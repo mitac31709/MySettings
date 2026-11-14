@@ -41,27 +41,78 @@ let
     '';
   };
 
-  agyJa = pkgs.writeShellApplication {
-    name = "agy-ja";
-    runtimeInputs = [
-      pkgs.antigravity
-      pkgs.coreutils
-      pkgs.findutils
-      pkgs.ncurses
-      pkgs.tmux
-      agyTranslateWatch
-      plamoTranslate
-    ];
+  commonRuntime = [
+    pkgs.antigravity
+    pkgs.coreutils
+    pkgs.findutils
+    pkgs.ncurses
+    pkgs.procps
+    pkgs.tmux
+    agyTranslateWatch
+    plamoTranslate
+  ];
+
+  agyPaneToggle = pkgs.writeShellApplication {
+    name = "agy-ja-pane-toggle";
+    runtimeInputs = commonRuntime;
     text = ''
       export AGY_BIN=${lib.getExe' pkgs.antigravity "agy"}
       export AGY_TRANSLATE_WATCH_BIN=${lib.getExe agyTranslateWatch}
       export PLAMO_TRANSLATE_BIN=${lib.getExe plamoTranslate}
-      exec ${pkgs.bash}/bin/bash ${../scripts/agy-ja.sh} "$@"
+      exec ${pkgs.bash}/bin/bash ${../scripts/agy-ja.sh} _pane-toggle "$@"
     '';
   };
+
+  mkAgyLauncher =
+    { name, launcherName }:
+    pkgs.writeShellApplication {
+      inherit name;
+      runtimeInputs = commonRuntime;
+      text = ''
+        export AGY_BIN=${lib.getExe' pkgs.antigravity "agy"}
+        export AGY_TRANSLATE_WATCH_BIN=${lib.getExe agyTranslateWatch}
+        export PLAMO_TRANSLATE_BIN=${lib.getExe plamoTranslate}
+        export AGY_PANE_TOGGLE_BIN=${lib.getExe agyPaneToggle}
+        export AGY_LAUNCHER_NAME=${lib.escapeShellArg launcherName}
+        exec ${pkgs.bash}/bin/bash ${../scripts/agy-ja.sh} "$@"
+      '';
+    };
+
+  agyJa = mkAgyLauncher {
+    name = "agy-ja";
+    launcherName = "agy-ja";
+  };
+
+  agyWrappedCli = mkAgyLauncher {
+    name = "agy-wrapped";
+    launcherName = "agy";
+  };
+
+  # Wrap `agy` transparently so interactive TTY sessions open the 2-pane PLaMo
+  # translator automatically (when enabled), while keeping `antigravity` / `agy-raw` un-wrapped.
+  antigravityWrapped =
+    pkgs.runCommand "antigravity-wrapped"
+      {
+        meta = {
+          inherit (pkgs.antigravity.meta)
+            description
+            homepage
+            license
+            platforms
+            ;
+          mainProgram = "agy";
+        };
+      }
+      ''
+        mkdir -p $out/bin
+        ln -s ${lib.getExe agyWrappedCli} $out/bin/agy
+        ln -s ${pkgs.antigravity}/bin/antigravity $out/bin/antigravity
+        ln -s ${pkgs.antigravity}/bin/antigravity $out/bin/agy-raw
+      '';
 in
 {
   home.packages = [
+    antigravityWrapped
     plamoTranslate
     agyTranslateWatch
     agyJa

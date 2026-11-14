@@ -317,8 +317,9 @@ class AgyWatcher:
     def print_banner(self) -> None:
         header = "━━ PLaMo 0.8B 思考リアルタイム翻訳 ━━"
         sub = "mode: all sessions" if self.args.all_sessions else f"log: {self.log_path.name}"
+        hint = " / F9・Ctrl+b t: 表示切替" if (self.args.done_file or os.environ.get("TMUX")) else ""
         print(c(BOLD + CYAN, header, self.use_color), flush=True)
-        print(c(DIM, f"({sub} / history={self.args.history})", self.use_color), flush=True)
+        print(c(DIM, f"({sub} / history={self.args.history}{hint})", self.use_color), flush=True)
         print("", flush=True)
 
     def _emit_monitor(self, ts: str, name: str, triggered: str, reason: str, duration: str) -> None:
@@ -386,7 +387,11 @@ class AgyWatcher:
             for pat in ROOT_CONV_PATTERNS:
                 m_conv = pat.search(line)
                 if m_conv:
-                    self.root_conv_ids.add(m_conv.group(1))
+                    cid = m_conv.group(1)
+                    if cid not in self.root_conv_ids:
+                        self.root_conv_ids.add(cid)
+                        if not (first_scan and self.args.standalone):
+                            print(c(DIM, f"[{time.strftime('%H:%M:%S')}] 🔗 会話接続: {cid[:8]}", self.use_color), flush=True)
 
             m_log = LOG_TIME_RE.match(line)
             if not m_log:
@@ -397,12 +402,12 @@ class AgyWatcher:
                 mon_name, triggered, raw_reason, duration = m_mon.groups()
                 reason = unescape_go_quoted(raw_reason)
                 item = (ts, mon_name, triggered, reason, duration)
-                if first_scan and self.args.standalone:
+                if first_scan:
                     pending_monitors.append(item)
                 else:
                     self._emit_monitor(*item)
 
-        if first_scan and self.args.standalone:
+        if first_scan:
             for item in pending_monitors:
                 self._emit_monitor(*item)
 

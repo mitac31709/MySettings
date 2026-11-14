@@ -462,8 +462,8 @@ in
     opencode
     # Anthropic Claude Code CLI (`claude`).
     claude-code
-    # Google Antigravity CLI (`agy` / `antigravity`; pkgs/antigravity).
-    antigravity
+    # Google Antigravity CLI (`agy` / `antigravity`; pkgs/antigravity) is installed
+    # via home/antigravity-translate.nix (wrapping `agy` with PLaMo 2-pane watch).
     # ChatGPT desktop (Codex included). App menu: ChatGPT.
     chatgpt
     # Grok Bot desktop agent. App menu: Grok Bot (`grok-bot`).
