@@ -666,6 +666,11 @@ let
           }
           {
             section = inputSection;
+            label = "スクロール速度（タッチパッド）";
+            keys = "scroll_factor 0.6";
+          }
+          {
+            section = inputSection;
             label = "手動 OOM（C-A-Bksp も可）";
             keys = "Ctrl+Alt+Del";
           }
@@ -1478,7 +1483,11 @@ let
     }
     {
       section = powerSection;
-      label = "注: 偽 iowait → i915_flip D 張り付き（PSR）。boot: i915.enable_psr=0";
+      label = "注: 偽 iowait → i915_flip 張り付き。boot: i915.enable_psr=0 enable_dc=0";
+    }
+    {
+      section = powerSection;
+      label = "注: BAT capacity=0 なのに稼働＝ゲージ異常。満充電→空→満充電で較正";
     }
     {
       section = powerSection;
@@ -1731,6 +1740,9 @@ in
           tap = "enabled";
           click_method = "clickfinger";
           dwt = "disabled";
+        }
+        // lib.optionalAttrs (!isChromebook) {
+          scroll_factor = "0.6";
         };
       };
 
