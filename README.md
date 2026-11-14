@@ -306,18 +306,20 @@ passwd mitac
 
 ## flake の更新
 
-`nixpkgs` と `nixpkgs-cursor` はどちらも `nixos-unstable` を追います。`nix flake update` を引数なしで走らせると両方が同じコミットになり、Cursor だけ新しい nixpkgs を使う意味がなくなります。
+`flake-update`（左 waybar 上端アイコンのクリックでも起動）は端末内のほぼすべてのソフトウェアをまとめて更新します（**JQuake のみ 1.8.4 固定**）。実行すると順番に次を行います。
 
-`flake-update` は UniClipboard / ChatGPT / Grok Bot の .deb URL を `flake.nix` に書いたあと、lock に載っている入力のうち `nixpkgs-cursor` 以外を `nix flake update` します。システムの nixpkgs は動き、Cursor のピンは残ります。
+1. `flake.nix` の pinned `.deb` URL 更新（UniClipboard / ChatGPT / Grok Bot）
+2. `pkgs/` の独自パッケージ更新（**Meltype** / **OpenCode** / **Antigravity** / **wol-pc**。`nix store prefetch-file` でハッシュ再計算）
+3. `nix flake update` により `flake.lock` の全入力更新（`nixpkgs` / `nixpkgs-cursor` / `bootvine` / `home-manager` 等）
+4. `~/.npm-global` に導入済みの場合、`@deepseek-ai/dsh` / `@deepseek-harness-tui/dsh-tui` の `npm` 更新
+5. waybar 状態表示の即時更新と、`rebuild`（`nixos-rebuild switch`）をそのまま実行するかの対話確認
 
-Cursor（`code-cursor` / `cursor-cli`）だけ新しい nixpkgs にするときは、作業コピーで次のどちらかです。
+Cursor（`code-cursor` / `cursor-cli`）だけ先行更新したいときは `flake-update-cursor`（または `nix flake update nixpkgs-cursor`）も引き続き使えます。
 
 ```bash
-flake-update-cursor
-nix flake update nixpkgs-cursor
+flake-update          # 一括チェック & 更新 → rebuild 確認
+flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 ```
-
-どちらも `nixpkgs-cursor` だけを取り直します。差分を見てコミットしてから `rebuild` します。
 
 ## 同梱ソフトウェア
 

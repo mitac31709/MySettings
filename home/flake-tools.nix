@@ -25,28 +25,33 @@ let
 
   flakeUpdateCheckPy = pyBin "flake-update-check-flake" ../scripts/flake-update-check-flake.py;
 
-  wrap =
-    name: runtimeInputs: script:
+  wrapWithEnv =
+    extraEnv: name: runtimeInputs: script:
     pkgs.writeShellApplication {
       inherit name runtimeInputs;
       text = ''
         export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
         export FLAKE_CHECK_PY=${lib.escapeShellArg (lib.getExe flakeUpdateCheckPy)}
+        ${extraEnv}
         exec ${pkgs.bash}/bin/bash ${script} ${lib.escapeShellArg repoPath} "$@"
       '';
     };
+
+  wrap = wrapWithEnv "";
 
   netTools = [
     pkgs.cacert
     pkgs.coreutils
     pkgs.curl
     pkgs.gawk
+    pkgs.git
+    pkgs.gnugrep
     pkgs.gnused
+    pkgs.jq
     pkgs.nix
     pkgs.python3
   ];
 
-  flakeUpdate = wrap "flake-update" netTools ../scripts/flake-update.sh;
   flakeUpdateCursor = wrap "flake-update-cursor" [
     pkgs.coreutils
     pkgs.nix
@@ -54,6 +59,22 @@ let
   flakeUpdateCheck = wrap "flake-update-check" (
     netTools ++ [ pkgs.procps ]
   ) ../scripts/flake-update-check.sh;
+  flakeUpdate =
+    wrapWithEnv
+      ''
+        export MITAC_FLAKE_HOST=${lib.escapeShellArg config.mitac.flakeHost}
+        export MITAC_HIRAGINO_DIR=${lib.escapeShellArg machine.hiraginoDir}
+        export MITAC_FLAKE_UPDATE_CHECK=${lib.escapeShellArg (lib.getExe flakeUpdateCheck)}
+      ''
+      "flake-update"
+      (
+        netTools
+        ++ [
+          pkgs.nix-output-monitor
+          pkgs.procps
+        ]
+      )
+      ../scripts/flake-update.sh;
   secretsTool = wrap "secrets" [
     agenixPkg
     pkgs.age

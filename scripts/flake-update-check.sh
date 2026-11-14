@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Compare pinned .deb versions and GitHub flake inputs to upstream tips.
-# For nixpkgs / nixpkgs-cursor, list watched apps that changed (GitHub compare).
+# Compare pinned .deb versions, custom pkgs/, installed npm globals (dsh-tui),
+# and flake inputs (GitHub + git) to upstream tips.
 # Writes $XDG_RUNTIME_DIR/flake-update-status for waybar (does not mutate the flake).
 set -u
 
 # Packaged command passes the checkout. A direct ./scripts run uses this tree.
 if [[ $# -ge 1 && -f "${1}/flake.nix" ]]; then
   root=$1
+  shift
 else
   root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fi
@@ -39,16 +40,53 @@ current_ver() {
   sed -n "s/.*${1}[[:space:]]*=[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p" "$flake_nix" | head -n1
 }
 
+pkg_attr() {
+  sed -n "s/^[[:space:]]*${2}[[:space:]]*=[[:space:]]*\"\\([^\"]*\\)\";.*/\\1/p" "$root/pkgs/$1/default.nix" | head -n1
+}
+
+read_gh_token() {
+  if [[ -n "${GH_TOKEN:-}" ]]; then
+    printf '%s' "$GH_TOKEN"
+    return
+  fi
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    printf '%s' "$GITHUB_TOKEN"
+    return
+  fi
+  local f
+  for f in "${HOME}/.config/gh/hosts.yml" "/run/agenix/gh-hosts.yml"; do
+    if [[ -r "$f" ]]; then
+      awk '
+        /^[^ \t#]/ { in_gh = ($1 == "github.com:") }
+        in_gh && /^[ \t]+oauth_token:/ {
+          gsub(/["'\'']/, "", $2)
+          print $2
+          exit
+        }
+      ' "$f"
+      return
+    fi
+  done
+}
+
+gh_token="$(read_gh_token || true)"
+gh_curl() {
+  if [[ -n "$gh_token" ]]; then
+    curl -fsSL --max-time 20 -H "Authorization: Bearer $gh_token" "$@"
+  else
+    curl -fsSL --max-time 20 "$@"
+  fi
+}
+
 py=(python3)
 if ! command -v python3 >/dev/null 2>&1; then
   py=(nix shell nixpkgs#python3 --command python3)
 fi
 
-# --- UniClipboard ---
+# --- UniClipboard (.deb) ---
 uc_cur="$(current_ver uniclipboardVersion)"
-if uc_json="$(curl -fsSL --max-time 20 https://api.github.com/repos/UniClipboard/UniClipboard/releases/latest 2>/dev/null)"; then
-  uc_tag="$(printf '%s\n' "$uc_json" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
-  uc_ver="${uc_tag#v}"
+if uc_json="$(gh_curl https://api.github.com/repos/UniClipboard/UniClipboard/releases/latest 2>/dev/null)"; then
+  uc_ver="$(printf '%s\n' "$uc_json" | jq -r '.tag_name // empty' | sed 's/^v//')"
   if [[ -n "$uc_ver" && -n "$uc_cur" && "$uc_ver" != "$uc_cur" ]]; then
     note $'\uf0ea' "uc" "UniClipboard ${uc_cur}→${uc_ver}"
   fi
@@ -56,7 +94,7 @@ else
   fail_fetch "UniClipboard release fetch failed"
 fi
 
-# --- ChatGPT ---
+# --- ChatGPT (.deb) ---
 chatgpt_cur="$(current_ver chatgptVersion)"
 if chatgpt_ver="$(
   curl -fsSL --max-time 20 https://persistent.oaistatic.com/codex-app-prod/linux/deb/dists/stable/main/binary-amd64/Packages 2>/dev/null |
@@ -69,7 +107,7 @@ else
   fail_fetch "ChatGPT Packages fetch failed"
 fi
 
-# --- Grok Bot ---
+# --- Grok Bot (.deb) ---
 grok_cur="$(current_ver grokBotVersion)"
 if grok_bot_url="$(
   curl -fsSL --max-time 20 https://cursor.com/download/bot 2>/dev/null |
@@ -78,19 +116,80 @@ if grok_bot_url="$(
 )"; then
   grok_bot_ver="$(printf '%s\n' "$grok_bot_url" | sed -n 's/.*grok-bot_\([^_]*\)_amd64\.deb/\1/p')"
   if [[ -n "$grok_bot_ver" && -n "$grok_cur" && "$grok_bot_ver" != "$grok_cur" ]]; then
-    note $'\uf544' "grok" "Grok Bot ${grok_cur}→${grok_bot_ver}"
+    note $'\U000f06a9' "grok" "Grok Bot ${grok_cur}→${grok_bot_ver}"
   fi
 else
   fail_fetch "Grok Bot download page fetch failed"
 fi
 
-# --- GitHub flake inputs (+ nixpkgs watched apps via compare) ---
+# --- Custom pkgs/ (jquake stays pinned at 1.8.4) ---
+mel_cur="$(pkg_attr meltype version)"
+if mel_json="$(gh_curl https://api.github.com/repos/yksr-melt/Meltype/releases/latest 2>/dev/null)"; then
+  mel_ver="$(printf '%s\n' "$mel_json" | jq -r '.tag_name // empty' | sed 's/^v//')"
+  if [[ -n "$mel_ver" && -n "$mel_cur" && "$mel_ver" != "$mel_cur" ]]; then
+    note $'\uf1ab' "melt" "Meltype ${mel_cur}→${mel_ver}"
+  fi
+else
+  fail_fetch "Meltype release fetch failed"
+fi
+
+oc_cur="$(pkg_attr opencode version)"
+if oc_json="$(curl -fsSL --max-time 20 https://registry.npmjs.org/@opencode/cli-linux-x64/latest 2>/dev/null)"; then
+  oc_ver="$(printf '%s\n' "$oc_json" | jq -r '.version // empty')"
+  if [[ -n "$oc_ver" && -n "$oc_cur" && "$oc_ver" != "$oc_cur" ]]; then
+    note $'\uf121' "opcd" "OpenCode ${oc_cur}→${oc_ver}"
+  fi
+else
+  fail_fetch "OpenCode npm registry fetch failed"
+fi
+
+agy_cur="$(pkg_attr antigravity version)"
+if agy_json="$(curl -fsSL --max-time 20 https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json 2>/dev/null)"; then
+  agy_ver="$(printf '%s\n' "$agy_json" | jq -r '.version // empty')"
+  if [[ -n "$agy_ver" && -n "$agy_cur" && "$agy_ver" != "$agy_cur" ]]; then
+    note $'\uf135' "agy" "Antigravity ${agy_cur}→${agy_ver}"
+  fi
+else
+  fail_fetch "Antigravity manifest fetch failed"
+fi
+
+wol_cur="$(pkg_attr wol-pc rev)"
+if wol_tip="$(git ls-remote https://github.com/mitac-31709/wol-pc.git HEAD 2>/dev/null | awk 'NR==1 {print $1}')"; then
+  if [[ -n "$wol_tip" && -n "$wol_cur" && "$wol_tip" != "$wol_cur" ]]; then
+    note $'\uf011' "wol" "wol-pc ${wol_cur:0:7}→${wol_tip:0:7}"
+  fi
+else
+  fail_fetch "wol-pc git ls-remote failed"
+fi
+
+# --- Global npm CLI packages if locally installed (dsh / dsh-tui) ---
+npm_global_modules="${HOME}/.npm-global/lib/node_modules"
+check_npm_global() {
+  local pkg_name="$1" icon="$2" short="$3" label="$4"
+  local pkg_json="${npm_global_modules}/${pkg_name}/package.json"
+  [[ -r "$pkg_json" ]] || return 0
+  local cur latest
+  cur="$(jq -r '.version // empty' "$pkg_json" 2>/dev/null || true)"
+  [[ -n "$cur" ]] || return 0
+  if latest="$(curl -fsSL --max-time 20 "https://registry.npmjs.org/${pkg_name}/latest" 2>/dev/null | jq -r '.version // empty')"; then
+    if [[ -n "$latest" && "$latest" != "$cur" ]]; then
+      note "$icon" "$short" "${label} ${cur}→${latest}"
+    fi
+  else
+    fail_fetch "${pkg_name} npm registry fetch failed"
+  fi
+}
+
+check_npm_global "@deepseek-harness-tui/dsh-tui" $'\uf120' "dsh" "dsh-tui"
+check_npm_global "@deepseek-ai/dsh" $'\uf120' "dshc" "@deepseek-ai/dsh"
+
+# --- Flake inputs (+ nixpkgs / nixpkgs-cursor watched apps) ---
 mapfile -t flake_notes < <("${py[@]}" "$flake_py" "$flake_lock" 2>/dev/null || true)
 
 for line in "${flake_notes[@]+"${flake_notes[@]}"}"; do
   [[ -z "$line" ]] && continue
   if [[ "$line" == __FAIL__* ]]; then
-    fail_fetch "GitHub tip/compare failed for ${line#__FAIL__}"
+    fail_fetch "Flake tip/compare failed for ${line#__FAIL__}"
   elif [[ "$line" == REC$'\t'* ]]; then
     IFS=$'\t' read -r _rec icon short tip <<<"$line"
     note "$icon" "$short" "$tip"
@@ -136,6 +235,7 @@ for line in raw.splitlines():
 
 # Always keep the refresh glyph visible (waybar side-bar button).
 header = "\uf021"
+max_icons = 10
 if n == 0 or not recs:
     if fetch_ok:
         tip = "更新なし\nクリックで flake-update"
@@ -143,13 +243,24 @@ if n == 0 or not recs:
         tip = "確認失敗（一部取得不可）\nクリックで flake-update"
     obj = {"text": header, "class": "idle", "tooltip": tip}
 else:
-    lines = [header]
+    bar_glyphs = []
+    seen = set()
     tips = []
     for icon, short, tip in recs:
-        lines.append(icon if icon else short)
+        glyph = icon if icon else short
+        if glyph not in seen:
+            bar_glyphs.append(glyph)
+            seen.add(glyph)
         tips.append(f"{icon} {tip}".strip() if icon else tip)
+
+    if len(bar_glyphs) > max_icons:
+        shown = bar_glyphs[:max_icons]
+        shown.append(f"+{len(bar_glyphs) - max_icons}")
+    else:
+        shown = bar_glyphs
+
     obj = {
-        "text": "\n".join(lines),
+        "text": "\n".join([header, *shown]),
         "class": "available",
         "tooltip": "\n".join(tips) + "\n\nクリックで flake-update",
     }

@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
-# Bump versioned .deb URLs, then update every flake input except nixpkgs-cursor.
-# nixpkgs and nixpkgs-cursor both track nixos-unstable; updating them together
-# pins Cursor to the same commit as the system. Move Cursor alone with
-# `flake-update-cursor` / `nix flake update nixpkgs-cursor`.
+# Update .deb inputs in flake.nix, custom pkgs/* derivations (except jquake
+# pinned at 1.8.4), all flake.lock inputs (including nixpkgs-cursor), and
+# locally installed dsh-tui npm globals, then offer an interactive rebuild.
 #
 # Usage: flake-update [checkout]
-# The packaged command passes the checkout (lib/machine.nix repoPath).
-# Running this file from a checkout with no argument uses that checkout.
 set -euo pipefail
 
 if [[ $# -ge 1 && -f "${1}/flake.nix" ]]; then
@@ -21,8 +18,57 @@ if [[ ! -f "$root/flake.nix" ]]; then
 fi
 cd "$root"
 
-json="$(curl -fsSL https://api.github.com/repos/UniClipboard/UniClipboard/releases/latest)"
-tag="$(printf '%s\n' "$json" | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+read_gh_token() {
+  if [[ -n "${GH_TOKEN:-}" ]]; then
+    printf '%s' "$GH_TOKEN"
+    return
+  fi
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    printf '%s' "$GITHUB_TOKEN"
+    return
+  fi
+  local f
+  for f in "${HOME}/.config/gh/hosts.yml" "/run/agenix/gh-hosts.yml"; do
+    if [[ -r "$f" ]]; then
+      awk '
+        /^[^ \t#]/ { in_gh = ($1 == "github.com:") }
+        in_gh && /^[ \t]+oauth_token:/ {
+          gsub(/["'\'']/, "", $2)
+          print $2
+          exit
+        }
+      ' "$f"
+      return
+    fi
+  done
+}
+
+gh_token="$(read_gh_token || true)"
+gh_curl() {
+  if [[ -n "$gh_token" ]]; then
+    curl -fsSL -H "Authorization: Bearer $gh_token" "$@"
+  else
+    curl -fsSL "$@"
+  fi
+}
+
+# NixOS often has no python3 on PATH; prefer it when present, else nixpkgs.
+py=(python3)
+if ! command -v python3 >/dev/null 2>&1; then
+  py=(nix shell nixpkgs#python3 --command python3)
+fi
+
+pkg_attr() {
+  sed -n "s/^[[:space:]]*${2}[[:space:]]*=[[:space:]]*\"\\([^\"]*\\)\";.*/\\1/p" "$root/pkgs/$1/default.nix" | head -n1
+}
+
+prefetch_hash() {
+  nix store prefetch-file --json "$@" | jq -r '.hash'
+}
+
+echo "==> Checking .deb URLs (UniClipboard / ChatGPT / Grok Bot)"
+uc_json="$(gh_curl https://api.github.com/repos/UniClipboard/UniClipboard/releases/latest)"
+tag="$(printf '%s\n' "$uc_json" | jq -r '.tag_name // empty')"
 if [[ -z "$tag" ]]; then
   echo "flake-update: could not parse UniClipboard latest tag" >&2
   exit 1
@@ -55,11 +101,6 @@ if [[ -z "$grok_bot_ver" ]]; then
   exit 1
 fi
 
-# NixOS often has no python3 on PATH; prefer it when present, else nixpkgs.
-py=(python3)
-if ! command -v python3 >/dev/null 2>&1; then
-  py=(nix shell nixpkgs#python3 --command python3)
-fi
 "${py[@]}" - "$root/flake.nix" "$uc_ver" "$uc_url" "$chatgpt_ver" "$chatgpt_url" "$grok_bot_ver" "$grok_bot_url" <<'PY'
 import pathlib, re, sys
 
@@ -105,19 +146,225 @@ else:
     print(f"Grok Bot already {grok_bot_ver}")
 PY
 
-# Every locked root input except nixpkgs-cursor. Listing them (instead of a
-# bare `nix flake update`) is what keeps Cursor's nixpkgs pin where it is.
-mapfile -t inputs < <(
-  "${py[@]}" -c '
-import json, sys
-root = json.load(sys.stdin)["locks"]["nodes"]["root"]["inputs"]
-names = [name for name in sorted(root) if name != "nixpkgs-cursor"]
-if not names:
-    sys.exit("flake-update: no inputs besides nixpkgs-cursor")
-print("\n".join(names))
-' < <(nix flake metadata --json)
-)
-echo "nix flake update ${inputs[*]}"
-echo "nixpkgs-cursor は対象外。Cursor だけ上げる: flake-update-cursor"
-nix flake update "${inputs[@]}"
-echo "flake.lock updated. Review, commit, then rebuild."
+echo "==> Checking custom pkgs/ (Meltype / OpenCode / Antigravity / wol-pc; JQuake pinned at 1.8.4)"
+
+# --- Meltype ---
+mel_cur="$(pkg_attr meltype version)"
+mel_tag="$(gh_curl https://api.github.com/repos/yksr-melt/Meltype/releases/latest | jq -r '.tag_name // empty')"
+mel_ver="${mel_tag#v}"
+if [[ -z "$mel_ver" ]]; then
+  echo "flake-update: could not parse Meltype latest release" >&2
+  exit 1
+fi
+if [[ "$mel_ver" != "$mel_cur" ]]; then
+  echo "Meltype: prefetching ${mel_cur} -> ${mel_ver}..."
+  mel_src_hash="$(prefetch_hash --unpack "https://github.com/yksr-melt/Meltype/archive/refs/tags/v${mel_ver}.tar.gz")"
+  mel_zip_hash="$(prefetch_hash "https://github.com/yksr-melt/Meltype/releases/download/v${mel_ver}/Meltype-${mel_ver}-linux.zip")"
+  if [[ -z "$mel_src_hash" || -z "$mel_zip_hash" ]]; then
+    echo "flake-update: failed to prefetch Meltype ${mel_ver}" >&2
+    exit 1
+  fi
+  "${py[@]}" - "$root/pkgs/meltype/default.nix" "$mel_ver" "$mel_src_hash" "$mel_zip_hash" <<'PY'
+import pathlib, re, sys
+p = pathlib.Path(sys.argv[1])
+ver, src_hash, zip_hash = sys.argv[2:5]
+t = p.read_text()
+for pat, val, lbl in [
+    (r'(  version\s*=\s*")[^"]*(";)', ver, "meltype version"),
+    (r'(src\s*=\s*fetchFromGitHub\s*\{[^}]*?hash\s*=\s*")[^"]*(";)', src_hash, "meltype src hash"),
+    (r'(binaryZip\s*=\s*fetchurl\s*\{[^}]*?hash\s*=\s*")[^"]*(";)', zip_hash, "meltype binaryZip hash"),
+]:
+    t, n = re.subn(pat, rf"\g<1>{val}\2", t, count=1, flags=re.S)
+    if n != 1:
+        sys.exit(f"flake-update: expected one {lbl} (got {n})")
+p.write_text(t)
+print(f"Meltype → {ver}")
+PY
+else
+  echo "Meltype already ${mel_ver}"
+fi
+
+# --- OpenCode ---
+oc_cur="$(pkg_attr opencode version)"
+oc_meta="$(curl -fsSL https://registry.npmjs.org/@opencode/cli-linux-x64/latest)"
+oc_ver="$(printf '%s\n' "$oc_meta" | jq -r '.version // empty')"
+oc_tarball="$(printf '%s\n' "$oc_meta" | jq -r '.dist.tarball // empty')"
+if [[ -z "$oc_ver" || -z "$oc_tarball" ]]; then
+  echo "flake-update: could not parse OpenCode latest release" >&2
+  exit 1
+fi
+if [[ "$oc_ver" != "$oc_cur" ]]; then
+  echo "OpenCode: prefetching ${oc_cur} -> ${oc_ver}..."
+  oc_hash="$(prefetch_hash "$oc_tarball")"
+  if [[ -z "$oc_hash" ]]; then
+    echo "flake-update: failed to prefetch OpenCode ${oc_ver}" >&2
+    exit 1
+  fi
+  "${py[@]}" - "$root/pkgs/opencode/default.nix" "$oc_ver" "$oc_hash" <<'PY'
+import pathlib, re, sys
+p = pathlib.Path(sys.argv[1])
+ver, h = sys.argv[2:4]
+t = p.read_text()
+for pat, val, lbl in [
+    (r'(  version\s*=\s*")[^"]*(";)', ver, "opencode version"),
+    (r'(src\s*=\s*fetchurl\s*\{[^}]*?hash\s*=\s*")[^"]*(";)', h, "opencode hash"),
+]:
+    t, n = re.subn(pat, rf"\g<1>{val}\2", t, count=1, flags=re.S)
+    if n != 1:
+        sys.exit(f"flake-update: expected one {lbl} (got {n})")
+p.write_text(t)
+print(f"OpenCode → {ver}")
+PY
+else
+  echo "OpenCode already ${oc_ver}"
+fi
+
+# --- Antigravity ---
+agy_cur="$(pkg_attr antigravity version)"
+agy_meta="$(curl -fsSL https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_amd64.json)"
+agy_ver="$(printf '%s\n' "$agy_meta" | jq -r '.version // empty')"
+agy_url="$(printf '%s\n' "$agy_meta" | jq -r '.url // empty')"
+if [[ -z "$agy_ver" || -z "$agy_url" ]]; then
+  echo "flake-update: could not parse Antigravity manifest" >&2
+  exit 1
+fi
+if [[ "$agy_ver" != "$agy_cur" ]]; then
+  echo "Antigravity: prefetching ${agy_cur} -> ${agy_ver}..."
+  agy_hash="$(prefetch_hash "$agy_url")"
+  if [[ -z "$agy_hash" ]]; then
+    echo "flake-update: failed to prefetch Antigravity ${agy_ver}" >&2
+    exit 1
+  fi
+  "${py[@]}" - "$root/pkgs/antigravity/default.nix" "$agy_ver" "$agy_url" "$agy_hash" <<'PY'
+import pathlib, re, sys
+p = pathlib.Path(sys.argv[1])
+ver, url, h = sys.argv[2:5]
+t = p.read_text()
+for pat, val, lbl in [
+    (r'(  version\s*=\s*")[^"]*(";)', ver, "antigravity version"),
+    (r'(src\s*=\s*fetchurl\s*\{[^}]*?url\s*=\s*")[^"]*(";)', url, "antigravity url"),
+    (r'(src\s*=\s*fetchurl\s*\{[^}]*?hash\s*=\s*")[^"]*(";)', h, "antigravity hash"),
+]:
+    t, n = re.subn(pat, rf"\g<1>{val}\2", t, count=1, flags=re.S)
+    if n != 1:
+        sys.exit(f"flake-update: expected one {lbl} (got {n})")
+p.write_text(t)
+print(f"Antigravity → {ver}")
+PY
+else
+  echo "Antigravity already ${agy_ver}"
+fi
+
+# --- wol-pc ---
+wol_cur="$(pkg_attr wol-pc rev)"
+wol_tip="$(git ls-remote https://github.com/mitac-31709/wol-pc.git HEAD | awk 'NR==1 {print $1}')"
+if [[ -z "$wol_tip" ]]; then
+  echo "flake-update: could not resolve wol-pc HEAD" >&2
+  exit 1
+fi
+if [[ "$wol_tip" != "$wol_cur" ]]; then
+  echo "wol-pc: prefetching ${wol_cur:0:7} -> ${wol_tip:0:7}..."
+  wol_date="$(
+    gh_curl "https://api.github.com/repos/mitac-31709/wol-pc/commits/${wol_tip}" 2>/dev/null |
+      jq -r '.commit.committer.date[0:10] // empty' || true
+  )"
+  [[ -n "$wol_date" ]] || wol_date="$(date -u +%F)"
+  wol_ver="0-unstable-${wol_date}"
+  wol_hash="$(prefetch_hash --unpack "https://github.com/mitac-31709/wol-pc/archive/${wol_tip}.tar.gz")"
+  if [[ -z "$wol_hash" ]]; then
+    echo "flake-update: failed to prefetch wol-pc ${wol_tip}" >&2
+    exit 1
+  fi
+  "${py[@]}" - "$root/pkgs/wol-pc/default.nix" "$wol_ver" "$wol_tip" "$wol_hash" <<'PY'
+import pathlib, re, sys
+p = pathlib.Path(sys.argv[1])
+ver, rev, h = sys.argv[2:5]
+t = p.read_text()
+for pat, val, lbl in [
+    (r'(  version\s*=\s*")[^"]*(";)', ver, "wol-pc version"),
+    (r'(src\s*=\s*fetchFromGitHub\s*\{[^}]*?rev\s*=\s*")[^"]*(";)', rev, "wol-pc rev"),
+    (r'(src\s*=\s*fetchFromGitHub\s*\{[^}]*?hash\s*=\s*")[^"]*(";)', h, "wol-pc hash"),
+]:
+    t, n = re.subn(pat, rf"\g<1>{val}\2", t, count=1, flags=re.S)
+    if n != 1:
+        sys.exit(f"flake-update: expected one {lbl} (got {n})")
+p.write_text(t)
+print(f"wol-pc → {rev[:7]} ({ver})")
+PY
+else
+  echo "wol-pc already ${wol_tip:0:7}"
+fi
+
+echo "==> Running nix flake update (all inputs including nixpkgs-cursor and bootvine)"
+nix flake update
+
+# --- Global npm CLI packages if locally installed (dsh / dsh-tui) ---
+npm_global_modules="${HOME}/.npm-global/lib/node_modules"
+dsh_pkgs=()
+for pkg in "@deepseek-ai/dsh" "@deepseek-harness-tui/dsh-tui"; do
+  if [[ -r "${npm_global_modules}/${pkg}/package.json" ]]; then
+    dsh_pkgs+=("${pkg}@latest")
+  fi
+done
+if ((${#dsh_pkgs[@]} > 0)); then
+  npm_bin=""
+  if [[ -x "${HOME}/.local/share/dsh/node22/bin/npm" ]]; then
+    export PATH="${HOME}/.local/share/dsh/node22/bin:${PATH}"
+    npm_bin="${HOME}/.local/share/dsh/node22/bin/npm"
+  elif command -v npm >/dev/null 2>&1; then
+    npm_bin="$(command -v npm)"
+  fi
+  if [[ -n "$npm_bin" ]]; then
+    extra_npm_args=()
+    if [[ -f "${HOME}/.npm-global/bin/dsh-tui" && ! -L "${HOME}/.npm-global/bin/dsh-tui" ]]; then
+      # Preserve custom node22 wrapper scripts in ~/.npm-global/bin.
+      extra_npm_args+=(--no-bin-links)
+    fi
+    echo "==> Updating global npm packages: ${dsh_pkgs[*]}"
+    "$npm_bin" install -g --prefix "${HOME}/.npm-global" "${extra_npm_args[@]+"${extra_npm_args[@]}"}" "${dsh_pkgs[@]}"
+  else
+    echo "dsh-tui: npm not found; skipping npm global update"
+  fi
+else
+  echo "==> dsh-tui: ~/.npm-global に未導入のためスキップ"
+fi
+
+echo "==> Refreshing waybar update status"
+check_cmd="${MITAC_FLAKE_UPDATE_CHECK:-$root/scripts/flake-update-check.sh}"
+if [[ -x "$check_cmd" ]]; then
+  "$check_cmd" "$root" || true
+fi
+
+echo ""
+echo "==> Git status / diff summary"
+git status -sb
+git diff --stat -- flake.nix flake.lock pkgs/ || true
+
+if [[ -t 0 ]]; then
+  host="${MITAC_FLAKE_HOST:-$(hostname)}"
+  case "$host" in
+    vaio|chromebook) ;;
+    *) host="chromebook" ;;
+  esac
+  hiragino_dir="${MITAC_HIRAGINO_DIR:-/home/mitac/Documents/hiragino-otf}"
+  impure_args=()
+  if [[ -d "$hiragino_dir" ]]; then
+    impure_args=(--impure)
+  fi
+
+  echo ""
+  printf 'この変更で rebuild (sudo nixos-rebuild switch --flake %s#%s%s) を実行しますか？ [y/N]: ' \
+    "$root" "$host" "${impure_args:+ ${impure_args[*]}}"
+  IFS= read -r answer || answer=""
+  case "$answer" in
+    [yY]|[yY][eE][sS])
+      sudo -v
+      sudo nixos-rebuild switch --flake "$root#$host" "${impure_args[@]+"${impure_args[@]}"}" |& nom
+      ;;
+    *)
+      echo "rebuild はスキップしました。後で反映するには: rebuild"
+      ;;
+  esac
+else
+  echo "flake.lock / flake.nix / pkgs updated. Review, commit, then rebuild."
+fi

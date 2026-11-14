@@ -22,7 +22,13 @@ let
   # defaultFonts (Hiragino, then Noto Sans CJK JP).
   waybarFont = "JetBrainsMono Nerd Font";
   ghosttyBin = "${pkgs.ghostty}/bin/ghostty";
-  openFlakeUpdate = "${ghosttyBin} -e ${flakeUpdate}";
+  flakeUpdateRunner = pkgs.writeShellScript "open-flake-update" ''
+    rc=0
+    ${flakeUpdate} || rc=$?
+    printf '\n終了コード: %d [Enter で閉じる] ' "$rc"
+    IFS= read -r _ || true
+  '';
+  openFlakeUpdate = "${ghosttyBin} -e ${flakeUpdateRunner}";
   swaylockBin = "${pkgs.swaylock}/bin/swaylock";
   swayidleBin = "${pkgs.swayidle}/bin/swayidle";
   rofiBin = "${pkgs.rofi}/bin/rofi";
@@ -479,7 +485,7 @@ let
     }
     {
       section = "NixOS";
-      label = "入力＋.deb 更新（nixpkgs-cursor 以外）";
+      label = "全アプリ＋flake 入力更新（rebuild 選択付き）";
       run = "flake-update";
       mode = "term";
     }
