@@ -1,11 +1,11 @@
 ---
-description: Git コミットは依頼時のみ。安全手順とメッセージ規約に従う
+description: Git コミットの安全手順とメッセージ規約。明示依頼時または完了単位の区切りで従う
 alwaysApply: true
 ---
 
 # Committing changes with git
 
-Only create commits when requested by the user. If unclear, ask first. When the user asks you to create a new git commit, follow these steps carefully:
+Create commits when requested by the user, or when committing a coherent, finished unit of work before the next unit per `commit-before-next-unit.mdc`. If the user said not to commit, the unit is ambiguous, or it is otherwise unclear whether a commit is wanted, ask first. Whenever creating a git commit, follow these steps carefully:
 
 ## Git Safety Protocol
 
@@ -19,19 +19,19 @@ Only create commits when requested by the user. If unclear, ask first. When the 
   3. Commit has NOT been pushed to remote (verify: `git status` shows "Your branch is ahead")
 - CRITICAL: If commit FAILED or was REJECTED by hook, NEVER amend - fix the issue and create a NEW commit
 - CRITICAL: If you already pushed to remote, NEVER amend unless the user explicitly requests it in the user query or in a different user rule (requires force push)
-- NEVER commit changes unless the user explicitly asks you to in the user query or in a different user rule. It is VERY IMPORTANT to only commit when explicitly asked, otherwise the user will feel that you are being too proactive.
+- Only commit when explicitly requested by the user, when committing a coherent finished unit under `commit-before-next-unit.mdc`, or after confirming with the user. Still ask first if the user said not to commit, if the unit is ambiguous, or if the commit would include secrets or unwanted generated/lockfile churn.
 
 1. You can call multiple tools in a single response. When multiple independent pieces of information are requested, batch your tool calls together for optimal performance. ALWAYS run the following shell commands in parallel, each using the Shell tool:
    - Run a git status command to see all untracked files.
    - Run a git diff command to see both staged and unstaged changes that will be committed.
    - Run a git log command to see recent commit messages, so you can follow this repository's commit message style.
-2. Analyze all staged changes (both previously staged and newly added) and draft a commit message:
+2. Analyze the changes to be committed (previously staged changes and the unit files to be staged) and draft a commit message:
    - Summarize the nature of the changes (eg. new feature, enhancement to an existing feature, bug fix, refactoring, test, docs, etc.). Ensure the message accurately reflects the changes and their purpose (i.e. "add" means a wholly new feature, "update" means an enhancement to an existing feature, "fix" means a bug fix, etc.).
    - Do not commit files that likely contain secrets (.env, credentials.json, etc). Warn the user if they specifically request to commit those files
    - Draft a concise (1-2 sentences) commit message that focuses on the "why" rather than the "what"
    - Ensure it accurately reflects the changes and their purpose
 3. Run the following commands sequentially:
-   - Add relevant untracked files to the staging area.
+   - Stage only the relevant modified and untracked files belonging to the commit unit (leave unrelated dirty files out).
    - Commit the changes with the message.
    - Run git status after the commit completes to verify success.
 4. If the commit fails due to pre-commit hook, fix the issue and create a NEW commit (see amend rules above)
