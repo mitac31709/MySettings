@@ -4,6 +4,7 @@
 {
   imports = [
     ./flake-tools.nix
+    ./antigravity-translate.nix
     ./secrets.nix
     ./shell.nix
     ./programs.nix

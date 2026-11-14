@@ -562,6 +562,24 @@ let
     }
     {
       section = "開発";
+      label = "Antigravity（思考日本語訳）";
+      run = "agy-ja";
+      mode = "term";
+    }
+    {
+      section = "開発";
+      label = "Antigravity（全許可・思考日本語訳）";
+      run = "agy-ja --dangerously-skip-permissions";
+      mode = "term";
+    }
+    {
+      section = "開発";
+      label = "PLaMo 翻訳ステータス";
+      run = "plamo-translate status";
+      mode = "term";
+    }
+    {
+      section = "開発";
       label = "dsh-TUI";
       run = "dsh-tui";
       mode = "term";

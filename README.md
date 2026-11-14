@@ -326,7 +326,7 @@ nix flake update nixpkgs-cursor
 - **Zed** — `zed-editor`（起動: `zeditor`、アプリメニュー: Zed）
 - **OpenCode** — ターミナル AI コーディングエージェント（`opencode`、`pkgs/opencode` で V2 をピン留め。nixpkgs の 1.x は使わない）
 - **Claude Code** — Anthropic のターミナルエージェント（`claude`、nixpkgs `claude-code`）
-- **Antigravity** — Google のターミナルエージェント（`agy` / `antigravity`、`pkgs/antigravity` で CLI バイナリをピン留め）
+- **Antigravity** — Google のターミナルエージェント（`agy` / `antigravity`、`pkgs/antigravity` で CLI バイナリをピン留め）。日本語思考訳付き起動は `agy-ja`（tmux 2ペインでメイン・サブエージェント思考と `cli.log` Monitor 理由をリアルタイム翻訳、`home/antigravity-translate.nix`）。`plamo-translate` が `llama-cpp` の `llama-server`（PFN `plamo-3-translate-0.8b-GGUF` Q4_K_M）を初回のみ `~/.cache/plamo-translate/` へ自動取得してオンデマンド起動し、無通信 300 秒で自動終了（非使用時 RAM 0）
 - **dsh-TUI** — DeepSeek Harness の TUI（`dsh-tui` / `dst`）。Node のグローバル npm（`~/.npm-global`、`.npmrc` の `prefix`）へ `npm i -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui`。初回起動でプロファイルを初期化（`pnpm` 必須）。モデル利用は `DEEPSEEK_API_KEY` または `/auth`
 - **ChatGPT** — 公式 Linux デスクトップ（Codex 含む、`pkgs/chatgpt`、`.deb`）。アプリメニュー / `chatgpt`。起動時に Vivaldi 等向け Native Messaging（`com.openai.codexextension`）を入れ、ブラウザ拡張の Browser Use を有効化する
 - **Vivaldi × ChatGPT 拡張** — Vivaldi は `chrome.sidePanel.setOptions` を無視するため、Web Store 版は side panel が真っ白になる（VB-120826）。`vivaldi-chatgpt-extension-patch` が `~/.local/share/vivaldi-chatgpt-extension` に `default_path=codex-work-sidepanel.html` の unpacked 版を作る。初回だけ `vivaldi://extensions` で Store 版を無効化し、Developer mode → Load unpacked でそのディレクトリを読み込む
