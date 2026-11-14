@@ -6,10 +6,13 @@
   # Keep redistributable firmware from modules/nixos/common.nix and add SOF here.
   hardware.firmware = [ pkgs.sof-firmware ];
 
-  # Ice Lake eDP (VAIO): PSR2 left i915_flip stuck in
-  # drm_atomic_helper_wait_for_flip_done for minutes, which shows up as a
-  # permanent procs_blocked/iowait tax (~1 CPU ≈ 12%). Disable PSR at boot.
-  boot.kernelParams = [ "i915.enable_psr=0" ];
+  # Ice Lake eDP (VAIO): i915_flip stuck in drm_atomic_helper_wait_for_flip_done
+  # (GPU HANG ecode 11:0:00000000) for many minutes → procs_blocked/iowait tax.
+  # PSR=0 alone was not enough after reboot; also disable display power DC states.
+  boot.kernelParams = [
+    "i915.enable_psr=0"
+    "i915.enable_dc=0"
+  ];
 
   # Intel iGPU (8th+ gen / Iris Xe / Core Ultra): VA-API for Parsec's
   # FFMPEG hardware encode/decode. Without intel-media-driver there is no
