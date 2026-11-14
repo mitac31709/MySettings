@@ -9,27 +9,35 @@
   fcitx5,
   autoPatchelfHook,
   patchelf,
+  makeWrapper,
   icu,
+  python3,
+  gtk4,
+  gobject-introspection,
+  pango,
+  graphene,
+  gdk-pixbuf,
 }:
 
 stdenv.mkDerivation (finalAttrs: {
   pname = "meltype";
-  version = "1.4.0";
+  version = "1.5.1";
 
   # Rebuild the small fcitx5 addon so MELTYPE_DIR points into the Nix store.
   # NativeAOT core + Mozc helper come from the official Linux release zip.
-  # 1.4.0+: ZSymbols (zl→→, zh→←, zj→↓, zk→↑, z/→・, …) default ON.
   src = fetchFromGitHub {
     owner = "yksr-melt";
     repo = "Meltype";
     rev = "v${finalAttrs.version}";
-    hash = "sha256-jN2GYB6dritmmYSXfAoRmRO4WzQVJugxKyR+OgGPSWw=";
+    hash = "sha256-xdSetKTHbJAZ3Z2JM2ELPHl1ULb+C0AJ0+hjYOjy9u0=";
   };
 
   binaryZip = fetchurl {
     url = "https://github.com/yksr-melt/Meltype/releases/download/v${finalAttrs.version}/Meltype-${finalAttrs.version}-linux.zip";
-    hash = "sha256-DNePfymBrMqlImTa3Jxx5gR6ShyQRHKjURvkCUGQsto=";
+    hash = "sha256-FgGwenucotyhxFY8Gx/3pz2EFmCklE0WGJxCFeAxUIU=";
   };
+
+  patches = [ ./fcitx5-meaning-pane.patch ];
 
   nativeBuildInputs = [
     unzip
@@ -37,6 +45,7 @@ stdenv.mkDerivation (finalAttrs: {
     pkg-config
     autoPatchelfHook
     patchelf
+    makeWrapper
   ];
 
   buildInputs = [
@@ -75,10 +84,28 @@ stdenv.mkDerivation (finalAttrs: {
     unzip -q ${finalAttrs.binaryZip} -d binary
     install -Dm555 binary/Meltype-linux/libMeltypeNative.so $out/lib/meltype/libMeltypeNative.so
     install -Dm555 binary/Meltype-linux/mozc/meltype_mozc_helper $out/lib/meltype/mozc/meltype_mozc_helper
+    install -Dm555 binary/Meltype-linux/meltype-settings $out/lib/meltype/meltype-settings
     install -Dm444 binary/Meltype-linux/icon.png $out/lib/meltype/icon.png
     install -Dm444 binary/Meltype-linux/LICENSE $out/share/licenses/meltype/LICENSE
     install -Dm444 binary/Meltype-linux/THIRD-PARTY-NOTICES.md $out/share/licenses/meltype/THIRD-PARTY-NOTICES.md
     install -Dm444 binary/Meltype-linux/mozc/MOZC-LICENSE.txt $out/share/licenses/meltype/MOZC-LICENSE.txt
+
+    substituteInPlace $out/lib/meltype/meltype-settings \
+      --replace-fail '#!/usr/bin/env python3' '#!${
+        (python3.withPackages (ps: [ ps.pygobject3 ])).interpreter
+      }'
+    wrapProgram $out/lib/meltype/meltype-settings \
+      --prefix GI_TYPELIB_PATH : "${
+        lib.makeSearchPath "lib/girepository-1.0" [
+          gtk4
+          pango
+          graphene
+          gdk-pixbuf
+          gobject-introspection
+        ]
+      }"
+    mkdir -p $out/bin
+    ln -s $out/lib/meltype/meltype-settings $out/bin/meltype-settings
 
     substitute linux/fcitx5/meltype.conf $out/share/fcitx5/inputmethod/meltype.conf \
       --replace-fail '@DIR@' "$out/lib/meltype"

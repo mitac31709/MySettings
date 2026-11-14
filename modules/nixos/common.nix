@@ -14,6 +14,133 @@ let
   # and builtins.path copies the OTFs into the store.
   hiraginoEnabled = builtins.pathExists hiraginoDir;
   hasBtrfs = lib.any (fs: (fs.fsType or null) == "btrfs") (lib.attrValues config.fileSystems);
+
+  # Dark candidate panel matching upstream Meltype Windows UI (CandidateWindow.cpp).
+  meltypeFcitx5Theme = pkgs.runCommand "meltype-fcitx5-theme" { } ''
+        dir="$out/share/fcitx5/themes/meltype-dark"
+        mkdir -p "$dir"
+        for svg in arrow.svg next.svg prev.svg radio.svg; do
+          cp -L "${pkgs.fcitx5}/share/fcitx5/themes/default-dark/$svg" "$dir/$svg"
+        done
+        cat > "$dir/theme.conf" << 'EOF'
+    [Metadata]
+    Name=Meltype Dark
+    Version=1
+    Author=MySettings
+    Description=Dark vertical candidate & meaning pane theme matching upstream Meltype
+    ScaleWithDPI=True
+
+    [InputPanel]
+    NormalColor=#ffffff
+    HighlightCandidateColor=#ffffff
+    HighlightColor=#ffffff
+    HighlightBackgroundColor=#285577
+    CandidateLabelColor=#9aa7b5
+    HighlightCandidateLabelColor=#9fe7e7
+    LabelTextSizeFactor=85
+    CandidateCommentColor=#7cc7ff
+    HighlightCandidateCommentColor=#9fe7e7
+    CommentTextSizeFactor=80
+    FullWidthHighlight=True
+    PageButtonAlignment=Bottom
+
+    [InputPanel/TextMargin]
+    Left=8
+    Right=8
+    Top=5
+    Bottom=5
+
+    [InputPanel/ContentMargin]
+    Left=4
+    Right=4
+    Top=4
+    Bottom=4
+
+    [InputPanel/Background]
+    Color=#2c2c2c
+    BorderColor=#454a54
+    BorderWidth=1
+
+    [InputPanel/Background/Margin]
+    Left=2
+    Right=2
+    Top=2
+    Bottom=2
+
+    [InputPanel/Highlight]
+    Color=#285577
+
+    [InputPanel/Highlight/Margin]
+    Left=6
+    Right=6
+    Top=4
+    Bottom=4
+
+    [InputPanel/PrevPage]
+    Image=prev.svg
+
+    [InputPanel/PrevPage/ClickMargin]
+    Left=5
+    Right=5
+    Top=5
+    Bottom=5
+
+    [InputPanel/NextPage]
+    Image=next.svg
+
+    [InputPanel/NextPage/ClickMargin]
+    Left=5
+    Right=5
+    Top=5
+    Bottom=5
+
+    [Menu]
+    NormalColor=#e6edf3
+    HighlightCandidateColor=#ffffff
+    Spacing=2
+
+    [Menu/Background]
+    Color=#2c2c2c
+    BorderColor=#454a54
+    BorderWidth=1
+
+    [Menu/Background/Margin]
+    Left=2
+    Right=2
+    Top=2
+    Bottom=2
+
+    [Menu/ContentMargin]
+    Left=2
+    Right=2
+    Top=2
+    Bottom=2
+
+    [Menu/CheckBox]
+    Image=radio.svg
+
+    [Menu/SubMenu]
+    Image=arrow.svg
+
+    [Menu/Highlight]
+    Color=#285577
+
+    [Menu/Highlight/Margin]
+    Left=5
+    Right=5
+    Top=5
+    Bottom=5
+
+    [Menu/Separator]
+    Color=#454a54
+
+    [Menu/TextMargin]
+    Left=5
+    Right=5
+    Top=5
+    Bottom=5
+    EOF
+  '';
 in
 {
   imports = [
@@ -86,10 +213,18 @@ in
     fcitx5.waylandFrontend = true;
     fcitx5.addons = with pkgs; [
       meltype
+      meltypeFcitx5Theme
       fcitx5-gtk
       kdePackages.fcitx5-qt
       kdePackages.fcitx5-configtool
     ];
+    fcitx5.settings.addons.classicui.globalSection = {
+      "Vertical Candidate List" = true;
+      Font = "Sans 11";
+      Theme = "meltype-dark";
+      DarkTheme = "meltype-dark";
+      UseDarkTheme = true;
+    };
     fcitx5.settings.inputMethod = {
       GroupOrder."0" = "Default";
       "Groups/0" = {

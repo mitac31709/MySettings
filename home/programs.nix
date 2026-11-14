@@ -252,6 +252,10 @@ in
         text = osConfig.environment.etc."xdg/fcitx5/config".text;
         force = true;
       };
+      "fcitx5/conf/classicui.conf" = {
+        text = osConfig.environment.etc."xdg/fcitx5/conf/classicui.conf".text;
+        force = true;
+      };
     })
   ];
 

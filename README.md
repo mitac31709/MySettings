@@ -351,7 +351,7 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **wol-pc** — Wake-on-LAN クライアント（`pkgs/wol-pc` により `github:mitac-31709/wol-pc` をパッケージ化し、`wake-pc` / `wake-pc-relay` / `.desktop` を同梱。依存 `sshpass` / `zenity` 等をラップ済み）。設定は `WOL_PC_CONFIG` → `/run/agenix/wol-pc-env`（`secrets import-wol`）→ `~/.config/wol-pc/config.env` → `~/Projects/wol-pc/config.env` の順に読み込み、秘密値はストアへ含めない
 - **7-Zip** — `_7zip-zstd`（コマンド `7z` / `7zz`、Zstd ほか対応）+ GUI `peazip`（PeaZip）
 - **tmux** — `runbtop <cmd>` で上部に実行出力（約 10 行）、下部に `btop`
-- **Meltype** — Fcitx5 エンジン（日本語／英語の自動打ち分け。Linux プレビュー。IME は Meltype のみ）
+- **Meltype** — Fcitx5 エンジン（日本語／英語の自動打ち分け。縦型候補・意味/翻訳ペイン付き。IME は Meltype のみ）
 - **フォント** — JetBrainsMono Nerd Font（ターミナル／等幅の既定）
 - **シークレット管理（agenix × Bitwarden）** — `secrets/*.age` を NixOS（`modules/nixos/secrets.nix`）で `/run/agenix/*` へ復号し、共通マスター鍵 `agenix-master-key` のみを Bitwarden（`rbw`）で保持。`secrets` コマンド（`scripts/secrets-tool.sh`）で管理
 - **暗号化バックアップ** — `restic` + `rclone` で `/home` を Google Drive へ。`agenix` 移行時は `/run/agenix/` 経由で自動無監視実行（未移行時・他端末リカバリ時は Bitwarden `rbw`）。詳細は下記。
@@ -368,8 +368,8 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - Meltype 内の英数 ⇔ 日本語: **半角/全角**（Fcitx の Trigger には割り当てない。ChatGPT 等 Electron で直接入力に落ちて戻せなくなるのを防ぐ）
 - **z + 記号 / hjkl**: `zl`→`→`、`zh`→`←`、`zj`→`↓`、`zk`→`↑`、`z/`→`・`、`z.`→`…` など（Meltype 1.4+、既定 ON）
 - 学習・設定: `~/.local/share/Meltype`
-- 詳細設定: **Fcitx5 設定**（`fcitx5-configtool`）
-- プロファイル／config: NixOS モジュールが生成する INI を、Home Manager が `~/.config/fcitx5/{profile,config}` へシンボリックリンクする。Fcitx は `~/.config` を `/etc/xdg` より先に読むので、古いユーザコピー（`keyboard-jp` や半角/全角 Trigger）が勝たない。リンク先はストアで読み取り専用。変更は `modules/nixos/common.nix` の `i18n.inputMethod.fcitx5.settings`
+- 詳細設定: `meltype-settings`（または **Fcitx5 設定** `fcitx5-configtool`）
+- プロファイル／config／ClassicUI: NixOS モジュールが生成する INI を、Home Manager が `~/.config/fcitx5/{profile,config,conf/classicui.conf}` へシンボリックリンクする（ClassicUI は本家準拠のダークテーマ `meltype-dark` と縦型候補、パッチ済み `pkgs/meltype` の注記・折り返し意味/翻訳ペインを有効化）。Fcitx は `~/.config` を `/etc/xdg` より先に読むので、古いユーザコピー（`keyboard-jp` や半角/全角 Trigger）が勝たない。リンク先はストアで読み取り専用。変更は `modules/nixos/common.nix` の `i18n.inputMethod.fcitx5.settings`
 - **Cursor / ChatGPT** など Electron: `NIXOS_OZONE_WL=1` と Wayland IME フラグ。`ShareInputState=All` でフォーカス間の active/inactive ずれを抑える。適用後はアプリを**完全終了**してから開き直す
 - 適用後: `rebuild` してから **fcitx5 再起動**（例: `fcitx5 -d --replace`）かセッション再ログイン
 

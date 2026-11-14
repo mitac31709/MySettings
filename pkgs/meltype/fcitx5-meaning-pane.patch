@@ -1,0 +1,155 @@
+--- a/linux/fcitx5/meltype.cpp	2026-11-14 20:55:56.858496434 +0900
++++ b/linux/fcitx5/meltype.cpp	2026-11-14 20:56:21.439002263 +0900
+@@ -373,6 +373,63 @@
+     return n;
+ }
+ 
++// 本家 CandidateWindow.cpp (kMeaningMaxWidth = 320 DIP) に合わせ、意味・翻訳を狭い幅で折り返す
++std::string wrapMeaning(const std::string &text, size_t maxCols = 44) {
++    std::string out;
++    out.reserve(text.size() + 16);
++    size_t col = 0;
++    size_t lastSpaceOut = std::string::npos;
++    size_t i = 0;
++    while (i < text.size()) {
++        unsigned char c = static_cast<unsigned char>(text[i]);
++        if (c == '\r') {
++            i++;
++            continue;
++        }
++        if (c == '\n') {
++            out += '\n';
++            col = 0;
++            lastSpaceOut = std::string::npos;
++            i++;
++            continue;
++        }
++        size_t len = c < 0x80 ? 1 : c < 0xE0 ? 2 : c < 0xF0 ? 3 : 4;
++        len = std::min(len, text.size() - i);
++        size_t cols = len == 1 ? 1 : 2;
++        if (c == ' ' && col == 0) {
++            i += len;
++            continue;
++        }
++        if (col + cols > maxCols && col > 0) {
++            if (lastSpaceOut != std::string::npos && c != ' ') {
++                out[lastSpaceOut] = '\n';
++                col = 0;
++                for (size_t j = lastSpaceOut + 1; j < out.size();) {
++                    unsigned char uc = static_cast<unsigned char>(out[j]);
++                    size_t ulen = uc < 0x80 ? 1 : uc < 0xE0 ? 2 : uc < 0xF0 ? 3 : 4;
++                    ulen = std::min(ulen, out.size() - j);
++                    col += ulen == 1 ? 1 : 2;
++                    j += ulen;
++                }
++                lastSpaceOut = std::string::npos;
++            } else {
++                out += '\n';
++                col = 0;
++                lastSpaceOut = std::string::npos;
++                if (c == ' ') {
++                    i += len;
++                    continue;
++                }
++            }
++        }
++        if (c == ' ') lastSpaceOut = out.size();
++        out.append(text, i, len);
++        col += cols;
++        i += len;
++    }
++    return out;
++}
++
+ 
+ class MeltypeEngine;
+ 
+@@ -388,6 +445,8 @@
+     std::unique_ptr<fcitx::EventSourceTime> enterTimer;
+     // 意味を出すのを待っている候補 (選んでいる番号と意味)。変わったら待ち直す
+     std::string meaningKey;
++    // 意味を表示中か (意味の待機後に再描画が来ても消さない)
++    bool meaningVisible = false;
+     // 変換中の文字 (preedit) を出しているか
+     bool preeditVisible = false;
+     // 入力欄に入ったときの出来事を送っているか (入力モードの表示を遅らせる)
+@@ -396,8 +455,10 @@
+ 
+ class MeltypeCandidate : public fcitx::CandidateWord {
+ public:
+-    MeltypeCandidate(MeltypeEngine *engine, std::string text, int index)
+-        : fcitx::CandidateWord(fcitx::Text(std::move(text))), engine_(engine), index_(index) {}
++    MeltypeCandidate(MeltypeEngine *engine, std::string text, std::string comment, int index)
++        : fcitx::CandidateWord(fcitx::Text(std::move(text))), engine_(engine), index_(index) {
++        if (!comment.empty()) setComment(fcitx::Text(std::move(comment)));
++    }
+     void select(fcitx::InputContext *ic) const override;
+ 
+ private:
+@@ -636,18 +697,23 @@
+         std::string aux;
+         for (const auto &part : {view.str("typedKeys"), view.str("spellingSuggestion"), view.str("hint")})
+             if (!part.empty()) aux += (aux.empty() ? "" : "　") + part;
+-        if (!aux.empty()) panel.setAuxDown(fcitx::Text(aux));
++        std::string auxHeader;
++        for (const auto &part : {view.str("typedKeys"), view.str("spellingSuggestion")})
++            if (!part.empty()) auxHeader += (auxHeader.empty() ? "" : "　") + part;
+         auto *state = ic->propertyFor(&factory_);
+         const auto *listed = view.get("candidates");
+         if (!listed || listed->kind != Json::Kind::Object) {
++            if (!aux.empty()) panel.setAuxDown(fcitx::Text(aux));
+             state->meaningTimer.reset();
+             state->meaningKey.clear();
++            state->meaningVisible = false;
+         } else {
+-            // 注記 (候補の種類など) は候補の後ろに付ける
++            // 注記 (英訳・半角・全角) は ClassicUI の comment 列に出す (本家の副表示色に揃える)
+             auto candidates = listed->strings("items");
++            std::vector<std::string> candidateNotes(candidates.size());
+             if (const auto *notes = listed->get("notes"); notes && notes->kind == Json::Kind::Array)
+                 for (size_t i = 0; i < candidates.size() && i < notes->items.size(); i++)
+-                    if (notes->items[i].kind == Json::Kind::String) candidates[i] += "　" + notes->items[i].string;
++                    if (notes->items[i].kind == Json::Kind::String) candidateNotes[i] = notes->items[i].string;
+             auto list = std::make_unique<fcitx::CommonCandidateList>();
+             list->setLayoutHint(fcitx::CandidateLayoutHint::Vertical);
+             list->setPageSize(9);
+@@ -655,7 +721,8 @@
+             if (listed->flag("numbered")) list->setLabels({"1. ", "2. ", "3. ", "4. ", "5. ", "6. ", "7. ", "8. ", "9. "});
+             else list->setLabels(std::vector<std::string>(9, ""));
+             list->setCursorPositionAfterPaging(fcitx::CursorPositionAfterPaging::DonotChange);
+-            for (size_t i = 0; i < candidates.size(); i++) list->append<MeltypeCandidate>(this, candidates[i], static_cast<int>(i));
++            for (size_t i = 0; i < candidates.size(); i++)
++                list->append<MeltypeCandidate>(this, candidates[i], candidateNotes[i], static_cast<int>(i));
+             int selected = listed->integer("selected", -1);
+             // setGlobalCursorIndex はページを変えないので、選んでいる候補のページに移ってから置く
+             if (selected >= 0 && selected < static_cast<int>(candidates.size())) {
+@@ -666,10 +733,19 @@
+             // 選んでいる候補で止まったら、本体が決めた時間のあとに意味を出す
+             const auto meaning = listed->str("selectedMeaning");
+             const auto key = meaning.empty() ? std::string() : std::to_string(selected) + ":" + meaning;
++            const auto wrapped = meaning.empty() ? std::string() : wrapMeaning(meaning);
++            const auto meaningPane = wrapped.empty() ? std::string() : (auxHeader.empty() ? wrapped : auxHeader + "\n" + wrapped);
++            if (key == state->meaningKey && state->meaningVisible && !meaningPane.empty()) {
++                panel.setAuxDown(fcitx::Text(meaningPane));
++            } else if (!aux.empty()) {
++                panel.setAuxDown(fcitx::Text(aux));
++            }
+             if (key != state->meaningKey) {
+                 state->meaningKey = key;
+-                state->meaningTimer = key.empty() ? nullptr : after(listed->integer("meaningDelayMs"), [ic, meaning]() {
+-                    ic->inputPanel().setAuxDown(fcitx::Text(meaning));
++                state->meaningVisible = false;
++                state->meaningTimer = key.empty() ? nullptr : after(listed->integer("meaningDelayMs"), [ic, state, meaningPane]() {
++                    state->meaningVisible = true;
++                    ic->inputPanel().setAuxDown(fcitx::Text(meaningPane));
+                     ic->updateUserInterface(fcitx::UserInterfaceComponent::InputPanel);
+                 });
+             }
+@@ -686,6 +762,7 @@
+         state->preeditVisible = false;
+         state->meaningTimer.reset();
+         state->meaningKey.clear();
++        state->meaningVisible = false;
+     }
+ };
+ 
