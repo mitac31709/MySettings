@@ -1,11 +1,11 @@
-# JQuake: login autostart, tray background, alert fullscreen over swaylock.
+# JQuake: login autostart, offscreen tray background, alert fullscreen over swaylock.
 #
 # - Patches a few Settings.properties keys on each start (tray / always-on-top /
 #   wake screen / no window until alert) without rewriting the whole file.
 # - Sway: AWT SystemTray needs an XEmbed tray host. Offscreen stalonetray hosts
 #   JQuake's icon (avoiding xembedsniproxy's KDE dependency and blank window),
-#   and jquake-tray-sni captures the live icon via XComposite/XDamage onto a
-#   native StatusNotifierItem in waybar's tray.
+#   and waybar's dedicated `custom/jquake` module opens it via stalonetray
+#   remote double-click (`--remote-click-icon JavaEmbeddedFrame`).
 # - ext-session-lock blocks normal windows above swaylock; on alert we dismiss
 #   swaylock and fullscreen the map (intentional emergency unlock).
 {
@@ -24,26 +24,39 @@ let
 
   stalonetrayBin = "${pkgs.stalonetray}/bin/stalonetray";
 
-  jquakeTraySniPy = pkgs.writers.writePython3Bin "jquake-tray-sni-py" {
-    libraries = [
-      pkgs.python3Packages.xlib
-      pkgs.python3Packages.dbus-next
-    ];
-    doCheck = false;
-  } (builtins.readFile ../scripts/jquake-tray-sni.py);
+  # Sway clamps floating windows onto the output; clear X11 ShapeInput so the
+  # invisible stalonetray window can never intercept pointer clicks.
+  clearStalonetrayInput =
+    pkgs.writers.writePython3 "stalonetray-clear-input"
+      {
+        libraries = [ pkgs.python3Packages.xlib ];
+        doCheck = false;
+      }
+      ''
+        import os
+        from Xlib import X, display
+        from Xlib.ext import shape
 
-  jquakeTraySni = pkgs.writeShellApplication {
-    name = "jquake-tray-sni";
-    runtimeInputs = [
-      pkgs.stalonetray
-      pkgs.systemd
-      pkgs.sway
-      pkgs.coreutils
-    ];
-    text = ''
-      exec ${lib.getExe jquakeTraySniPy} "$@"
-    '';
-  };
+        dpy = display.Display(os.environ.get("DISPLAY") or ":0")
+        root = dpy.screen().root
+
+        def walk(win):
+            yield win
+            try:
+                for child in win.query_tree().children:
+                    yield from walk(child)
+            except Exception:
+                return
+
+        for win in walk(root):
+            try:
+                cls = win.get_wm_class() or ()
+            except Exception:
+                cls = ()
+            if "stalonetray" in cls:
+                win.shape_rectangles(shape.SO.Set, shape.SK.Input, X.Unsorted, 0, 0, [])
+        dpy.sync()
+      '';
 
   # for_window alone races map; re-apply after the tray window exists.
   hideStalonetray = pkgs.writeShellScript "stalonetray-jquake-hide" ''
@@ -56,6 +69,7 @@ let
         ${pkgs.sway}/bin/swaymsg \
           '[class="^stalonetray$"] floating enable, border none, sticky enable, opacity 0, move absolute position -2000 px -2000 px' \
           >/dev/null
+        ${clearStalonetrayInput} >/dev/null 2>&1 || true
         exit 0
       fi
       sleep 0.25
@@ -217,10 +231,15 @@ let
       pkgs.jq
       pkgs.sway
       pkgs.procps
+      pkgs.systemd
       pkgs.coreutils
     ];
     text = ''
       criteria=${lib.escapeShellArg swayCriteria}
+
+      refresh_jquake_bar() {
+        systemctl --user kill --kill-who=main --signal=RTMIN+12 waybar.service >/dev/null 2>&1 || true
+      }
 
       raise_alert() {
         # Wake outputs (pairs with JQuake wakeUpScreen).
@@ -239,9 +258,18 @@ let
         ' >/dev/null 2>&1
       }
 
+      is_jquake_close() {
+        jq -e --arg class ${lib.escapeShellArg jquakeClass} '
+          (.change == "close") and (.container.window_properties.class? == $class)
+        ' >/dev/null 2>&1
+      }
+
       swaymsg -t subscribe -m '["window"]' | while IFS= read -r line; do
         if printf '%s\n' "$line" | is_jquake_event; then
           raise_alert
+          refresh_jquake_bar
+        elif printf '%s\n' "$line" | is_jquake_close; then
+          refresh_jquake_bar
         fi
       done
     '';
@@ -282,8 +310,8 @@ in
     };
   };
 
-  # Offscreen XEmbed tray host for JQuake; jquake-tray-sni bridges its pixels
-  # and clicks to waybar's native SNI tray.
+  # Offscreen XEmbed tray host for JQuake; waybar's `custom/jquake` opens the
+  # main window via stalonetray --remote-click-icon.
   systemd.user.services.stalonetray-jquake = {
     Unit = {
       Description = "Offscreen XEmbed tray for JQuake (Sway)";
@@ -295,35 +323,10 @@ in
     };
     Service = {
       Type = "simple";
-      # Pin background to waybar's #0b0f14 so anti-aliased tray edges blend cleanly;
-      # sway keeps the window offscreen and opacity 0, and jquake-tray-sni clears
-      # X11 ShapeInput so it can never eat clicks.
+      # Sway keeps the window opacity 0 and hideStalonetray clears X11
+      # ShapeInput so it can never intercept pointer clicks.
       ExecStart = "${stalonetrayBin} --background '#0b0f14' --geometry 1x1+-2000+-2000 --max-geometry 1x1 --slot-size 16 --icon-size 16 --scrollbars none --sticky --window-type utility --window-strut none --kludges force_icons_size,fix_window_pos";
       ExecStartPost = "${hideStalonetray}";
-      Restart = "on-failure";
-      RestartSec = 3;
-    };
-    Install = {
-      WantedBy = [ "graphical-session.target" ];
-    };
-  };
-
-  systemd.user.services.jquake-tray-sni = {
-    Unit = {
-      Description = "SNI tray bridge for JQuake offscreen XEmbed icon (Sway)";
-      After = [
-        "graphical-session.target"
-        "stalonetray-jquake.service"
-        "jquake.service"
-      ];
-      BindsTo = [ "graphical-session.target" ];
-      ConditionEnvironment = "XDG_CURRENT_DESKTOP=sway";
-      StartLimitIntervalSec = 30;
-      StartLimitBurst = 3;
-    };
-    Service = {
-      Type = "simple";
-      ExecStart = "${lib.getExe jquakeTraySni}";
       Restart = "on-failure";
       RestartSec = 3;
     };

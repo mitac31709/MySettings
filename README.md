@@ -339,7 +339,7 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **Vivaldi** — `vivaldi`
 - **Firefox** — `firefox`
 - **Tor Browser** — `tor-browser`
-- **JQuake** — `JQuake` / `jquake`（1.8.4 + `pkgs/jquake` ラッパー。Sway AWT 修正・更新ダイアログ無効化）。ログイン時に `jquake.service` で常駐し、Sway では offscreen `stalonetray`＋`jquake-tray-sni`（XComposite/XDamage → StatusNotifierItem）経由で左 waybar の `tray` に動的アイコンを表示（クリックで開く／右クリックでメニュー）。警報時は全画面＋`swaylock` 解除（`home/jquake.nix`）
+- **JQuake** — `JQuake` / `jquake`（1.8.4 + `pkgs/jquake` ラッパー。Sway AWT 修正・更新ダイアログ無効化）。ログイン時に `jquake.service` で常駐し、Sway では offscreen `stalonetray` にトレイを保持しつつ左 waybar の専用枠（`custom/jquake`）を表示（左クリックでウィンドウを開く／右クリックでメニュー）。警報時は全画面＋`swaylock` 解除（`home/jquake.nix` / `home/sway.nix`）
 - **ONLYOFFICE** — `onlyoffice-desktopeditors`（文書・表計算・プレゼン）
 - **Affinity** — 未導入（`affinity-v3` なし。flake 入力も overlay も外してある）。戻すときは次の 3 箇所です。
   1. `flake.nix` の `inputs` に `affinity-nix.url = "github:mrshmllow/affinity-nix";` を足し、`nixpkgs.overlays` の先頭に `inputs.affinity-nix.overlays.default` を戻す

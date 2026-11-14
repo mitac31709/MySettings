@@ -311,6 +311,179 @@ let
     '';
   };
 
+  # Dedicated left-bar JQuake slot: status indicator + click-to-open + right-click menu.
+  waybarJquake = pkgs.writeShellApplication {
+    name = "waybar-jquake";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.jq
+      pkgs.sway
+      pkgs.systemd
+    ];
+    text = ''
+      mapfile -t ust < <(
+        systemctl --user is-active \
+          jquake.service \
+          stalonetray-jquake.service \
+          jquake-sway-alert.service 2>/dev/null || true
+      )
+      jq_s="''${ust[0]:-unknown}"
+      st_s="''${ust[1]:-unknown}"
+      al_s="''${ust[2]:-unknown}"
+
+      is_open=0
+      if swaymsg -t get_tree 2>/dev/null | jq -e '
+        [.. | objects | select(.window_properties.class? == "net-jquake-app-Main")] | length > 0
+      ' >/dev/null; then
+        is_open=1
+      fi
+
+      glyph=$'\uf469'
+      if [ "$jq_s" = "failed" ] || [ "$st_s" = "failed" ] || [ "$al_s" = "failed" ]; then
+        cls="failed"
+        glyph=$'\uf071'
+        tip=$'✗ JQuake: 異常停止\njquake='"$jq_s"$' tray='"$st_s"$' alert='"$al_s"$'\n\n左クリックで起動・表示\n右クリックで管理メニュー'
+      elif [ "$jq_s" = "active" ] && [ "$st_s" = "active" ] && [ "$al_s" = "active" ]; then
+        if [ "$is_open" -eq 1 ]; then
+          cls="open"
+          tip=$'JQuake: 表示中\n\n左クリックでフォーカス\n右クリックで管理メニュー'
+        else
+          cls="active"
+          tip=$'JQuake: 待機中（強震モニタ・EEW 監視）\n\n左クリックで表示\n右クリックで管理メニュー'
+        fi
+      else
+        cls="degraded"
+        tip=$'! JQuake: 停止中\njquake='"$jq_s"$' tray='"$st_s"$' alert='"$al_s"$'\n\n左クリックで起動・表示\n右クリックで管理メニュー'
+      fi
+
+      jq -cn --arg text "$glyph" --arg tooltip "$tip" --arg class "$cls" \
+        '{text: $text, tooltip: $tooltip, class: $class}'
+    '';
+  };
+
+  waybarJquakeOpen = pkgs.writeShellApplication {
+    name = "waybar-jquake-open";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.jq
+      pkgs.libnotify
+      pkgs.stalonetray
+      pkgs.sway
+      pkgs.systemd
+    ];
+    text = ''
+      refresh_jquake_bar() {
+        systemctl --user kill --kill-who=main --signal=RTMIN+12 waybar.service >/dev/null 2>&1 || true
+      }
+
+      mapfile -t ust < <(
+        systemctl --user is-active \
+          stalonetray-jquake.service \
+          jquake.service \
+          jquake-sway-alert.service 2>/dev/null || true
+      )
+      if [ "''${ust[0]:-}" != "active" ] || [ "''${ust[1]:-}" != "active" ] || [ "''${ust[2]:-}" != "active" ]; then
+        systemctl --user reset-failed stalonetray-jquake.service jquake.service jquake-sway-alert.service >/dev/null 2>&1 || true
+        systemctl --user start stalonetray-jquake.service jquake.service jquake-sway-alert.service
+        refresh_jquake_bar
+      fi
+
+      if swaymsg -t get_tree 2>/dev/null | jq -e '
+        [.. | objects | select(.window_properties.class? == "net-jquake-app-Main")] | length > 0
+      ' >/dev/null; then
+        swaymsg '[class="^net-jquake-app-Main$"] focus' >/dev/null 2>&1 || true
+        refresh_jquake_bar
+        exit 0
+      fi
+
+      disp="''${DISPLAY:-:0}"
+      clicked=0
+      for _ in $(seq 1 40); do
+        if stalonetray -display "$disp" \
+          --remote-click-icon JavaEmbeddedFrame \
+          --remote-click-button 1 \
+          --remote-click-type double >/dev/null 2>&1; then
+          clicked=1
+          break
+        fi
+        sleep 0.25
+      done
+
+      if [ "$clicked" -eq 0 ]; then
+        notify-send -u normal "JQuake" "トレイアイコンが見つかりません。状態を確認してください。" >/dev/null 2>&1 || true
+        refresh_jquake_bar
+        exit 1
+      fi
+
+      for _ in $(seq 1 20); do
+        if swaymsg -t get_tree 2>/dev/null | jq -e '
+          [.. | objects | select(.window_properties.class? == "net-jquake-app-Main")] | length > 0
+        ' >/dev/null; then
+          swaymsg '[class="^net-jquake-app-Main$"] focus' >/dev/null 2>&1 || true
+          break
+        fi
+        sleep 0.1
+      done
+      refresh_jquake_bar
+    '';
+  };
+
+  waybarJquakeMenu = pkgs.writeShellApplication {
+    name = "waybar-jquake-menu";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.ghostty
+      pkgs.rofi
+      pkgs.systemd
+    ];
+    text = ''
+            jq_s="$(systemctl --user is-active jquake.service 2>/dev/null || true)"
+            if [ "$jq_s" = "active" ]; then
+              toggle_label="JQuake [$jq_s] │ 停止"
+            else
+              toggle_label="JQuake [$jq_s] │ 開始"
+            fi
+
+            menu="$(cat <<EOF
+      JQuake [$jq_s] │ ウィンドウを開く
+      JQuake │ 再起動 (3ユニット)
+      $toggle_label
+      JQuake │ 状態・ログ表示
+      EOF
+            )"
+
+            choice="$(printf '%s\n' "$menu" | ${rofiBin} -dmenu -i -p 'JQuake' || true)"
+            [ -n "$choice" ] || exit 0
+
+            refresh_jquake_bar() {
+              systemctl --user kill --kill-who=main --signal=RTMIN+12 waybar.service >/dev/null 2>&1 || true
+            }
+
+            case "$choice" in
+              *"ウィンドウを開く")
+                exec ${lib.getExe waybarJquakeOpen}
+                ;;
+              *"再起動"*)
+                systemctl --user reset-failed stalonetray-jquake.service jquake.service jquake-sway-alert.service >/dev/null 2>&1 || true
+                systemctl --user restart stalonetray-jquake.service jquake.service jquake-sway-alert.service
+                refresh_jquake_bar
+                ;;
+              *"停止")
+                systemctl --user stop jquake.service jquake-sway-alert.service stalonetray-jquake.service
+                refresh_jquake_bar
+                ;;
+              *"開始")
+                systemctl --user reset-failed stalonetray-jquake.service jquake.service jquake-sway-alert.service >/dev/null 2>&1 || true
+                systemctl --user start stalonetray-jquake.service jquake.service jquake-sway-alert.service
+                refresh_jquake_bar
+                ;;
+              *"状態・ログ表示")
+                exec ${ghosttyBin} -e ${pkgs.bash}/bin/bash -lc "systemctl --user status jquake stalonetray-jquake jquake-sway-alert --no-pager; echo; journalctl --user -u jquake -u stalonetray-jquake -u jquake-sway-alert -n 30 --no-pager; printf '\n[Enter で閉じる] '; IFS= read -r _ || true"
+                ;;
+            esac
+    '';
+  };
+
   # Bottom of sideBar: background daemon & system status + interactive menu.
   waybarServices = pkgs.writeShellApplication {
     name = "waybar-services";
@@ -322,10 +495,6 @@ let
     text = ''
       mapfile -t ust < <(
         systemctl --user is-active \
-          jquake.service \
-          stalonetray-jquake.service \
-          jquake-tray-sni.service \
-          jquake-sway-alert.service \
           uniclipd.service \
           lan-mouse.service \
           taildrop-receive.service \
@@ -339,15 +508,11 @@ let
           restic-backups-home.timer 2>/dev/null || true
       )
 
-      jq_s="''${ust[0]:-unknown}"
-      st_s="''${ust[1]:-unknown}"
-      sni_s="''${ust[2]:-unknown}"
-      al_s="''${ust[3]:-unknown}"
-      uc_s="''${ust[4]:-unknown}"
-      lm_s="''${ust[5]:-unknown}"
-      td_s="''${ust[6]:-unknown}"
-      ct_s="''${ust[7]:-unknown}"
-      ci_s="''${ust[8]:-unknown}"
+      uc_s="''${ust[0]:-unknown}"
+      lm_s="''${ust[1]:-unknown}"
+      td_s="''${ust[2]:-unknown}"
+      ct_s="''${ust[3]:-unknown}"
+      ci_s="''${ust[4]:-unknown}"
 
       ts_s="''${sst[0]:-unknown}"
       rb_s="''${sst[1]:-unknown}"
@@ -388,18 +553,6 @@ let
             ;;
         esac
       }
-
-      # JQuake: when healthy, the real icon lives below in `tray`; surface an
-      # explicit alert glyph only if any piece of the stack is unhealthy.
-      if [ "$jq_s" = "active" ] && [ "$st_s" = "active" ] && [ "$sni_s" = "active" ] && [ "$al_s" = "active" ]; then
-        tips+=("✓ JQuake: active (tray/sni/alert 稼働)")
-      elif [ "$jq_s" = "failed" ] || [ "$st_s" = "failed" ] || [ "$sni_s" = "failed" ] || [ "$al_s" = "failed" ]; then
-        add_icon failed $'\uf071'
-        tips+=("✗ JQuake: jquake=$jq_s tray=$st_s sni=$sni_s alert=$al_s")
-      else
-        add_icon warn $'\uf071'
-        tips+=("! JQuake: jquake=$jq_s tray=$st_s sni=$sni_s alert=$al_s")
-      fi
 
       add_icon "$uc_s" $'\uf0ea'
       tips+=("• UniClipboard (uniclipd): $uc_s")
@@ -464,9 +617,7 @@ let
     name = "waybar-services-menu";
     runtimeInputs = [
       pkgs.coreutils
-      pkgs.gawk
       pkgs.ghostty
-      pkgs.procps
       pkgs.rofi
       pkgs.sway
       pkgs.systemd
@@ -481,10 +632,9 @@ let
               ${ghosttyBin} -e ${pkgs.bash}/bin/bash -lc "$cmd; printf '\n[Enter で閉じる] '; IFS= read -r _ || true"
             }
             refresh_bar() {
-              pkill -SIGRTMIN+10 -x waybar >/dev/null 2>&1 || true
+              systemctl --user kill --kill-who=main --signal=RTMIN+10 waybar.service >/dev/null 2>&1 || true
             }
 
-            jq_s="$(u_state jquake.service)"
             uc_s="$(u_state uniclipd.service)"
             lm_s="$(u_state lan-mouse.service)"
             td_s="$(u_state taildrop-receive.service)"
@@ -495,9 +645,6 @@ let
             rt_s="$(s_state restic-backups-home.timer)"
 
             menu="$(cat <<EOF
-      JQuake [$jq_s] │ ウィンドウを開く
-      JQuake │ 関連サービス再起動 (4ユニット)
-      JQuake │ 状態・ログ表示
       UniClipboard [$uc_s] │ 再起動
       UniClipboard [$uc_s] │ $(toggle_verb "$uc_s")
       UniClipboard │ GUI を開く
@@ -522,28 +669,6 @@ let
             [ -n "$choice" ] || exit 0
 
             case "$choice" in
-              *"JQuake"*"ウィンドウを開く")
-                if [ "$jq_s" != "active" ]; then
-                  systemctl --user start stalonetray-jquake.service jquake-tray-sni.service jquake.service jquake-sway-alert.service
-                  refresh_bar
-                fi
-                swaymsg '[class="^net-jquake-app-Main$"] focus' >/dev/null 2>&1 || \
-                  pkill -0 -f jquake-tray-sni || true
-                # Activate via SNI DBus item if running, so hidden JQuake maps cleanly.
-                for dest in $(busctl --user list --no-legend 2>/dev/null | awk '/org\.kde\.StatusNotifierItem-/{print $1}'); do
-                  if [ "$(busctl --user get-property "$dest" /StatusNotifierItem org.kde.StatusNotifierItem Id 2>/dev/null || true)" = 's "jquake"' ]; then
-                    busctl --user call "$dest" /StatusNotifierItem org.kde.StatusNotifierItem Activate ii 0 0 >/dev/null 2>&1 || true
-                    break
-                  fi
-                done
-                ;;
-              *"JQuake"*"関連サービス再起動"*)
-                systemctl --user restart stalonetray-jquake.service jquake-tray-sni.service jquake.service jquake-sway-alert.service
-                refresh_bar
-                ;;
-              *"JQuake"*"状態・ログ表示")
-                run_term "systemctl --user status jquake stalonetray-jquake jquake-tray-sni jquake-sway-alert --no-pager; echo; journalctl --user -u jquake -u jquake-tray-sni -n 30 --no-pager"
-                ;;
               *"UniClipboard"*"再起動")
                 systemctl --user restart uniclipd.service
                 refresh_bar
@@ -1751,14 +1876,14 @@ let
     }
     {
       section = "周辺";
-      label = "JQuake（ログイン常駐・警報で全画面）";
-      run = "JQuake";
+      label = "JQuake 表示（左 waybar クリックでも可）";
+      run = "${lib.getExe waybarJquakeOpen}";
       mode = "exec";
     }
     {
       section = "周辺";
       label = "JQuake 状態（systemd）";
-      run = "systemctl --user status jquake stalonetray-jquake jquake-tray-sni jquake-sway-alert";
+      run = "systemctl --user status jquake stalonetray-jquake jquake-sway-alert";
       mode = "term";
     }
     {
@@ -2197,7 +2322,7 @@ in
           on-click = lib.getExe ntpSync;
         };
       };
-      # Left vertical bar: updates (top), daemons + tray (bottom).
+      # Left vertical bar: updates (top), JQuake + daemons + tray (bottom).
       # Align top/bottom flush with tiled Sway windows (gaps inner=4 + outer=4 = 8px).
       sideBar = {
         name = "side";
@@ -2209,6 +2334,7 @@ in
         margin-bottom = 8;
         modules-left = [ "custom/updates" ];
         modules-right = [
+          "custom/jquake"
           "custom/services"
           "tray"
         ];
@@ -2227,6 +2353,15 @@ in
           signal = 9;
           tooltip = true;
           on-click = openFlakeUpdate;
+        };
+        "custom/jquake" = {
+          exec = lib.getExe waybarJquake;
+          return-type = "json";
+          interval = 5;
+          signal = 12;
+          tooltip = true;
+          on-click = lib.getExe waybarJquakeOpen;
+          on-click-right = lib.getExe waybarJquakeMenu;
         };
         "custom/services" = {
           exec = lib.getExe waybarServices;
@@ -2326,8 +2461,9 @@ in
         color: #e06c75;
         background: #3a1a1e;
       }
-      /* Side bar: updates (top), services + tray (bottom). */
+      /* Side bar: updates (top), JQuake + services + tray (bottom). */
       window.side #custom-updates,
+      window.side #custom-jquake,
       window.side #custom-services,
       window.side #tray {
         padding: 4px 0;
@@ -2335,6 +2471,7 @@ in
         background: transparent;
       }
       window.side #custom-updates,
+      window.side #custom-jquake,
       window.side #custom-services {
         font-family: "${waybarFont}", sans-serif;
         font-size: 13px;
@@ -2349,6 +2486,24 @@ in
         color: #9fe7e7;
         background: #15383a;
         border-top: 2px solid #33c5c5;
+      }
+      window.side #custom-jquake {
+        padding: 7px 0;
+        border-top: 1px solid #15383a;
+      }
+      window.side #custom-jquake.open {
+        color: #e6edf3;
+        background: #15383a;
+        border-left: 2px solid #33c5c5;
+      }
+      window.side #custom-jquake.degraded {
+        color: #e5c07b;
+        border-left: 2px solid #e5c07b;
+      }
+      window.side #custom-jquake.failed {
+        color: #e06c75;
+        background: #3a1a1e;
+        border-left: 2px solid #e06c75;
       }
       window.side #custom-services {
         padding: 6px 0 3px 0;
