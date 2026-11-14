@@ -90,11 +90,75 @@ let
   # Route launches through swaymsg exec so new windows land on the
   # workspace active at selection time (not wherever focus is when they map).
   rofiLauncher = "${rofiBin} -show drun -run-command \"swaymsg exec -- {cmd}\" -run-shell-command \"swaymsg exec -- {terminal} -e {cmd}\"";
-  # waybar cpu / mem → Ghostty + btop; network → Ghostty + nmtui; clock → time.is
+  # waybar cpu / mem → Ghostty + btop; network → Ghostty + nmtui; clock → NTP sync
   openBtop = "${ghosttyBin} -e ${btopBin}";
   openNmtui = "${ghosttyBin} -e ${nmtuiBin}";
   openYazi = "${ghosttyBin} -e ${yaziBin}";
-  openTimeIs = "${pkgs.xdg-utils}/bin/xdg-open https://time.is/Tokyo";
+
+  waybarClock = pkgs.writeShellScript "waybar-clock" ''
+    export LC_ALL=C
+    export TZDIR="${pkgs.tzdata}/share/zoneinfo"
+    printf -v now '%(%s)T' -1
+    TZ="Asia/Tokyo" printf -v bar '%(%a %m-%d %H:%M:%S)T' "$now"
+    TZ="Asia/Tokyo" printf -v jst '%(%Y-%m-%d (%a) %H:%M:%S %Z)T' "$now"
+    TZ="UTC" printf -v utc '%(%Y-%m-%d (%a) %H:%M:%S %Z)T' "$now"
+    TZ="America/Los_Angeles" printf -v pt '%(%Y-%m-%d (%a) %H:%M:%S %Z)T' "$now"
+    TZ="Asia/Shanghai" printf -v bj '%(%Y-%m-%d (%a) %H:%M:%S %Z)T' "$now"
+    TZ="America/Los_Angeles" printf -v sv '%(%Y-%m-%d (%a) %H:%M:%S %Z)T' "$now"
+    if [ -e /run/systemd/timesync/synchronized ]; then
+      ntp_line="NTP: 同期済み（クリックで時刻同期）"
+    else
+      ntp_line="NTP: 同期待ち（クリックで時刻同期）"
+    fi
+    tooltip="JST (東京)      $jst\nUTC             $utc\n太平洋時間      $pt\n北京時間        $bj\nシリコンバレー  $sv\n\n$ntp_line"
+    printf '{"text":"%s","tooltip":"%s"}\n' "$bar" "$tooltip"
+  '';
+
+  ntpSync = pkgs.writeShellApplication {
+    name = "waybar-ntp-sync";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.libnotify
+      pkgs.procps
+      pkgs.systemd
+    ];
+    text = ''
+      notify() {
+        notify-send "$@" >/dev/null 2>&1 || true
+      }
+
+      if ! err="$(systemctl restart systemd-timesyncd.service 2>&1)"; then
+        notify -u critical "NTP 時刻同期に失敗しました" "systemd-timesyncd の再起動が拒否または失敗しました: ''${err:-exit $?}"
+        exit 1
+      fi
+
+      synced=0
+      server=""
+      status=""
+      for _ in $(seq 1 20); do
+        status="$(systemctl show -p StatusText --value systemd-timesyncd.service 2>/dev/null || true)"
+        server="$(timedatectl show-timesync -p ServerName --value 2>/dev/null || true)"
+        msg="$(timedatectl show-timesync -p NTPMessage --value 2>/dev/null || true)"
+        if [ -n "$server" ] && [[ "$msg" != *"PacketCount=0"* ]]; then
+          synced=1
+          break
+        fi
+        sleep 0.25
+      done
+
+      pkill -SIGRTMIN+11 -x waybar >/dev/null 2>&1 || true
+
+      now_jst="$(TZ="Asia/Tokyo" date '+%Y-%m-%d %H:%M:%S %Z')"
+      now_utc="$(TZ="UTC" date '+%Y-%m-%d %H:%M:%S %Z')"
+      if [ "$synced" -eq 1 ]; then
+        body="$(printf '%s\n%s\n%s' "$now_jst" "$now_utc" "''${status:-server: $server}")"
+        notify "NTP 時刻同期完了" "$body"
+      else
+        body="$(printf '%s\n%s\n%s' "$now_jst" "$now_utc" "''${status:-応答待ち（オフラインまたは同期待ち）}")"
+        notify -u normal "NTP 時刻同期を要求しました" "$body"
+      fi
+    '';
+  };
 
   # Bottom of sideBar: background daemon & system status + interactive menu.
   waybarServices = pkgs.writeShellApplication {
@@ -701,9 +765,9 @@ let
     }
     {
       section = "Waybar・日常";
-      label = "time.is（東京）";
-      keys = "日付クリック";
-      run = openTimeIs;
+      label = "NTP 時刻同期";
+      keys = "時計クリック";
+      run = lib.getExe ntpSync;
       mode = "exec";
     }
     {
@@ -1811,7 +1875,7 @@ in
           "network"
           "backlight"
           "pulseaudio"
-          "clock"
+          "custom/clock"
         ];
         "custom/cheatsheet" = {
           format = "?";
@@ -1891,10 +1955,13 @@ in
           max-volume = 100;
           on-click = "${pactl} set-sink-mute @DEFAULT_SINK@ toggle";
         };
-        clock = {
-          format = "{:%a %m-%d %H:%M}";
-          tooltip-format = "{:%Y-%m-%d %H:%M:%S}";
-          on-click = openTimeIs;
+        "custom/clock" = {
+          exec = "${waybarClock}";
+          return-type = "json";
+          interval = 1;
+          signal = 11;
+          tooltip = true;
+          on-click = lib.getExe ntpSync;
         };
       };
       # Left vertical bar: updates (top), daemons + tray (bottom).
@@ -1991,7 +2058,7 @@ in
         color: #9aa7b5;
         padding: 0 8px;
       }
-      #custom-cheatsheet, #cpu, #memory, #custom-keep-screen-on, #battery, #network, #backlight, #pulseaudio, #clock {
+      #custom-cheatsheet, #cpu, #memory, #custom-keep-screen-on, #battery, #network, #backlight, #pulseaudio, #custom-clock {
         padding: 0 8px;
         color: #9fe7e7;
         /* Stock waybar style + light GTK use white module chrome. */

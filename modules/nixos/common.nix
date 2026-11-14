@@ -193,6 +193,19 @@ in
   # TLS then fails with "certificate is not yet valid". Keep timesyncd on.
   services.timesyncd.enable = true;
 
+  # Allow wheel users to trigger an immediate NTP resync from the Waybar
+  # clock click without granting broader unit control.
+  security.polkit.extraConfig = ''
+    polkit.addRule(function(action, subject) {
+      if (action.id == "org.freedesktop.systemd1.manage-units" &&
+          action.lookup("unit") == "systemd-timesyncd.service" &&
+          action.lookup("verb") == "restart" &&
+          subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+      }
+    });
+  '';
+
   i18n.defaultLocale = "ja_JP.UTF-8";
   i18n.extraLocaleSettings = {
     LC_ADDRESS = "ja_JP.UTF-8";
