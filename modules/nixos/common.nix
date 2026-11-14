@@ -256,6 +256,9 @@ in
 
   hardware.enableRedistributableFirmware = true;
 
+  # Allow unprivileged mounting of removable drives (udisksctl) in active sessions.
+  services.udisks2.enable = true;
+
   # Pre-populate verified SSH host public keys in /etc/ssh/ssh_known_hosts
   # so clients don't rely solely on mutable ~/.ssh/known_hosts.
   programs.ssh.knownHosts =
