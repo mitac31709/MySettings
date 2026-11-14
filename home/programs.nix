@@ -270,9 +270,16 @@ in
       identity_url = "https://identity.bitwarden.eu";
       ui_url = "https://vault.bitwarden.eu";
       notifications_url = "https://notifications.bitwarden.eu";
-      pinentry = pkgs.pinentry-qt;
+      pinentry = pkgs.rofi-prompt;
       lock_timeout = 3600;
     };
+  };
+
+  # GnuPG + gpg-agent using the same Rofi pinentry as rbw.
+  programs.gpg.enable = true;
+  services.gpg-agent = {
+    enable = true;
+    pinentry.package = pkgs.rofi-prompt;
   };
 
   programs.neovim = {
@@ -483,7 +490,7 @@ in
     # (/run/agenix/wol-pc-env), ~/.config/wol-pc/config.env, or ~/Projects/wol-pc/config.env.
     wol-pc
     sshpass
-    zenity
+    rofi-prompt
     tmux
     trayscale
     vivaldi

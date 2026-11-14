@@ -14,9 +14,9 @@
   iputils,
   libnotify,
   openssh,
+  rofi-prompt,
   sshpass,
   wakeonlan,
-  zenity,
 }:
 
 stdenvNoCC.mkDerivation {
@@ -81,7 +81,50 @@ stdenvNoCC.mkDerivation {
     fi"""
     if old not in text:
         raise SystemExit("expected config header block not found in wake-pc.sh")
-    p.write_text(text.replace(old, new, 1), encoding="utf-8")
+    text = text.replace(old, new, 1)
+
+    old_prompt = """prompt_ssh_password() {
+      if command -v zenity >/dev/null 2>&1; then
+        zenity --password --title="SSH パスワード" \\
+          --text="''${SSH_USER}@''${WOL_RELAY_HOST} のパスワードを入力"
+        return
+      fi
+
+      if command -v kdialog >/dev/null 2>&1; then
+        kdialog --password "SSH パスワード (''${SSH_USER}@''${WOL_RELAY_HOST})"
+        return
+      fi
+
+      if [[ -t 0 ]]; then
+        read -r -s -p "SSH パスワード (''${SSH_USER}@''${WOL_RELAY_HOST}): " password
+        echo >&2
+        printf '%s' "$password"
+        return
+      fi
+
+      echo "パスワード入力 UI (zenity / kdialog) が見つかりません" >&2
+      return 1
+    }"""
+    new_prompt = """prompt_ssh_password() {
+      if command -v rofi-askpass >/dev/null 2>&1; then
+        rofi-askpass --title "SSH パスワード" \\
+          "''${SSH_USER}@''${WOL_RELAY_HOST} のパスワードを入力"
+        return
+      fi
+
+      if [[ -t 0 ]]; then
+        read -r -s -p "SSH パスワード (''${SSH_USER}@''${WOL_RELAY_HOST}): " password
+        echo >&2
+        printf '%s' "$password"
+        return
+      fi
+
+      echo "パスワード入力 UI (rofi-askpass) が見つかりません" >&2
+      return 1
+    }"""
+    if old_prompt not in text:
+        raise SystemExit("expected prompt_ssh_password block not found in wake-pc.sh")
+    p.write_text(text.replace(old_prompt, new_prompt, 1), encoding="utf-8")
     PY
 
     install -Dm755 wake-pc.sh "$out/bin/wake-pc"
@@ -104,8 +147,8 @@ stdenvNoCC.mkDerivation {
           iputils
           libnotify
           openssh
+          rofi-prompt
           sshpass
-          zenity
         ]
       }
 

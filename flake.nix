@@ -129,6 +129,8 @@
                     opencode = final.callPackage ./pkgs/opencode { };
                     # Google Antigravity CLI (`agy`; binary from antigravity-public).
                     antigravity = final.callPackage ./pkgs/antigravity { };
+                    # Unified Rofi prompt helpers (Askpass, Pinentry, Polkit).
+                    rofi-prompt = final.callPackage ./pkgs/rofi-prompt { };
                     # Wake-on-LAN SSH relay client (`wake-pc`) & desktop entry.
                     wol-pc = final.callPackage ./pkgs/wol-pc { };
                   }

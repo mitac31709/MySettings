@@ -33,7 +33,7 @@ let
   swayidleBin = "${pkgs.swayidle}/bin/swayidle";
   rofiBin = "${pkgs.rofi}/bin/rofi";
   yaziBin = "${pkgs.yazi}/bin/yazi";
-  polkitAgent = "${pkgs.kdePackages.polkit-kde-agent-1}/libexec/polkit-kde-authentication-agent-1";
+  polkitAgent = "${pkgs.lib.getExe pkgs.cmd-polkit} -s -c ${pkgs.lib.getExe' pkgs.rofi-prompt "rofi-polkit"}";
   pactl = "${pkgs.pulseaudio}/bin/pactl";
   # pactl +N% has no ceiling; PulseAudio happily goes past 100% (soft boost).
   volumeUp = pkgs.writeShellScript "volume-up" ''

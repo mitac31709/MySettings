@@ -111,7 +111,7 @@ let
   # Wrapper so systemd's minimal PATH still finds rbw-agent. Always talk to
   # mitac's session agent (do not trust %U / id -u here: ExecStartPre can see
   # uid 0 and systemd %U has been observed to expand to 0 on this unit).
-  # When the vault is locked, pinentry-qt needs the graphical session (D-Bus +
+  # When the vault is locked, pinentry needs the graphical session (D-Bus +
   # Wayland/X11); a bare systemd unit has neither unless we import them here.
   resticPasswordCommand = pkgs.writeShellScript "restic-home-password" ''
     set -eu
@@ -132,7 +132,7 @@ let
       exit 1
     fi
 
-    # Import display so pinentry-qt can prompt if the vault is locked.
+    # Import display so pinentry can prompt if the vault is locked.
     if [ -z "''${WAYLAND_DISPLAY:-}" ]; then
       for sock in /run/user/"''${uid}"/wayland-*; do
         case "$sock" in
