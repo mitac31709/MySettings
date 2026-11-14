@@ -28,7 +28,7 @@
 | ファイルマネージャ | **Super+E** | **Yazi**（Ghostty 内） |
 | ロック | **Super+L** | swaylock |
 | クリップボード履歴 | **Super+V** | **cliphist** + rofi |
-| スクショ | **Print** / **Super+Shift+S** | **grim**（全画面）/ grim+**slurp**（範囲）→ クリップボード |
+| スクショ | **Super+Shift+S** / **Shift+Print** / **Print** / **Super+Print** | **wayfreeze**+**grim**+**slurp**+**satty**（画面停止して範囲選択／全画面／ウィンドウ → 注釈・切り抜き・クリップボード・`~/Pictures/Screenshots/` 保存。`screenshot` CLI） |
 | タッチパッド | — | 自然スクロール off・タップクリック on・入力中もポインタ有効 |
 
 電源ボタン（`power-chords`）: 短押し=suspend / 長押し≈2.5s=poweroff / **電源+F1（Chromebook は 電源+Back）=強制ログアウト** / **電源+F2（Chromebook は 電源+Refresh）=再起動**。

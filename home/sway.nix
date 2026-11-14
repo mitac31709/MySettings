@@ -55,6 +55,131 @@ let
   grim = "${pkgs.grim}/bin/grim";
   slurp = "${pkgs.slurp}/bin/slurp";
   wlCopy = "${pkgs.wl-clipboard}/bin/wl-copy";
+
+  freezeCaptureHelper = pkgs.writeShellScript "wayfreeze-slurp-grim" ''
+    set -uo pipefail
+    cleanup() {
+      kill "$PPID" 2>/dev/null || pkill -x wayfreeze 2>/dev/null || true
+    }
+    trap cleanup EXIT
+    geom="$(${slurp} -b '#0b0f1466' -c '#33c5c5ff' -s '#00000000' -w 2 2>/dev/null)" || exit 0
+    [ -n "$geom" ] || exit 0
+    ${grim} -g "$geom" "$SCREENCAP_TMP"
+  '';
+
+  screenshotBin = pkgs.writeShellApplication {
+    name = "screenshot";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.grim
+      pkgs.jq
+      pkgs.libnotify
+      pkgs.procps
+      pkgs.rofi
+      pkgs.satty
+      pkgs.slurp
+      pkgs.sway
+      pkgs.wayfreeze
+      pkgs.wl-clipboard
+    ];
+    text = ''
+      mode="''${1:-region}"
+      out_dir="$HOME/Pictures/Screenshots"
+      mkdir -p "$out_dir"
+      out_pattern="$out_dir/screenshot-%Y%m%d-%H%M%S.png"
+
+      if [ "$mode" = "menu" ]; then
+        choice="$(
+          printf '%s\n' \
+            "範囲選択（画面停止） → Satty 編集 (Super+Shift+S / Shift+Print)" \
+            "全画面 → Satty 切り抜き・編集 (Print)" \
+            "アクティブウィンドウ → Satty 編集 (Super+Print)" \
+            "範囲選択（画面停止） → 即クリップボード" \
+            "全画面 → 即クリップボード" \
+            | rofi -dmenu -i -p 'スクリーンショット' || true
+        )"
+        case "$choice" in
+          "範囲選択（画面停止） → Satty"*) mode="region" ;;
+          "全画面 → Satty"*) mode="full" ;;
+          "アクティブウィンドウ"*) mode="window" ;;
+          "範囲選択（画面停止） → 即"*) mode="quick-region" ;;
+          "全画面 → 即"*) mode="quick-full" ;;
+          *) exit 0 ;;
+        esac
+      fi
+
+      open_satty() {
+        local file="$1"
+        local tool="$2"
+        wl-copy --type image/png < "$file"
+        satty \
+          --filename "$file" \
+          --initial-tool "$tool" \
+          --output-filename "$out_pattern" \
+          --copy-command wl-copy \
+          --early-exit copy \
+          --early-exit save \
+          --actions-on-enter save-to-clipboard \
+          --actions-on-enter exit \
+          --actions-on-escape exit \
+          --corner-roundness 8
+      }
+
+      tmp="$(mktemp --suffix=.png)"
+      trap 'rm -f "$tmp"' EXIT
+
+      case "$mode" in
+        region)
+          if pgrep -x slurp >/dev/null 2>&1 || pgrep -x wayfreeze >/dev/null 2>&1; then
+            exit 0
+          fi
+          export SCREENCAP_TMP="$tmp"
+          wayfreeze --hide-cursor --after-freeze-cmd "${freezeCaptureHelper}" || true
+          [ -s "$tmp" ] || exit 0
+          open_satty "$tmp" arrow
+          ;;
+        full)
+          grim "$tmp"
+          [ -s "$tmp" ] || exit 0
+          open_satty "$tmp" crop
+          ;;
+        window)
+          geom="$(
+            swaymsg -t get_tree \
+              | jq -r '.. | select(.type? and .focused == true and (.rect.width > 0)) | "\(.rect.x),\(.rect.y) \(.rect.width)x\(.rect.height)"' \
+              | head -n 1
+          )"
+          if [ -z "$geom" ]; then
+            grim "$tmp"
+          else
+            grim -g "$geom" "$tmp"
+          fi
+          [ -s "$tmp" ] || exit 0
+          open_satty "$tmp" arrow
+          ;;
+        quick-region)
+          if pgrep -x slurp >/dev/null 2>&1 || pgrep -x wayfreeze >/dev/null 2>&1; then
+            exit 0
+          fi
+          export SCREENCAP_TMP="$tmp"
+          wayfreeze --hide-cursor --after-freeze-cmd "${freezeCaptureHelper}" || true
+          [ -s "$tmp" ] || exit 0
+          wl-copy --type image/png < "$tmp"
+          notify-send "スクリーンショット" "選択範囲をクリップボードへコピーしました" >/dev/null 2>&1 || true
+          ;;
+        quick-full)
+          grim "$tmp"
+          [ -s "$tmp" ] || exit 0
+          wl-copy --type image/png < "$tmp"
+          notify-send "スクリーンショット" "全画面をクリップボードへコピーしました" >/dev/null 2>&1 || true
+          ;;
+        *)
+          printf 'Usage: screenshot [region|full|window|quick-region|quick-full|menu]\n' >&2
+          exit 2
+          ;;
+      esac
+    '';
+  };
   # Manual / before-sleep lock (always runs).
   lockCmd = "${swaylockBin} -f -c 0b0f14";
   # Presentation marker toggled with waybar scr / scr ON. XDG_RUNTIME_DIR is
@@ -579,13 +704,30 @@ let
     # スクショ・音量・輝度・履歴
     {
       section = "スクショ・音量・輝度";
-      label = "全画面 → クリップボード";
-      keys = "Print";
+      label = "範囲選択（画面停止） → Satty 編集・コピー";
+      keys = "Super+Shift+s / Shift+Print";
+      run = "${lib.getExe screenshotBin} region";
+      mode = "exec";
     }
     {
       section = "スクショ・音量・輝度";
-      label = "範囲選択 → クリップボード";
-      keys = "Super+Shift+s";
+      label = "全画面 → Satty 切り抜き・編集・コピー";
+      keys = "Print";
+      run = "${lib.getExe screenshotBin} full";
+      mode = "exec";
+    }
+    {
+      section = "スクショ・音量・輝度";
+      label = "アクティブウィンドウ → Satty 編集";
+      keys = "Super+Print";
+      run = "${lib.getExe screenshotBin} window";
+      mode = "exec";
+    }
+    {
+      section = "スクショ・音量・輝度";
+      label = "スクショメニュー（即コピー含む）";
+      run = "${lib.getExe screenshotBin} menu";
+      mode = "exec";
     }
     {
       section = "スクショ・音量・輝度";
@@ -1646,6 +1788,9 @@ in
     pkgs.swayidle
     pkgs.grim
     pkgs.slurp
+    pkgs.satty
+    pkgs.wayfreeze
+    screenshotBin
     pkgs.brightnessctl
     pkgs.jq
   ];
@@ -1771,9 +1916,13 @@ in
           "XF86AudioMicMute" = "exec ${pactl} set-source-mute @DEFAULT_SOURCE@ toggle";
           "XF86MonBrightnessUp" = "exec ${brightnessctl} set +5%";
           "XF86MonBrightnessDown" = "exec ${brightnessctl} set 5%-";
-          # Screenshots.
-          "Print" = "exec ${grim} - | ${wlCopy}";
-          "${mod}+Shift+s" = "exec ${grim} -g \"$(${slurp})\" - | ${wlCopy}";
+          # Screenshots (wayfreeze + grim + slurp + satty).
+          "Print" = null;
+          "--inhibited Print" = "exec ${lib.getExe screenshotBin} full";
+          "--inhibited Shift+Print" = "exec ${lib.getExe screenshotBin} region";
+          "--inhibited ${mod}+Print" = "exec ${lib.getExe screenshotBin} window";
+          "${mod}+Shift+s" = null;
+          "--inhibited ${mod}+Shift+s" = "exec ${lib.getExe screenshotBin} region";
           # Cursor / Vivaldi / Discord inhibit compositor shortcuts while focused.
           # --inhibited keeps window-mgmt binds working inside those apps.
           # ELECOM TK-FCP097 often fails to register Win+Shift+* (matrix); prefer
@@ -1809,6 +1958,8 @@ in
       # showmethekey floating overlay
       for_window [app_id="showmethekey-gtk"] floating enable, sticky enable, border none
       for_window [app_id="one.alynx.showmethekey"] floating enable, sticky enable, border none
+      # Satty screenshot editor floating overlay
+      for_window [app_id="com.gabm.satty"] floating enable, border pixel 2
       # External http(s) opens (xdg-open → existing Vivaldi) set urgent but do not
       # activate across workspaces (focus_on_window_activation is smart). Raise WS3.
       for_window [app_id="vivaldi-stable" urgent=latest] focus
@@ -2159,6 +2310,31 @@ in
       #pulseaudio.muted { color: #6b7785; }
     '';
   };
+
+  xdg.configFile."satty/config.toml".text = ''
+    [general]
+    early-exit = ["copy", "save"]
+    corner-roundness = 8
+    initial-tool = "arrow"
+    copy-command = "wl-copy"
+    output-filename = "~/Pictures/Screenshots/screenshot-%Y%m%d-%H%M%S.png"
+    actions-on-enter = ["save-to-clipboard", "exit"]
+    actions-on-escape = ["exit"]
+    annotation-size-factor = 1.0
+
+    [font]
+    family = "sans-serif"
+
+    [color-palette]
+    palette = [
+      "#33c5c5",
+      "#e06c75",
+      "#e5c07b",
+      "#98c379",
+      "#61afef",
+      "#ffffff",
+    ]
+  '';
 
   services.mako = {
     enable = true;
