@@ -1144,7 +1144,35 @@ let
     }
     {
       section = "開発";
+      label = "Antigravity（Remote Control 有効で起動）";
+      run = "agy --remote-control";
+      mode = "term";
+    }
+    {
+      section = "開発";
+      label = "Antigravity Remote Control 状態確認";
+      run = "agy remote-control status";
+      mode = "term";
+    }
+    {
+      section = "開発";
+      label = "Antigravity Remote Control デーモン再起動";
+      run = "systemctl --user restart antigravity-cli-daemon";
+      mode = "term";
+    }
+    {
+      section = "開発";
+      label = "Antigravity Remote Control ログ確認";
+      run = "journalctl --user -u antigravity-cli-daemon -n 50 --no-pager";
+      mode = "term";
+    }
+    {
+      section = "開発";
       label = "注: agy 起動中は F9 / Ctrl+b t / ステータスバークリックで翻訳ペインを即 ON/OFF";
+    }
+    {
+      section = "開発";
+      label = "注: 対話中は /remote-control でも接続可 / 別端末は https://antigravity.google.com を開く";
     }
     {
       section = "開発";

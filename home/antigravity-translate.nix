@@ -117,4 +117,32 @@ in
     agyTranslateWatch
     agyJa
   ];
+
+  # Persistent headless daemon for Antigravity Remote Control (https://antigravity.google.com)
+  systemd.user.services.antigravity-cli-daemon = {
+    Unit = {
+      Description = "antigravity remote-control daemon";
+      After = [ "network.target" ];
+      StartLimitIntervalSec = 0;
+    };
+
+    Service = {
+      Type = "simple";
+      ExecStart = "${pkgs.antigravity}/bin/antigravity remote-control serve";
+      # user@.service overrides PATH before Sway updates activation env; supply system/profile bins for boot-time linger
+      Environment = [
+        "PATH=/run/wrappers/bin:%h/.nix-profile/bin:/nix/profile/bin:%h/.local/state/nix/profile/bin:/etc/profiles/per-user/%u/bin:/nix/var/nix/profiles/default/bin:/run/current-system/sw/bin"
+      ];
+      Restart = "on-failure";
+      RestartSec = "10s";
+      RestartPreventExitStatus = 3;
+      TimeoutStopSec = "30s";
+      StandardOutput = "journal";
+      StandardError = "journal";
+    };
+
+    Install = {
+      WantedBy = [ "default.target" ];
+    };
+  };
 }

@@ -1609,6 +1609,14 @@ def scrub_cursor_storage_json(data: dict) -> bool:
     return bool(keys)
 
 
+def scrub_gemini_config_json(data: dict) -> bool:
+    user_settings = data.get("userSettings")
+    if isinstance(user_settings, dict) and "cliRemoteControlHostname" in user_settings:
+        del user_settings["cliRemoteControlHostname"]
+        return True
+    return False
+
+
 def scrub_cursor_state_db(db_path: Path) -> None:
     if not db_path.is_file() or db_path.is_symlink():
         return
@@ -1730,6 +1738,8 @@ if stage_home.is_dir():
     cursor_gs = stage_home / ".config" / "Cursor" / "User" / "globalStorage"
     scrub_json_file(cursor_gs / "storage.json", scrub_cursor_storage_json)
     scrub_cursor_state_db(cursor_gs / "state.vscdb")
+
+    scrub_json_file(stage_home / ".gemini" / "config" / "config.json", scrub_gemini_config_json)
 
     scrub_steam_config_vdf(stage_home / ".local" / "share" / "Steam" / "config" / "config.vdf")
 PYEOF

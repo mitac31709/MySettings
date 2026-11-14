@@ -14,11 +14,11 @@
 
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "antigravity";
-  version = "1.5.2";
+  version = "1.5.9";
 
   src = fetchurl {
-    url = "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.2-4951595792859136/linux-x64/cli_linux_x64.tar.gz";
-    hash = "sha256-2mlqjcYSKmPV/73SGwLIpi1TYfug7X07wtJhmInmJxE=";
+    url = "https://storage.googleapis.com/antigravity-public/antigravity-cli/1.5.9-4515810895593472/linux-x64/cli_linux_x64.tar.gz";
+    hash = "sha256-ix9eVnefJDSgrzbxtxWoOSoITeVQ+MaLx5gh+V+r8/o=";
   };
 
   # Archive contains a single `antigravity` binary at the root.
