@@ -225,17 +225,43 @@ let
     export TZDIR="${pkgs.tzdata}/share/zoneinfo"
     printf -v now '%(%s)T' -1
     TZ="Asia/Tokyo" printf -v bar '%(%a %m-%d %H:%M:%S)T' "$now"
-    TZ="Asia/Tokyo" printf -v jst '%(%Y-%m-%d (%a) %H:%M:%S %Z)T' "$now"
-    TZ="UTC" printf -v utc '%(%Y-%m-%d (%a) %H:%M:%S %Z)T' "$now"
-    TZ="America/Los_Angeles" printf -v pt '%(%Y-%m-%d (%a) %H:%M:%S %Z)T' "$now"
-    TZ="Asia/Shanghai" printf -v bj '%(%Y-%m-%d (%a) %H:%M:%S %Z)T' "$now"
-    TZ="America/Los_Angeles" printf -v sv '%(%Y-%m-%d (%a) %H:%M:%S %Z)T' "$now"
+    lines=""
+    sep='\n'
+    for tz in Asia/Tokyo UTC America/Los_Angeles Asia/Shanghai; do
+      TZ="$tz" printf -v abbr '%(%Z)T' "$now"
+      TZ="$tz" printf -v ts '%(%Y-%m-%d (%a) %H:%M:%S)T' "$now"
+      TZ="$tz" printf -v off '%(%z)T' "$now"
+      printf -v row '%-4s %s (%s:%s)' "$abbr" "$ts" "''${off:0:3}" "''${off:3:2}"
+      lines+="''${lines:+$sep}$row"
+    done
+
+    # Derive TAI-UTC from tzdata leap-seconds.list; GPST = TAI - 19s (epoch 1980-01-06).
+    ntp_now=$((now + 2208988800))
+    dtai=19
+    while read -r ntp val _; do
+      case "$ntp" in
+        ""|\#*) continue ;;
+      esac
+      if [ "$ntp" -le "$ntp_now" ]; then
+        dtai="$val"
+      fi
+    done < "$TZDIR/leap-seconds.list"
+    gps_off=$((dtai - 19))
+    gps_unix=$((now + gps_off))
+    gps_sec=$((now - 315964800 + gps_off))
+    gps_week=$((gps_sec / 604800))
+    gps_tow=$((gps_sec % 604800))
+    TZ="UTC" printf -v gps_ts '%(%Y-%m-%d (%a) %H:%M:%S)T' "$gps_unix"
+    printf -v gps_row '%-4s %s (UTC%+ds / W%d %ds)' "GPST" "$gps_ts" "$gps_off" "$gps_week" "$gps_tow"
+    printf -v unix_row '%-4s %s' "UNIX" "$now"
+    lines+="$sep$gps_row$sep$unix_row"
+
     if [ -e /run/systemd/timesync/synchronized ]; then
       ntp_line="NTP: 同期済み（クリックで時刻同期）"
     else
       ntp_line="NTP: 同期待ち（クリックで時刻同期）"
     fi
-    tooltip="JST (東京)      $jst\nUTC             $utc\n太平洋時間      $pt\n北京時間        $bj\nシリコンバレー  $sv\n\n$ntp_line"
+    tooltip="$lines\n\n$ntp_line"
     printf '{"text":"%s","tooltip":"%s"}\n' "$bar" "$tooltip"
   '';
 
