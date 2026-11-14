@@ -2,9 +2,10 @@
 #
 # - Patches a few Settings.properties keys on each start (tray / always-on-top /
 #   wake screen / no window until alert) without rewriting the whole file.
-# - Sway: AWT SystemTray needs an XEmbed tray host. We use offscreen stalonetray
-#   (not xembedsniproxy→waybar) so the broken JavaEmbeddedFrame SNI icon never
-#   appears in the bar; alerts still raise the main window.
+# - Sway: AWT SystemTray needs an XEmbed tray host. Offscreen stalonetray hosts
+#   JQuake's icon (avoiding xembedsniproxy's KDE dependency and blank window),
+#   and jquake-tray-sni captures the live icon via XComposite/XDamage onto a
+#   native StatusNotifierItem in waybar's tray.
 # - ext-session-lock blocks normal windows above swaylock; on alert we dismiss
 #   swaylock and fullscreen the map (intentional emergency unlock).
 {
@@ -22,6 +23,27 @@ let
   swayCriteria = ''[class="^${jquakeClass}$"]'';
 
   stalonetrayBin = "${pkgs.stalonetray}/bin/stalonetray";
+
+  jquakeTraySniPy = pkgs.writers.writePython3Bin "jquake-tray-sni-py" {
+    libraries = [
+      pkgs.python3Packages.xlib
+      pkgs.python3Packages.dbus-next
+    ];
+    doCheck = false;
+  } (builtins.readFile ../scripts/jquake-tray-sni.py);
+
+  jquakeTraySni = pkgs.writeShellApplication {
+    name = "jquake-tray-sni";
+    runtimeInputs = [
+      pkgs.stalonetray
+      pkgs.systemd
+      pkgs.sway
+      pkgs.coreutils
+    ];
+    text = ''
+      exec ${lib.getExe jquakeTraySniPy} "$@"
+    '';
+  };
 
   # for_window alone races map; re-apply after the tray window exists.
   hideStalonetray = pkgs.writeShellScript "stalonetray-jquake-hide" ''
@@ -260,8 +282,8 @@ in
     };
   };
 
-  # Offscreen XEmbed tray host so JQuake can background without a waybar SNI
-  # (xembedsniproxy published a black JavaEmbeddedFrame icon).
+  # Offscreen XEmbed tray host for JQuake; jquake-tray-sni bridges its pixels
+  # and clicks to waybar's native SNI tray.
   systemd.user.services.stalonetray-jquake = {
     Unit = {
       Description = "Offscreen XEmbed tray for JQuake (Sway)";
@@ -273,11 +295,35 @@ in
     };
     Service = {
       Type = "simple";
-      # Placeholder geometry; sway moves it off-screen + opacity 0 (not
-      # scratchpad: Super+- would reveal scratchpad contents).
-      # BadWindow on icon destroy is noisy but harmless; keep going.
-      ExecStart = "${stalonetrayBin} --geometry 1x1+0+0 --icon-size 16 --window-type utility --window-strut none --kludges force_icons_size";
+      # Pin background to waybar's #0b0f14 so anti-aliased tray edges blend cleanly;
+      # sway keeps the window offscreen and opacity 0, and jquake-tray-sni clears
+      # X11 ShapeInput so it can never eat clicks.
+      ExecStart = "${stalonetrayBin} --background '#0b0f14' --geometry 1x1+-2000+-2000 --max-geometry 1x1 --slot-size 16 --icon-size 16 --scrollbars none --sticky --window-type utility --window-strut none --kludges force_icons_size,fix_window_pos";
       ExecStartPost = "${hideStalonetray}";
+      Restart = "on-failure";
+      RestartSec = 3;
+    };
+    Install = {
+      WantedBy = [ "graphical-session.target" ];
+    };
+  };
+
+  systemd.user.services.jquake-tray-sni = {
+    Unit = {
+      Description = "SNI tray bridge for JQuake offscreen XEmbed icon (Sway)";
+      After = [
+        "graphical-session.target"
+        "stalonetray-jquake.service"
+        "jquake.service"
+      ];
+      BindsTo = [ "graphical-session.target" ];
+      ConditionEnvironment = "XDG_CURRENT_DESKTOP=sway";
+      StartLimitIntervalSec = 30;
+      StartLimitBurst = 3;
+    };
+    Service = {
+      Type = "simple";
+      ExecStart = "${lib.getExe jquakeTraySni}";
       Restart = "on-failure";
       RestartSec = 3;
     };

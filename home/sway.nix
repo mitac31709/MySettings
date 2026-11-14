@@ -96,6 +96,315 @@ let
   openYazi = "${ghosttyBin} -e ${yaziBin}";
   openTimeIs = "${pkgs.xdg-utils}/bin/xdg-open https://time.is/Tokyo";
 
+  # Bottom of sideBar: background daemon & system status + interactive menu.
+  waybarServices = pkgs.writeShellApplication {
+    name = "waybar-services";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.jq
+      pkgs.systemd
+    ];
+    text = ''
+      mapfile -t ust < <(
+        systemctl --user is-active \
+          jquake.service \
+          stalonetray-jquake.service \
+          jquake-tray-sni.service \
+          jquake-sway-alert.service \
+          uniclipd.service \
+          lan-mouse.service \
+          taildrop-receive.service \
+          cliphist-text.service \
+          cliphist-image.service 2>/dev/null || true
+      )
+      mapfile -t sst < <(
+        systemctl is-active \
+          tailscaled.service \
+          restic-backups-home.service \
+          restic-backups-home.timer 2>/dev/null || true
+      )
+
+      jq_s="''${ust[0]:-unknown}"
+      st_s="''${ust[1]:-unknown}"
+      sni_s="''${ust[2]:-unknown}"
+      al_s="''${ust[3]:-unknown}"
+      uc_s="''${ust[4]:-unknown}"
+      lm_s="''${ust[5]:-unknown}"
+      td_s="''${ust[6]:-unknown}"
+      ct_s="''${ust[7]:-unknown}"
+      ci_s="''${ust[8]:-unknown}"
+
+      ts_s="''${sst[0]:-unknown}"
+      rb_s="''${sst[1]:-unknown}"
+      rt_s="''${sst[2]:-unknown}"
+      rb_res="$(systemctl show -p Result --value restic-backups-home.service 2>/dev/null || echo "")"
+
+      overall="ok"
+      mark_level() {
+        case "$1" in
+          failed) overall="failed" ;;
+          warn)
+            if [ "$overall" = "ok" ]; then
+              overall="degraded"
+            fi
+            ;;
+        esac
+      }
+
+      lines=()
+      tips=("裏方デーモン・システム状態")
+
+      add_icon() {
+        local state="$1" glyph="$2"
+        case "$state" in
+          active)
+            lines+=("<span color='#9fe7e7'>''${glyph}</span>")
+            ;;
+          running)
+            lines+=("<span color='#33c5c5'>''${glyph}</span>")
+            ;;
+          failed)
+            mark_level failed
+            lines+=("<span color='#e06c75'>''${glyph}</span>")
+            ;;
+          *)
+            mark_level warn
+            lines+=("<span color='#e5c07b'>''${glyph}</span>")
+            ;;
+        esac
+      }
+
+      # JQuake: when healthy, the real icon lives below in `tray`; surface an
+      # explicit alert glyph only if any piece of the stack is unhealthy.
+      if [ "$jq_s" = "active" ] && [ "$st_s" = "active" ] && [ "$sni_s" = "active" ] && [ "$al_s" = "active" ]; then
+        tips+=("✓ JQuake: active (tray/sni/alert 稼働)")
+      elif [ "$jq_s" = "failed" ] || [ "$st_s" = "failed" ] || [ "$sni_s" = "failed" ] || [ "$al_s" = "failed" ]; then
+        add_icon failed $'\uf071'
+        tips+=("✗ JQuake: jquake=$jq_s tray=$st_s sni=$sni_s alert=$al_s")
+      else
+        add_icon warn $'\uf071'
+        tips+=("! JQuake: jquake=$jq_s tray=$st_s sni=$sni_s alert=$al_s")
+      fi
+
+      add_icon "$uc_s" $'\uf0ea'
+      tips+=("• UniClipboard (uniclipd): $uc_s")
+
+      add_icon "$lm_s" $'\uf245'
+      tips+=("• LAN Mouse: $lm_s")
+
+      add_icon "$td_s" $'\uf019'
+      tips+=("• Taildrop Receive: $td_s")
+
+      if [ "$ct_s" = "active" ] && [ "$ci_s" = "active" ]; then
+        add_icon active $'\uf0c5'
+        tips+=("• Cliphist (text/image): active / active")
+      elif [ "$ct_s" = "failed" ] || [ "$ci_s" = "failed" ]; then
+        add_icon failed $'\uf0c5'
+        tips+=("✗ Cliphist: text=$ct_s image=$ci_s")
+      else
+        add_icon warn $'\uf0c5'
+        tips+=("! Cliphist: text=$ct_s image=$ci_s")
+      fi
+
+      if [ "$ts_s" = "active" ]; then
+        if [ -e /sys/class/net/tailscale0 ]; then
+          add_icon active $'\uf0e8'
+          tips+=("• Tailscale: active (tailscale0 UP)")
+        else
+          add_icon warn $'\uf0e8'
+          tips+=("! Tailscale: active (tailscale0 未接続)")
+        fi
+      else
+        add_icon "$ts_s" $'\uf0e8'
+        tips+=("• Tailscale: $ts_s")
+      fi
+
+      if [ "$rb_s" = "active" ] || [ "$rb_s" = "activating" ]; then
+        add_icon running $'\uf1c0'
+        tips+=("↻ Restic Backup: 実行中 (timer=$rt_s)")
+      elif [ "$rb_s" = "failed" ] || { [ -n "$rb_res" ] && [ "$rb_res" != "success" ]; }; then
+        add_icon failed $'\uf1c0'
+        tips+=("✗ Restic Backup: service=$rb_s result=$rb_res (timer=$rt_s)")
+      elif [ "$rt_s" = "active" ]; then
+        add_icon active $'\uf1c0'
+        tips+=("• Restic Backup: 待機 (timer active / 正常)")
+      else
+        add_icon "$rt_s" $'\uf1c0'
+        tips+=("! Restic Backup: timer=$rt_s service=$rb_s")
+      fi
+
+      tips+=("")
+      tips+=("クリックでサービス管理メニュー")
+
+      IFS=$'\n'
+      text="''${lines[*]}"
+      tooltip="''${tips[*]}"
+      unset IFS
+      jq -cn --arg text "$text" --arg tooltip "$tooltip" --arg class "$overall" \
+        '{text: $text, tooltip: $tooltip, class: $class}'
+    '';
+  };
+
+  waybarServicesMenu = pkgs.writeShellApplication {
+    name = "waybar-services-menu";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gawk
+      pkgs.ghostty
+      pkgs.procps
+      pkgs.rofi
+      pkgs.sway
+      pkgs.systemd
+      pkgs.yazi
+    ];
+    text = ''
+            u_state() { systemctl --user is-active "$1" 2>/dev/null || true; }
+            s_state() { systemctl is-active "$1" 2>/dev/null || true; }
+            toggle_verb() { if [ "$1" = "active" ]; then printf '停止'; else printf '開始'; fi; }
+            run_term() {
+              local cmd="$1"
+              ${ghosttyBin} -e ${pkgs.bash}/bin/bash -lc "$cmd; printf '\n[Enter で閉じる] '; IFS= read -r _ || true"
+            }
+            refresh_bar() {
+              pkill -SIGRTMIN+10 -x waybar >/dev/null 2>&1 || true
+            }
+
+            jq_s="$(u_state jquake.service)"
+            uc_s="$(u_state uniclipd.service)"
+            lm_s="$(u_state lan-mouse.service)"
+            td_s="$(u_state taildrop-receive.service)"
+            ct_s="$(u_state cliphist-text.service)"
+            ci_s="$(u_state cliphist-image.service)"
+            ts_s="$(s_state tailscaled.service)"
+            rb_s="$(s_state restic-backups-home.service)"
+            rt_s="$(s_state restic-backups-home.timer)"
+
+            menu="$(cat <<EOF
+      JQuake [$jq_s] │ ウィンドウを開く
+      JQuake │ 関連サービス再起動 (4ユニット)
+      JQuake │ 状態・ログ表示
+      UniClipboard [$uc_s] │ 再起動
+      UniClipboard [$uc_s] │ $(toggle_verb "$uc_s")
+      UniClipboard │ GUI を開く
+      LAN Mouse [$lm_s] │ 再起動
+      LAN Mouse [$lm_s] │ $(toggle_verb "$lm_s")
+      LAN Mouse │ GUI を開く
+      Taildrop Receive [$td_s] │ 再起動
+      Taildrop Receive [$td_s] │ $(toggle_verb "$td_s")
+      Taildrop │ ~/Downloads を yazi で開く
+      Cliphist [t:$ct_s i:$ci_s] │ 再起動
+      Cliphist │ 履歴メニューを開く
+      Tailscale [$ts_s] │ Trayscale GUI を開く
+      Tailscale │ 状態・IP確認 (tailscale status)
+      Tailscale │ デーモン再起動 (sudo)
+      Restic [$rb_s / timer:$rt_s] │ 状態 (backup status)
+      Restic │ ログ表示 (backup log)
+      Restic │ 今すぐバックアップ (sudo backup run)
+      EOF
+            )"
+
+            choice="$(printf '%s\n' "$menu" | ${rofiBin} -dmenu -i -p 'サービス管理' || true)"
+            [ -n "$choice" ] || exit 0
+
+            case "$choice" in
+              *"JQuake"*"ウィンドウを開く")
+                if [ "$jq_s" != "active" ]; then
+                  systemctl --user start stalonetray-jquake.service jquake-tray-sni.service jquake.service jquake-sway-alert.service
+                  refresh_bar
+                fi
+                swaymsg '[class="^net-jquake-app-Main$"] focus' >/dev/null 2>&1 || \
+                  pkill -0 -f jquake-tray-sni || true
+                # Activate via SNI DBus item if running, so hidden JQuake maps cleanly.
+                for dest in $(busctl --user list --no-legend 2>/dev/null | awk '/org\.kde\.StatusNotifierItem-/{print $1}'); do
+                  if [ "$(busctl --user get-property "$dest" /StatusNotifierItem org.kde.StatusNotifierItem Id 2>/dev/null || true)" = 's "jquake"' ]; then
+                    busctl --user call "$dest" /StatusNotifierItem org.kde.StatusNotifierItem Activate ii 0 0 >/dev/null 2>&1 || true
+                    break
+                  fi
+                done
+                ;;
+              *"JQuake"*"関連サービス再起動"*)
+                systemctl --user restart stalonetray-jquake.service jquake-tray-sni.service jquake.service jquake-sway-alert.service
+                refresh_bar
+                ;;
+              *"JQuake"*"状態・ログ表示")
+                run_term "systemctl --user status jquake stalonetray-jquake jquake-tray-sni jquake-sway-alert --no-pager; echo; journalctl --user -u jquake -u jquake-tray-sni -n 30 --no-pager"
+                ;;
+              *"UniClipboard"*"再起動")
+                systemctl --user restart uniclipd.service
+                refresh_bar
+                ;;
+              *"UniClipboard"*"開始")
+                systemctl --user start uniclipd.service
+                refresh_bar
+                ;;
+              *"UniClipboard"*"停止")
+                systemctl --user stop uniclipd.service
+                refresh_bar
+                ;;
+              *"UniClipboard"*"GUI を開く")
+                exec swaymsg exec -- uniclipboard
+                ;;
+              *"LAN Mouse"*"再起動")
+                systemctl --user restart lan-mouse.service
+                refresh_bar
+                ;;
+              *"LAN Mouse"*"開始")
+                systemctl --user start lan-mouse.service
+                refresh_bar
+                ;;
+              *"LAN Mouse"*"停止")
+                systemctl --user stop lan-mouse.service
+                refresh_bar
+                ;;
+              *"LAN Mouse"*"GUI を開く")
+                exec swaymsg exec -- lan-mouse
+                ;;
+              *"Taildrop Receive"*"再起動")
+                systemctl --user restart taildrop-receive.service
+                refresh_bar
+                ;;
+              *"Taildrop Receive"*"開始")
+                systemctl --user start taildrop-receive.service
+                refresh_bar
+                ;;
+              *"Taildrop Receive"*"停止")
+                systemctl --user stop taildrop-receive.service
+                refresh_bar
+                ;;
+              *"Taildrop"*"yazi"*)
+                exec swaymsg exec -- "${ghosttyBin} -e ${yaziBin} \"$HOME/Downloads\""
+                ;;
+              *"Cliphist"*"再起動")
+                systemctl --user restart cliphist-text.service cliphist-image.service
+                refresh_bar
+                ;;
+              *"Cliphist"*"履歴メニューを開く")
+                exec swaymsg exec -- clipboard-history
+                ;;
+              *"Tailscale"*"Trayscale"*)
+                exec swaymsg exec -- trayscale
+                ;;
+              *"Tailscale"*"tailscale status"*)
+                run_term "tailscale status"
+                ;;
+              *"Tailscale"*"sudo"*)
+                run_term "sudo systemctl restart tailscaled.service && tailscale status"
+                refresh_bar
+                ;;
+              *"Restic"*"backup status"*)
+                run_term "backup status"
+                ;;
+              *"Restic"*"backup log"*)
+                run_term "backup log"
+                ;;
+              *"Restic"*"sudo backup run"*)
+                run_term "sudo backup run"
+                refresh_bar
+                ;;
+            esac
+    '';
+  };
+
   # Searchable / clickable cheatsheet (rofi -dmenu).
   # - keys only → notify-send (no key injection)
   # - run + mode=term → Ghostty interactive shell
@@ -1164,7 +1473,7 @@ let
     {
       section = "周辺";
       label = "JQuake 状態（systemd）";
-      run = "systemctl --user status jquake stalonetray-jquake jquake-sway-alert";
+      run = "systemctl --user status jquake stalonetray-jquake jquake-tray-sni jquake-sway-alert";
       mode = "term";
     }
     {
@@ -1588,15 +1897,21 @@ in
           on-click = openTimeIs;
         };
       };
-      # Left vertical bar: updates (top), tray (bottom).
+      # Left vertical bar: updates (top), daemons + tray (bottom).
+      # Align top/bottom flush with tiled Sway windows (gaps inner=4 + outer=4 = 8px).
       sideBar = {
         name = "side";
         layer = "top";
         position = "left";
         # Icon column (Nerd Font).
         width = 34;
+        margin-top = 8;
+        margin-bottom = 8;
         modules-left = [ "custom/updates" ];
-        modules-right = [ "tray" ];
+        modules-right = [
+          "custom/services"
+          "tray"
+        ];
         "custom/updates" = {
           exec = pkgs.writeShellScript "waybar-flake-updates" ''
             f="''${XDG_RUNTIME_DIR}/flake-update-status"
@@ -1612,6 +1927,14 @@ in
           signal = 9;
           tooltip = true;
           on-click = openFlakeUpdate;
+        };
+        "custom/services" = {
+          exec = lib.getExe waybarServices;
+          return-type = "json";
+          interval = 15;
+          signal = 10;
+          tooltip = true;
+          on-click = lib.getExe waybarServicesMenu;
         };
         tray = {
           icon-size = 16;
@@ -1703,14 +2026,16 @@ in
         color: #e06c75;
         background: #3a1a1e;
       }
-      /* Side bar: updates (top), tray (bottom). */
+      /* Side bar: updates (top), services + tray (bottom). */
       window.side #custom-updates,
+      window.side #custom-services,
       window.side #tray {
         padding: 4px 0;
         color: #9fe7e7;
         background: transparent;
       }
-      window.side #custom-updates {
+      window.side #custom-updates,
+      window.side #custom-services {
         font-family: "${waybarFont}", sans-serif;
         font-size: 13px;
         min-width: 34px;
@@ -1725,8 +2050,19 @@ in
         background: #15383a;
         border-top: 2px solid #33c5c5;
       }
+      window.side #custom-services {
+        padding: 6px 0 3px 0;
+        border-top: 1px solid #15383a;
+      }
+      window.side #custom-services.degraded {
+        border-left: 2px solid #e5c07b;
+      }
+      window.side #custom-services.failed {
+        background: #3a1a1e;
+        border-left: 2px solid #e06c75;
+      }
       window.side #tray {
-        padding-top: 8px;
+        padding: 3px 0 6px 0;
       }
       /* Stock #battery is white; critical blinks to white — pin transparent. */
       #battery.charging,
