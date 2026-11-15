@@ -539,11 +539,14 @@ cmd_import_restic() {
 
 cmd_import_rclone() {
   require_pubkeys >/dev/null
-  local src="${XDG_CONFIG_HOME:-$HOME/.config}/rclone/rclone.conf"
-  [[ -f $src ]] || die "rclone 設定が見つかりません: $src（先に \`backup setup\` 等を実行）"
+  local src="${1:-${RCLONE_CONFIG:-}}"
+  if [[ -z $src ]]; then
+    src="${XDG_CONFIG_HOME:-$HOME/.config}/rclone/rclone.conf"
+  fi
+  [[ -f $src ]] || die "rclone 設定が見つかりません: $src（引数で指定、または \`backup setup\` / \`backup reconnect\` を実行）"
   grep -q '^\[gdrive\]' "$src" || die "$src に [gdrive] セクションが見つかりません。"
   encrypt_stdin_to_age "rclone-conf.age" <"$src"
-  say "ヒント: 他端末からの復元用（Bitwarden '$RBW_RESTIC_ITEM' 同期）には \`backup reconnect --help\` / OAuth メモ欄も維持してください。"
+  say "注: rclone 設定は agenix (secrets/rclone-conf.age) で一元管理されます（反映: rebuild）。"
 }
 
 cmd_import_ssh() {
@@ -711,8 +714,8 @@ PY
     return "$rc"
   fi
   encrypt_stdin_to_age "nm-connections.age" <"$tmp_bundle"
-  say "注意: 既存マシンの /etc/NetworkManager/system-connections に同一プロファイルが残っていると"
-  say "      一覧で重複表示されることがあります（\`rebuild\` 後に自動接続を確認してから不要分を削除可）。"
+  say "注意: 既存マシンの /etc/NetworkManager/system-connections に残った同一 Wi-Fi プロファイルは"
+  say "      \`rebuild\` 時に nm-agenix-profiles が自動で重複削除します。"
 }
 
 cmd_set_tailscale_key() {
@@ -857,7 +860,7 @@ secrets — Bitwarden (rbw) × agenix 宣言的シークレット管理 CLI
 既存環境からの暗号化取り込み:
   secrets import                  対話式ウィザードで全項目を順に取り込む
   secrets import-restic           Bitwarden restic-home → secrets/restic-home-password.age
-  secrets import-rclone           ~/.config/rclone/rclone.conf → secrets/rclone-conf.age
+  secrets import-rclone [FILE]    rclone.conf (既定: ~/.config/rclone/rclone.conf) → secrets/rclone-conf.age
   secrets import-ssh              ~/.ssh/id_wsl_builder 等 → secrets/id-wsl-builder.age
   secrets import-gh               gh auth token → secrets/gh-hosts.yml.age
   secrets import-wifi             NetworkManager 接続 → secrets/nm-connections.age（対話選択）

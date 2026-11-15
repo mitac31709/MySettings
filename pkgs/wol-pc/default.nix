@@ -1,6 +1,6 @@
 # Packaged Wake-on-LAN client/relay from github:mitac-31709/wol-pc.
-# Keeps secrets out of the Nix store by reading WOL_PC_CONFIG,
-# /run/agenix/wol-pc-env, ~/.config/wol-pc/config.env, or ~/Projects/wol-pc/config.env.
+# Keeps secrets out of the Nix store by reading WOL_PC_CONFIG or
+# `/run/agenix/wol-pc-env`.
 {
   lib,
   stdenvNoCC,
@@ -58,25 +58,13 @@ stdenvNoCC.mkDerivation {
       echo "  cp ''${SCRIPT_DIR}/config.example.env ''${CONFIG_FILE}" >&2
       exit 2
     fi"""
-    new = """CONFIG_FILE="''${WOL_PC_CONFIG:-}"
-    if [[ -z "$CONFIG_FILE" ]]; then
-      for _wol_candidate in \\
-        "/run/agenix/wol-pc-env" \\
-        "''${XDG_CONFIG_HOME:-$HOME/.config}/wol-pc/config.env" \\
-        "$HOME/Projects/wol-pc/config.env"; do
-        if [[ -r "$_wol_candidate" ]]; then
-          CONFIG_FILE="$_wol_candidate"
-          break
-        fi
-      done
-      unset _wol_candidate
-    fi
+    new = """CONFIG_FILE="''${WOL_PC_CONFIG:-/run/agenix/wol-pc-env}"
 
     if [[ -z "$CONFIG_FILE" || ! -r "$CONFIG_FILE" ]]; then
       if command -v notify-send >/dev/null 2>&1; then
-        notify-send -u critical "WOL エラー" "config.env が見つかりません。\\nsecrets import-wol または ~/.config/wol-pc/config.env を設定してください。"
+        notify-send -u critical "WOL エラー" "/run/agenix/wol-pc-env が見つかりません。\\nsecrets import-wol && rebuild を実行してください。"
       fi
-      echo "エラー: WOL 設定ファイルが見つかりません (/run/agenix/wol-pc-env, ~/.config/wol-pc/config.env, ~/Projects/wol-pc/config.env)" >&2
+      echo "エラー: WOL 設定ファイルが見つかりません (/run/agenix/wol-pc-env または WOL_PC_CONFIG)" >&2
       exit 2
     fi"""
     if old not in text:

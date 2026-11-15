@@ -3,17 +3,15 @@
 # Pieces:
 #   - restic  : encrypted, deduplicated, snapshot-based backup engine.
 #   - rclone  : Google Drive backend (restic talks to the "gdrive" remote).
-#   - agenix  : provides the restic repository password and rclone.conf headlessly
-#               from `/run/agenix` (falls back to `rbw` / `~/.config/rclone` until migrated).
-#   - rbw     : CLI Bitwarden client. Also keeps a copy of `restic-home` in Bitwarden
-#               so snapshots stay inspectable from other devices without agenix, and
-#               provisions the shared agenix master key (`agenix-master-key`).
+#   - agenix  : sole source for the restic repository password and rclone.conf
+#               at `/run/agenix` (Wi-Fi profiles and Tailscale pre-auth keys
+#               are also managed in agenix rather than restic system staging).
 #
 # Paths:
-#   - /home/mitac (with excludes for regenerable bulky trees; includes ~/MySettings)
+#   - /home/mitac (with excludes for regenerable bulky trees and agenix secrets;
+#     includes ~/MySettings)
 #   - Root-only system state staged into the unit RuntimeDirectory:
-#       NetworkManager Wi-Fi profiles, Bluetooth pairings, Cloudflare WARP,
-#       Tailscale node state.
+#       Bluetooth pairings and Cloudflare WARP registration.
 #     (/etc/shadow is intentionally not backed up.)
 # See README.md → "/home の暗号化バックアップ" for setup & secret sync.
 {
@@ -31,41 +29,27 @@ let
   # Google Drive destination: rclone remote "gdrive" plus a per-host subpath
   # (`<flakeTarget>-home`, e.g. chromebook-home / vaio-home) so multiple devices
   # never fight over a single restic repo lock or overwrite each other's
-  # snapshots. The remote is configured out-of-band with `rclone config`.
+  # snapshots.
   repository = "rclone:gdrive:restic/${flakeTarget}-home";
 
-  # Persistent user rclone config (kept writable for `backup reconnect`).
-  userRcloneConfigFile = "/home/${user}/.config/rclone/rclone.conf";
-
-  # Declarative secrets managed by agenix when encrypted files exist under secrets/.
-  agenixResticPassword = config.age.secrets."restic-home-password".path or null;
-  agenixRcloneConf = config.age.secrets."rclone-conf".path or null;
+  # Declarative secrets managed solely by agenix under /run/agenix.
+  agenixResticPassword =
+    config.age.secrets."restic-home-password".path or "/run/agenix/restic-home-password";
+  agenixRcloneConf = config.age.secrets."rclone-conf".path or "/run/agenix/rclone-conf";
 
   # Systemd RuntimeDirectory copy (mode 0600): rclone rewrites its config file
   # when refreshing an expired OAuth access token, so it must not point directly
   # to read-only `/run/agenix/rclone-conf`.
   runtimeRcloneConfigFile = "/run/restic-backups-home/rclone.conf";
-  rcloneConfigFile =
-    if agenixRcloneConf != null then runtimeRcloneConfigFile else userRcloneConfigFile;
-
-  # Bitwarden item whose password field holds the restic encryption key
-  # (client_id / client_secret / refresh_token can also be saved in its notes
-  # or custom fields so scripts/restore-on-nixos.sh can load them via rbw).
-  bitwardenItem = "restic-home";
+  rcloneConfigFile = runtimeRcloneConfigFile;
 
   # Matches RuntimeDirectory from the nixpkgs restic module for this unit.
   stagingRoot = "/run/restic-backups-home/system";
-  nmStagingDir = "${stagingRoot}/nm-connections";
   bluetoothStagingDir = "${stagingRoot}/bluetooth";
   warpStagingDir = "${stagingRoot}/cloudflare-warp";
-  tailscaleStagingDir = "${stagingRoot}/tailscale";
 
-  # Root-only sources → staged copies readable by the backup user.
+  # Root-only non-agenix sources → staged copies readable by the backup user.
   systemStagingSources = [
-    {
-      src = "/etc/NetworkManager/system-connections";
-      dest = nmStagingDir;
-    }
     {
       src = "/var/lib/bluetooth";
       dest = bluetoothStagingDir;
@@ -73,10 +57,6 @@ let
     {
       src = "/var/lib/cloudflare-warp";
       dest = warpStagingDir;
-    }
-    {
-      src = "/var/lib/tailscale";
-      dest = tailscaleStagingDir;
     }
   ];
 
@@ -106,58 +86,6 @@ let
   clearSystemStaging = pkgs.writeShellScript "restic-home-clear-system" ''
     set -eu
     rm -rf "${stagingRoot}" "${runtimeRcloneConfigFile}"
-  '';
-
-  # Wrapper so systemd's minimal PATH still finds rbw-agent. Always talk to
-  # mitac's session agent (do not trust %U / id -u here: ExecStartPre can see
-  # uid 0 and systemd %U has been observed to expand to 0 on this unit).
-  # When the vault is locked, pinentry needs the graphical session (D-Bus +
-  # Wayland/X11); a bare systemd unit has neither unless we import them here.
-  resticPasswordCommand = pkgs.writeShellScript "restic-home-password" ''
-    set -eu
-    export PATH="${
-      lib.makeBinPath [
-        pkgs.rbw
-        pkgs.coreutils
-        pkgs.getent
-      ]
-    }:$PATH"
-    uid="$(getent passwd ${user} | cut -d: -f3)"
-    export XDG_RUNTIME_DIR="/run/user/''${uid}"
-    export HOME="/home/${user}"
-    export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/''${uid}/bus"
-
-    if [ ! -S "/run/user/''${uid}/bus" ]; then
-      echo "restic-home-password: ''${user} session bus missing (log in graphically, then: rbw unlock)" >&2
-      exit 1
-    fi
-
-    # Import display so pinentry can prompt if the vault is locked.
-    if [ -z "''${WAYLAND_DISPLAY:-}" ]; then
-      for sock in /run/user/"''${uid}"/wayland-*; do
-        case "$sock" in
-          *.lock) continue ;;
-        esac
-        if [ -S "$sock" ]; then
-          export WAYLAND_DISPLAY="$(basename "$sock")"
-          break
-        fi
-      done
-    fi
-    if [ -z "''${DISPLAY:-}" ] && [ -e /tmp/.X11-unix/X0 ]; then
-      export DISPLAY=:0
-    fi
-    if [ -z "''${XAUTHORITY:-}" ] && [ -f "/home/${user}/.Xauthority" ]; then
-      export XAUTHORITY="/home/${user}/.Xauthority"
-    fi
-
-    exec ${lib.getExe pkgs.rbw} get ${bitwardenItem}
-  '';
-
-  # Non-secret: only tells restic to ask Bitwarden (via rbw) for the password.
-  # Safe to keep in the Nix store — it contains no key material.
-  resticEnvFile = pkgs.writeText "restic-home.env" ''
-    RESTIC_PASSWORD_COMMAND=${resticPasswordCommand}
   '';
 
   # Desktop notifications via the logged-in user's session bus.
@@ -302,42 +230,7 @@ let
     # Final label + clear are handled by backupCleanupCommand (avoids racing partOf stop).
   '';
 
-  # Print client_id / client_secret / refresh_token from rclone config so the
-  # user can paste or save them in Bitwarden item "restic-home" (notes or custom fields).
-  printRcloneBitwardenFields = pkgs.writeShellScript "restic-home-show-oauth" ''
-    set -eu
-    export PATH="${
-      lib.makeBinPath [
-        pkgs.coreutils
-        pkgs.jq
-        pkgs.rclone
-      ]
-    }:$PATH"
-    remote="$1"
-    bw_item="$2"
-    dump_json="$(rclone config dump 2>/dev/null || true)"
-    client_id=""
-    client_secret=""
-    refresh_token=""
-    if [ -n "$dump_json" ]; then
-      client_id="$(printf '%s\n' "$dump_json" | jq -r --arg r "$remote" '.[$r].client_id // empty' 2>/dev/null || true)"
-      client_secret="$(printf '%s\n' "$dump_json" | jq -r --arg r "$remote" '.[$r].client_secret // empty' 2>/dev/null || true)"
-      refresh_token="$(
-        printf '%s\n' "$dump_json" | jq -r --arg r "$remote" '
-          (try ((.[$r].token // "") | fromjson) catch null)
-          | if type == "object" then (.refresh_token // empty) else empty end
-        ' 2>/dev/null || true
-      )"
-    fi
-    printf '\nBitwarden の項目「%s」に保存（メモ欄へ貼り付け、または同名カスタムフィールドを作成）:\n' "$bw_item"
-    printf '  client_id: %s\n' "''${client_id:-(未設定)}"
-    printf '  client_secret: %s\n' "''${client_secret:-(未設定)}"
-    printf '  refresh_token: %s\n' "''${refresh_token:-(未設定)}"
-    printf '  ※ 固定値（remote=%s, type=drive, scope=drive）の保存は不要です。\n' "$remote"
-    printf '  ※ 復元時 ./scripts/restore-on-nixos.sh が rbw 経由で自動読込します。\n'
-  '';
-
-  # Single entrypoint for home backup ops (systemd / rclone / rbw / restic).
+  # Single entrypoint for home backup ops (systemd / rclone / agenix / restic).
   # NixOS names its auto-wrapper `restic-<name>`; we disable that and ship `backup`.
   # Meta subcommands are handled here; everything else is passed to restic.
   resticBackupCmd = pkgs.writeShellScriptBin "backup" ''
@@ -346,59 +239,53 @@ let
         unit="${backupUnit}"
         timer="restic-backups-home.timer"
         remote_name="gdrive"
-        user_rclone_conf="${userRcloneConfigFile}"
-        agenix_rclone_conf=${
-          lib.escapeShellArg (if agenixRcloneConf != null then agenixRcloneConf else "")
-        }
-        agenix_pw_file=${
-          lib.escapeShellArg (if agenixResticPassword != null then agenixResticPassword else "")
-        }
+        agenix_rclone_conf=${lib.escapeShellArg agenixRcloneConf}
+        agenix_pw_file=${lib.escapeShellArg agenixResticPassword}
 
-        # setuid sudo + packaged CLIs (restic-home-setup lives on the system profile).
+        # setuid sudo + packaged CLIs (restic-home-setup + secrets live outside/on user PATH).
         PATH="${
           lib.makeBinPath [
-            pkgs.rbw
             pkgs.rclone
             pkgs.jq
             pkgs.openssh
             pkgs.systemd
             pkgs.coreutils
           ]
-        }:/run/wrappers/bin:/run/current-system/sw/bin:$PATH"
+        }:/run/wrappers/bin:/run/current-system/sw/bin:/etc/profiles/per-user/${user}/bin:$PATH"
 
         resolve_writable_rclone_conf() {
           if [ -n "''${RCLONE_CONFIG:-}" ]; then
             export RCLONE_CONFIG
             return 0
           fi
-          if [ -n "$agenix_rclone_conf" ] && [ -r "$agenix_rclone_conf" ]; then
-            local runtime_dir="''${XDG_RUNTIME_DIR:-/tmp}"
-            local runtime_conf="''${runtime_dir%/}/backup-rclone-$(id -u).conf"
-            install -m 0600 "$agenix_rclone_conf" "$runtime_conf"
-            export RCLONE_CONFIG="$runtime_conf"
-            return 0
+          if [ ! -r "$agenix_rclone_conf" ]; then
+            printf 'エラー: %s が見つかりません（secrets bootstrap && rebuild または secrets import-rclone を実行）。\n' \
+              "$agenix_rclone_conf" >&2
+            exit 1
           fi
-          export RCLONE_CONFIG="$user_rclone_conf"
+          local runtime_dir="''${XDG_RUNTIME_DIR:-/tmp}"
+          local runtime_conf="''${runtime_dir%/}/backup-rclone-$(id -u).conf"
+          install -m 0600 "$agenix_rclone_conf" "$runtime_conf"
+          export RCLONE_CONFIG="$runtime_conf"
         }
 
         usage() {
           cat <<'EOF'
-    backup — ホーム暗号化バックアップ CLI (restic / rclone / agenix / Bitwarden / systemd)
+    backup — ホーム暗号化バックアップ CLI (restic / rclone / agenix / systemd)
 
     使い方:
       backup <command> [args…]
       backup -h | --help | help
 
     基本ワークフロー:
-      backup unlock-key              rbw unlock（手動作業 / Bitwarden 用。agenix 利用時はタイマー実行に不要）
       backup setup                   対話式初回セットアップ (restic-home-setup)
-      backup reconnect               rclone OAuth 再接続 (gdrive:)
+      backup reconnect               rclone OAuth 再接続 (gdrive:) ＋ secrets/rclone-conf.age 更新
       backup about                   Google Drive 疎通確認
       backup run                     フルバックアップ開始 (systemd)
       backup log                     進捗・ログを journal で追う
       backup status                  unit / timer の状態を表示
 
-    確認・部分復元（リポジトリ＆暗号化鍵の環境変数読み込み済み）:
+    確認・部分復元（agenix 鍵・設定を自動読み込み済み）:
       backup snapshots
       backup ls latest
       backup find NAME
@@ -446,39 +333,45 @@ let
             ;;
           reconnect)
             shift
-            mkdir -p "$(dirname "$user_rclone_conf")"
-            if [ ! -f "$user_rclone_conf" ] && [ -n "$agenix_rclone_conf" ] && [ -r "$agenix_rclone_conf" ]; then
-              install -m 0600 "$agenix_rclone_conf" "$user_rclone_conf"
+            tmp_conf="$(mktemp --tmpdir "backup-rclone-reconnect.XXXXXX.conf")"
+            chmod 0600 "$tmp_conf"
+            cleanup_tmp_conf() { rm -f "$tmp_conf"; }
+            trap cleanup_tmp_conf EXIT
+            if [ -r "$agenix_rclone_conf" ]; then
+              install -m 0600 "$agenix_rclone_conf" "$tmp_conf"
             fi
-            export RCLONE_CONFIG="$user_rclone_conf"
+            export RCLONE_CONFIG="$tmp_conf"
             rclone config reconnect "''${remote_name}:" "$@"
             for arg in "$@"; do
               case "$arg" in
                 -h|--help|--help=*) exit 0 ;;
               esac
             done
-            ${printRcloneBitwardenFields} "$remote_name" "${bitwardenItem}"
-            printf '\nagenix の暗号化済み rclone.conf も更新してください:\n'
-            printf '  secrets import-rclone && rebuild\n'
+            if command -v secrets >/dev/null 2>&1 && secrets import-rclone "$tmp_conf"; then
+              printf '\nagenix の secrets/rclone-conf.age を更新しました。\n'
+              printf '反映するには: rebuild（未ステージなら git add secrets/rclone-conf.age も実行）\n'
+            else
+              trap - EXIT
+              printf '\n警告: secrets import-rclone の自動実行に失敗しました。\n' >&2
+              printf '再認証済み設定を一時保持しています: %s\n' "$tmp_conf" >&2
+              printf '以下を実行してから一時ファイルを削除してください:\n' >&2
+              printf '  secrets import-rclone %q && rm -f %q && rebuild\n' "$tmp_conf" "$tmp_conf" >&2
+              exit 1
+            fi
             ;;
           about)
             shift
             resolve_writable_rclone_conf
             exec rclone about "''${remote_name}:" "$@"
             ;;
-          unlock-key)
-            shift
-            exec rbw unlock "$@"
-            ;;
           *)
             if [ -z "''${RESTIC_PASSWORD:-}" ] && [ -z "''${RESTIC_PASSWORD_FILE:-}" ] && [ -z "''${RESTIC_PASSWORD_COMMAND:-}" ]; then
-              if [ -n "$agenix_pw_file" ] && [ -r "$agenix_pw_file" ]; then
+              if [ -r "$agenix_pw_file" ]; then
                 export RESTIC_PASSWORD_FILE="$agenix_pw_file"
               else
-                set -a
-                # shellcheck disable=SC1091
-                source ${resticEnvFile}
-                set +a
+                printf 'エラー: %s が見つかりません（secrets bootstrap && rebuild を実行してください）。\n' \
+                  "$agenix_pw_file" >&2
+                exit 1
               fi
             fi
             export RESTIC_CACHE_DIR="/var/cache/restic-backups-home"
@@ -491,15 +384,14 @@ let
         esac
   '';
 
-  # Interactive first-time setup: rclone gdrive remote, Bitwarden key, first backup.
-  # Secrets stay out of the Nix store (OAuth token + restic key live in user config / BW).
+  # Interactive first-time setup / re-auth: rclone gdrive remote -> agenix, restic key -> agenix, first backup.
+  # Secrets stay out of the Nix store and live exclusively under agenix (/run/agenix).
   resticHomeSetup = pkgs.writeShellApplication {
     name = "restic-home-setup";
     runtimeInputs = [
       pkgs.coreutils
       pkgs.gnugrep
       pkgs.jq
-      pkgs.rbw
       pkgs.rclone
       pkgs.restic
       pkgs.systemd
@@ -507,13 +399,12 @@ let
     text = ''
       set -euo pipefail
 
-      # setuid sudo + system wrappers (backup) live outside the app PATH.
-      export PATH="/run/wrappers/bin:/run/current-system/sw/bin:$PATH"
+      # setuid sudo + system wrappers (backup) + user profile (secrets) live outside app PATH.
+      export PATH="/run/wrappers/bin:/run/current-system/sw/bin:/etc/profiles/per-user/${user}/bin:$PATH"
 
       remote_name="gdrive"
-      rclone_conf="${userRcloneConfigFile}"
-      agenix_rclone_conf=${lib.escapeShellArg (if agenixRcloneConf != null then agenixRcloneConf else "")}
-      bw_item="${bitwardenItem}"
+      agenix_rclone_conf=${lib.escapeShellArg agenixRcloneConf}
+      agenix_pw_file=${lib.escapeShellArg agenixResticPassword}
       repo="${repository}"
       unit="${backupUnit}"
 
@@ -563,22 +454,25 @@ let
         esac
       }
 
-      say "restic ホームバックアップ — 初回セットアップ"
+      say "restic ホームバックアップ — セットアップ (agenix 一元管理)"
       say "リポジトリ: $repo"
-      say "rclone 設定: $rclone_conf"
-      say "Bitwarden 項目: $bw_item"
 
-      # --- 1. rclone Google Drive remote ---------------------------------
-      step "1/3 Google Drive リモート ($remote_name)"
-      export RCLONE_CONFIG="$rclone_conf"
-      mkdir -p "$(dirname "$rclone_conf")"
-      if [ ! -f "$rclone_conf" ] && [ -n "$agenix_rclone_conf" ] && [ -r "$agenix_rclone_conf" ]; then
-        install -m 0600 "$agenix_rclone_conf" "$rclone_conf"
-        say "agenix の rclone-conf から $rclone_conf を展開しました。"
+      tmp_conf="$(mktemp --tmpdir "restic-home-setup.XXXXXX.conf")"
+      chmod 0600 "$tmp_conf"
+      cleanup_tmp_conf() { rm -f "$tmp_conf"; }
+      trap cleanup_tmp_conf EXIT
+
+      # --- 1. rclone Google Drive remote -> secrets/rclone-conf.age ------
+      step "1/3 Google Drive リモート ($remote_name → agenix)"
+      export RCLONE_CONFIG="$tmp_conf"
+      rclone_updated=0
+      if [ -r "$agenix_rclone_conf" ]; then
+        install -m 0600 "$agenix_rclone_conf" "$tmp_conf"
+        say "現在の agenix 設定 ($agenix_rclone_conf) を読み込みました。"
       fi
 
       has_remote=0
-      if [ -f "$rclone_conf" ] && rclone listremotes 2>/dev/null | grep -qx "''${remote_name}:"; then
+      if [ -s "$tmp_conf" ] && rclone listremotes 2>/dev/null | grep -qx "''${remote_name}:"; then
         has_remote=1
       fi
 
@@ -592,16 +486,18 @@ let
             warn_oauth_publish
             say "独自の Desktop OAuth client_id を設定してください（共有 ID は制限／2026 年廃止予定）。"
             rclone config reconnect "''${remote_name}:" || rclone config
+            rclone_updated=1
           fi
         else
           say "Google Drive 認証エラー（終了コード $probe_rc）。"
           warn_oauth_publish
           if ! confirm "OAuth アプリを公開 (Publish) 済みであることを確認し、今すぐ再接続しますか？"; then
-            die "中断しました。アプリを公開してから次を実行してください: rclone config reconnect ''${remote_name}:"
+            die "中断しました。アプリを公開してから次を実行してください: backup reconnect"
           fi
           rclone config reconnect "''${remote_name}:" || rclone config
           probe_gdrive || die "再接続後も ''${remote_name}: へ接続できませんでした。Publish と client_id を確認してください。"
           say "再接続後の Google Drive 認証 OK。"
+          rclone_updated=1
         fi
       else
         say "リモート ''${remote_name}: が未設定です。対話式 rclone config を起動します。"
@@ -612,7 +508,7 @@ let
         say "参考: https://rclone.org/drive/#making-your-own-client-id"
         say "ブラウザー OAuth を完了し、rclone メニューを終了 (q) してください。"
         if ! confirm "rclone config を開始しますか？"; then
-          die "中断しました。rclone 設定後に次を再実行してください: backup setup"
+          die "中断しました。設定するには次を再実行してください: backup setup"
         fi
         rclone config
         if ! rclone listremotes 2>/dev/null | grep -qx "''${remote_name}:"; then
@@ -620,49 +516,38 @@ let
         fi
         probe_gdrive || die "リモート ''${remote_name}: を作成しましたが認証確認に失敗しました。"
         say "リモート ''${remote_name}: OK。"
+        rclone_updated=1
       fi
 
-      # --- 2. Bitwarden (rbw) + restic encryption key --------------------
-      step "2/3 Bitwarden 暗号化鍵 ($bw_item)"
-
-      if ! rbw unlocked >/dev/null 2>&1; then
-        say "Bitwarden Vault がロック中（または未ログイン）です。"
-        if ! confirm "今すぐ rbw login / unlock を実行しますか？"; then
-          die "中断しました。次を実行してください: rbw login && rbw unlock"
+      if [ "$rclone_updated" -eq 1 ]; then
+        if command -v secrets >/dev/null 2>&1 && secrets import-rclone "$tmp_conf"; then
+          say "secrets/rclone-conf.age を更新しました（システム反映には rebuild を実行）。"
+        else
+          trap - EXIT
+          say "警告: secrets import-rclone の自動実行に失敗しました。"
+          say "設定を一時保持しています: $tmp_conf"
+          die "次を実行してから一時ファイルを削除してください: secrets import-rclone \"$tmp_conf\" && rm -f \"$tmp_conf\" && rebuild"
         fi
-        # login is idempotent-ish; unlock prompts via pinentry when needed.
-        rbw login || true
-        rbw unlock
+      fi
+
+      # --- 2. restic encryption password (agenix) ------------------------
+      step "2/3 restic 暗号化鍵 (agenix)"
+      if [ -r "$agenix_pw_file" ]; then
+        say "agenix 復号済みパスフレーズを確認しました: $agenix_pw_file"
       else
-        say "Vault はロック解除済みです。"
+        say "$agenix_pw_file が見つかりません。"
+        if command -v secrets >/dev/null 2>&1 && confirm "secrets import-restic で secrets/restic-home-password.age を作成・暗号化しますか？"; then
+          secrets import-restic
+          say "暗号化しました。次に git add secrets/ && rebuild を実行してください。"
+        else
+          say "手動で設定するには: secrets init && secrets import-restic && git add secrets/ && rebuild"
+        fi
       fi
 
-      rbw sync >/dev/null || true
-
-      if rbw get "$bw_item" >/dev/null 2>&1; then
-        say "Bitwarden 項目 '$bw_item' は既に存在します。"
-      else
-        say "Bitwarden 項目 '$bw_item' を新規作成します（40 文字の生成パスフレーズ＝restic 暗号化鍵）。"
-        if ! confirm "新しい restic 鍵を生成して '$bw_item' として保存しますか？"; then
-          die "中断しました。手動作成する場合: rbw generate 40 $bw_item"
-        fi
-        rbw generate 40 "$bw_item"
-        rbw sync >/dev/null || true
-        if ! rbw get "$bw_item" >/dev/null 2>&1; then
-          die "生成後に項目 '$bw_item' を読み取れませんでした。"
-        fi
-        say "鍵を Bitwarden の項目 '$bw_item' へ保存しました。"
-      fi
-
-      "${printRcloneBitwardenFields}" "$remote_name" "$bw_item"
-      say ""
-      say "agenix と同期する場合（自動バックアップの rbw ロック解除不要化）:"
-      say "  secrets import-restic && secrets import-rclone && rebuild"
-
-      # Smoke-check: restic can decrypt the password command path via wrapper.
-      if command -v backup >/dev/null 2>&1; then
-        if backup snapshots >/dev/null 2>&1; then
-          say "backup コマンドでリポジトリを開けました（既存スナップショット OK）。"
+      # Smoke-check only when both agenix secrets are readable on the system.
+      if [ -r "$agenix_pw_file" ] && [ -r "$agenix_rclone_conf" ] && command -v backup >/dev/null 2>&1; then
+        if RCLONE_CONFIG="$tmp_conf" RESTIC_PASSWORD_FILE="$agenix_pw_file" backup snapshots >/dev/null 2>&1; then
+          say "リポジトリを開けました（既存スナップショット OK）。"
         else
           say "まだリポジトリは未初期化です（初回バックアップ前の正常な状態）。"
         fi
@@ -670,6 +555,9 @@ let
 
       # --- 3. First backup -----------------------------------------------
       step "3/3 初回バックアップ ($unit)"
+      if [ "$rclone_updated" -eq 1 ] || [ ! -r "$agenix_rclone_conf" ] || [ ! -r "$agenix_pw_file" ]; then
+        say "注: agenix の更新内容を /run/agenix へ反映するには先に \`rebuild\` を実行してください。"
+      fi
       say "必要に応じて Google Drive 上に restic リポジトリを自動初期化します (initialize = true)。"
       if confirm "$unit を今すぐ開始しますか（sudo を求める場合があります）？"; then
         if systemctl --quiet is-active "$unit" 2>/dev/null; then
@@ -699,7 +587,6 @@ in
   environment.systemPackages = with pkgs; [
     restic
     rclone
-    rbw
     resticBackupCmd
     resticHomeSetup
   ];
@@ -710,8 +597,8 @@ in
     # Prefer a short `backup` CLI over nixpkgs' default `restic-home` wrapper.
     createWrapper = false;
 
-    # Home plus staged root-only system state (Wi-Fi, Bluetooth, WARP, Tailscale).
-    # On this single-user host /home/${user} is effectively all of /home.
+    # Home plus staged root-only system state (Bluetooth, Cloudflare WARP).
+    # Wi-Fi and Tailscale keys live in agenix rather than restic staging.
     paths = [
       "/home/${user}"
       stagingRoot
@@ -850,23 +737,39 @@ in
       "/home/${user}/.bashrc"
       "/home/${user}/.nix-defexpr"
       "/home/${user}/.nix-profile"
+
+      # Secrets managed declaratively by agenix (plus leftover plaintext copies / .backup files).
+      "/home/${user}/.ssh/id_ed25519"
+      "/home/${user}/.ssh/id_wsl_builder"
+      "/home/${user}/.ssh/id_wsl_builder.pub"
+      "/home/${user}/.ssh/*.backup"
+      "/home/${user}/.android/adbkey"
+      "/home/${user}/.android/adbkey.pub"
+      "/home/${user}/.android/adbkey*.backup"
+      "/home/${user}/.config/gh/hosts.yml"
+      "/home/${user}/.config/gh/hosts.yml.backup"
+      "/home/${user}/.config/opencode/service.json"
+      "/home/${user}/.config/opencode/service.json.backup"
+      "/home/${user}/.config/rclone/rclone.conf"
+      "/home/${user}/.config/wol-pc/config.env"
+      "/home/${user}/Projects/wol-pc/config.env"
     ];
 
-    # Prefer agenix decrypted passwordFile (headless/timer-safe); fallback to Bitwarden rbw env until migrated.
-    passwordFile = lib.mkIf (agenixResticPassword != null) agenixResticPassword;
-    environmentFile = lib.mkIf (agenixResticPassword == null) "${resticEnvFile}";
+    # Decrypt restic passphrase and rclone OAuth config solely via agenix.
+    passwordFile = agenixResticPassword;
 
     # Copy decrypted rclone.conf to writable RuntimeDirectory before restic preStart
     # so OAuth token refreshes succeed without failing on read-only /run/agenix.
-    backupPrepareCommand = lib.mkIf (agenixRcloneConf != null) ''
-      if [ -r ${lib.escapeShellArg agenixRcloneConf} ]; then
-        ${pkgs.coreutils}/bin/install -m 0600 ${lib.escapeShellArg agenixRcloneConf} ${lib.escapeShellArg runtimeRcloneConfigFile}
-      elif [ -r ${lib.escapeShellArg userRcloneConfigFile} ]; then
-        ${pkgs.coreutils}/bin/install -m 0600 ${lib.escapeShellArg userRcloneConfigFile} ${lib.escapeShellArg runtimeRcloneConfigFile}
-      else
-        echo "restic-home: ${agenixRcloneConf} is not readable (check /etc/agenix/master.key)" >&2
+    backupPrepareCommand = ''
+      if [ ! -r ${lib.escapeShellArg agenixResticPassword} ]; then
+        echo "restic-home: ${agenixResticPassword} is not readable (run: secrets bootstrap && rebuild)" >&2
         exit 1
       fi
+      if [ ! -r ${lib.escapeShellArg agenixRcloneConf} ]; then
+        echo "restic-home: ${agenixRcloneConf} is not readable (run: secrets bootstrap && rebuild)" >&2
+        exit 1
+      fi
+      ${pkgs.coreutils}/bin/install -m 0600 ${lib.escapeShellArg agenixRcloneConf} ${lib.escapeShellArg runtimeRcloneConfigFile}
     '';
 
     # Create the restic repository on Google Drive on first run.
@@ -911,11 +814,8 @@ in
           | grep -Eqi 'invalid_grant|token expired|couldn.t fetch token'; then
           fail_hint="GDrive OAuth失効。ConsoleでPublish後: backup reconnect"
         elif journalctl -u ${backupUnit} -n 40 -o cat --no-pager 2>/dev/null \
-          | grep -Eqi 'restic-home-password.*(no such file|permission denied)|/run/agenix'; then
+          | grep -Eqi 'restic-home-(password|rclone)|no such file|permission denied|/run/agenix'; then
           fail_hint="agenix復号失敗。/etc/agenix/master.key 確認: secrets bootstrap && rebuild"
-        elif journalctl -u ${backupUnit} -n 40 -o cat --no-pager 2>/dev/null \
-          | grep -Eqi 'pinentry cancelled|Resolving password failed'; then
-          fail_hint="rbw がロック。先に: backup unlock-key"
         fi
         ${resticPanel} set "バックアップ失敗" "$fail_hint" failed || true
         ${resticNotify} critical "バックアップ失敗" "$fail_hint" || true
@@ -926,18 +826,17 @@ in
     '';
 
     # CLI: `backup` (see resticBackupCmd) — e.g.:
-    #   backup setup | unlock-key | run | log | about | reconnect
+    #   backup setup | run | log | about | reconnect
     #   backup snapshots
     #   backup restore latest --target /tmp/restore
     #   RESTIC_REPOSITORY=rclone:gdrive:restic/vaio-home backup snapshots
   };
 
   # Systemd's default PATH for this unit does not include profile bins; restic
-  # needs rclone on PATH, and rbw needs rbw-agent. Start the progress notifier
+  # needs rclone on PATH. Start the progress notifier
   # alongside this oneshot (partOf stops it when the backup ends).
   systemd.services.restic-backups-home = {
     path = [
-      pkgs.rbw
       pkgs.rclone
       pkgs.openssh
       pkgs.systemd

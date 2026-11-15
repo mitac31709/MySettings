@@ -180,7 +180,7 @@ class RestoreIntegrationTest(unittest.TestCase):
             "home/mitac/Documents/hiragino-otf/test-font.otf": b"font fixture\x00\xff",
             "home/mitac/Documents/notes.txt": "復元するメモ\n".encode(),
             "home/mitac/.config/example.conf": b"setting = restored\n",
-            "run/restic-backups-home/system/nm-connections/example": b"system fixture\n",
+            "run/restic-backups-home/system/bluetooth/AA:BB": b"system fixture\n",
         }
         for name, contents in cls.expected_files.items():
             destination = cls.root / name
@@ -366,12 +366,12 @@ class RestoreIntegrationTest(unittest.TestCase):
         for name, contents in self.expected_files.items():
             if name.startswith("home/mitac/"):
                 self.assertEqual((restore_root / name).read_bytes(), contents)
-        nm_file = restore_root / "etc/NetworkManager/system-connections/example"
-        self.assertEqual(nm_file.read_bytes(), b"system fixture\n")
-        self.assertEqual(stat.S_IMODE(nm_file.stat().st_mode), 0o600)
+        bt_file = restore_root / "var/lib/bluetooth/AA:BB"
+        self.assertEqual(bt_file.read_bytes(), b"system fixture\n")
         self.assertEqual(list(stage_parent.iterdir()), [])
         sudo_calls = sudo_log.read_text(encoding="utf-8")
-        self.assertIn(f"chown -R root:root -- {restore_root}/etc/NetworkManager/system-connections", sudo_calls)
+        self.assertIn(f"chown -R root:root -- {restore_root}/var/lib/bluetooth", sudo_calls)
+        self.assertNotIn("NetworkManager", sudo_calls)
         self.assertNotIn("systemctl", sudo_calls)
         self.assertNotIn("nmcli", sudo_calls)
 
@@ -683,14 +683,9 @@ class RestoreIntegrationTest(unittest.TestCase):
         t_home = self.target / "home" / "mitac"
         t_sys = self.target / "run" / "restic-backups-home" / "system"
 
-        # System VPN / BT removed; NM profile sanitized but SSID/PSK intact
-        for dropped_sys in ("tailscale", "cloudflare-warp", "bluetooth"):
+        # System VPN / BT / legacy NM staging all removed under --new-device
+        for dropped_sys in ("tailscale", "cloudflare-warp", "bluetooth", "nm-connections"):
             self.assertFalse((t_sys / dropped_sys).exists(), dropped_sys)
-        nm_text = (t_sys / "nm-connections" / "corp.nmconnection").read_text(encoding="utf-8")
-        self.assertNotIn("interface-name=", nm_text)
-        self.assertNotIn("mac-address=", nm_text)
-        self.assertIn("ssid=CorpWiFi", nm_text)
-        self.assertIn("psk=super-secret-psk", nm_text)
 
         # Portable / preserved paths
         for kept in (
@@ -845,13 +840,13 @@ class RestoreIntegrationTest(unittest.TestCase):
         self.assertFalse((restore_root / "var" / "lib" / "cloudflare-warp").exists())
         self.assertFalse((restore_root / "var" / "lib" / "bluetooth").exists())
 
-        # Restored home data + sanitized Wi-Fi profile
+        # Restored home data; legacy NM profiles in snapshots are no longer applied (agenix owns them)
         self.assertEqual((target_home / "Documents" / "notes.txt").read_text(encoding="utf-8"), "vaio-note\n")
         nm_restored = restore_root / "etc" / "NetworkManager" / "system-connections" / "corp.nmconnection"
-        self.assertEqual(stat.S_IMODE(nm_restored.stat().st_mode), 0o600)
-        self.assertNotIn("interface-name=", nm_restored.read_text(encoding="utf-8"))
-        sudo_calls = sudo_log.read_text(encoding="utf-8")
-        self.assertIn(f"chown -R root:root -- {restore_root}/etc/NetworkManager/system-connections", sudo_calls)
+        self.assertFalse(nm_restored.exists())
+        sudo_calls = sudo_log.read_text(encoding="utf-8") if sudo_log.exists() else ""
+        self.assertNotIn("NetworkManager", sudo_calls)
+        self.assertNotIn("tailscale", sudo_calls)
         self.assertNotIn("systemctl", sudo_calls)
         self.assertNotIn("nmcli", sudo_calls)
 
@@ -1621,11 +1616,7 @@ class RestorePromptTest(unittest.TestCase):
         self.assertEqual(gdrive["client_id"], "cid-inplace")
         self.assertEqual(json.loads(gdrive["token"])["refresh_token"], "1//fresh-inplace-rt")
 
-        self.assertEqual(
-            (nm_dest / "home-wifi.nmconnection").read_text(encoding="utf-8"),
-            "[connection]\nid=home\n",
-        )
-        self.assertEqual(stat.S_IMODE((nm_dest / "home-wifi.nmconnection").stat().st_mode), 0o600)
+        self.assertFalse((nm_dest / "home-wifi.nmconnection").exists())
         self.assertEqual(
             (nm_dest / "current.nmconnection").read_text(encoding="utf-8"),
             "current wifi\n",
@@ -1634,16 +1625,13 @@ class RestorePromptTest(unittest.TestCase):
             (restore_root / "var/lib/bluetooth/AA:BB/info").read_text(encoding="utf-8"),
             "[General]\nName=Headphones\n",
         )
-        self.assertEqual(
-            (restore_root / "var/lib/tailscale/tailscaled.state").read_text(encoding="utf-8"),
-            "ts-state\n",
-        )
+        self.assertFalse((restore_root / "var/lib/tailscale/tailscaled.state").exists())
         self.assertFalse((restore_root / "var/lib/cloudflare-warp").exists())
 
         sudo_calls = self.sudo_log.read_text(encoding="utf-8")
-        self.assertIn(f"chown -R root:root -- {nm_dest}", sudo_calls)
         self.assertIn(f"chown -R root:root -- {restore_root}/var/lib/bluetooth", sudo_calls)
-        self.assertIn(f"chown -R root:root -- {restore_root}/var/lib/tailscale", sudo_calls)
+        self.assertNotIn("NetworkManager", sudo_calls)
+        self.assertNotIn("tailscale", sudo_calls)
         self.assertNotIn("cloudflare-warp", sudo_calls)
         self.assertNotIn("systemctl", sudo_calls)
         self.assertNotIn("nmcli", sudo_calls)
@@ -2959,15 +2947,21 @@ class RestoreSystemStateTest(unittest.TestCase):
         alt_root = self.root / "alt-root"
         calls = self.run_restore_system_state(str(alt_root))
         self.assertTrue(any(f"chown -R root:root -- {alt_root}/var/lib/bluetooth" == c for c in calls))
+        self.assertTrue(any(f"chown -R root:root -- {alt_root}/var/lib/cloudflare-warp" == c for c in calls))
+        self.assertFalse(any("NetworkManager" in c or "tailscale" in c for c in calls), calls)
+        self.assertFalse((alt_root / "etc" / "NetworkManager" / "system-connections").exists())
+        self.assertFalse((alt_root / "var" / "lib" / "tailscale").exists())
         self.assertFalse(any(c.startswith(("systemctl ", "nmcli ")) for c in calls), calls)
 
     def test_live_root_reloads_only_active_units(self):
         calls = self.run_restore_system_state("")
         self.assertIn("chown -R root:root -- /var/lib/bluetooth", calls)
+        self.assertIn("chown -R root:root -- /var/lib/cloudflare-warp", calls)
+        self.assertFalse(any("NetworkManager" in c or "tailscale" in c for c in calls), calls)
         if Path("/run/systemd/system").is_dir():
-            self.assertIn("nmcli connection reload", calls)
+            self.assertNotIn("nmcli connection reload", calls)
             self.assertIn("systemctl restart bluetooth.service", calls)
-            self.assertIn("systemctl restart tailscaled.service", calls)
+            self.assertNotIn("systemctl restart tailscaled.service", calls)
             self.assertNotIn("systemctl restart cloudflare-warp.service", calls)
         else:
             self.assertFalse(any(c.startswith(("systemctl ", "nmcli ")) for c in calls), calls)
@@ -3453,6 +3447,21 @@ class AgenixRestoreAndSecretsTest(unittest.TestCase):
         other_key = other_root / "etc" / "agenix" / "master.key"
         self.assertEqual(other_key.read_text(encoding="utf-8").strip(), master_key_txt)
         self.assertEqual(stat.S_IMODE(other_key.stat().st_mode), 0o400)
+
+        # Verify explicit path support for `secrets import-rclone <FILE>` without ~/.config/rclone/rclone.conf
+        rclone_cfg.unlink()
+        explicit_rclone = self.root / "runtime-reconnect-rclone.conf"
+        explicit_rclone_content = "[gdrive]\ntype = drive\nscope = drive\ntoken = {\"access_token\":\"explicit-tok\"}\n"
+        explicit_rclone.write_text(explicit_rclone_content, encoding="utf-8")
+        exp_res = run_secrets("import-rclone", str(explicit_rclone))
+        self.assertEqual(exp_res.returncode, 0, exp_res.stdout + exp_res.stderr)
+        self.assertNotIn("explicit-tok", exp_res.stdout + exp_res.stderr)
+        decrypted_explicit = subprocess.check_output(
+            ["age", "--decrypt", "-i", str(host_key), str(repo / "secrets" / "rclone-conf.age")],
+            env=env,
+            text=True,
+        )
+        self.assertEqual(decrypted_explicit, explicit_rclone_content)
 
 
 if __name__ == "__main__":

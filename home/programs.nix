@@ -492,7 +492,7 @@ in
     # Wineprefix manager for Windows apps/games (FHS-wrapped).
     (bottles.override { removeWarningPopup = true; })
     # wol-pc (Wake-on-LAN client): packaged via pkgs/wol-pc; reads agenix
-    # (/run/agenix/wol-pc-env), ~/.config/wol-pc/config.env, or ~/Projects/wol-pc/config.env.
+    # (/run/agenix/wol-pc-env) or $WOL_PC_CONFIG.
     wol-pc
     sshpass
     rofi-prompt

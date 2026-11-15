@@ -19,6 +19,7 @@ let
 
   nmProfilesScript = pkgs.writeScript "nm-agenix-profiles" ''
     #!${pkgs.python3}/bin/python3
+    import configparser
     import os
     import pathlib
     import re
@@ -66,6 +67,21 @@ let
         content = "".join(out).strip()
         return (content + "\n") if content else ""
 
+    def parse_keyfile_meta(text: str):
+        cp = configparser.RawConfigParser(delimiters=("=",), interpolation=None)
+        cp.optionxform = str
+        cp.read_string(text)
+        if not cp.has_section("connection"):
+            return None
+        ctype = cp.get("connection", "type", fallback="").strip().lower()
+        uuid = cp.get("connection", "uuid", fallback="").strip()
+        cid = cp.get("connection", "id", fallback="").strip()
+        ssid = (
+            cp.get("wifi", "ssid", fallback="").strip()
+            or cp.get("802-11-wireless", "ssid", fallback="").strip()
+        )
+        return ctype, uuid, cid, ssid
+
     dest_dir = pathlib.Path("/run/NetworkManager/system-connections")
     dest_dir.mkdir(parents=True, exist_ok=True)
     os.chmod(dest_dir, 0o700)
@@ -74,6 +90,8 @@ let
         old.unlink()
 
     written = 0
+    deployed_wifi_uuids = set()
+    deployed_wifi_keys = set()
     for idx, (name, body) in enumerate(sections, start=1):
         cleaned = clean_keyfile(body)
         if not cleaned or "[connection]" not in cleaned:
@@ -92,16 +110,49 @@ let
             os.chmod(tmp_path, 0o600)
             os.replace(tmp_path, out_path)
             written += 1
+            try:
+                meta = parse_keyfile_meta(cleaned)
+            except Exception:
+                meta = None
+            if meta is not None:
+                ctype, uuid, cid, ssid = meta
+                if ctype in ("wifi", "802-11-wireless"):
+                    if uuid:
+                        deployed_wifi_uuids.add(uuid)
+                    if cid and ssid:
+                        deployed_wifi_keys.add((cid, ssid))
         except Exception:
             if tmp_path.exists():
                 tmp_path.unlink()
             raise
 
+    removed_dups = 0
+    local_dir = pathlib.Path("/etc/NetworkManager/system-connections")
+    if local_dir.is_dir() and (deployed_wifi_uuids or deployed_wifi_keys):
+        for local_file in sorted(local_dir.glob("*.nmconnection")):
+            if not local_file.is_file() or local_file.is_symlink():
+                continue
+            try:
+                meta = parse_keyfile_meta(local_file.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if meta is None:
+                continue
+            ctype, uuid, cid, ssid = meta
+            if ctype not in ("wifi", "802-11-wireless"):
+                continue
+            if (uuid and uuid in deployed_wifi_uuids) or (cid and ssid and (cid, ssid) in deployed_wifi_keys):
+                try:
+                    local_file.unlink()
+                    removed_dups += 1
+                except OSError as exc:
+                    print(f"nm-agenix-profiles: warning: could not remove duplicate {local_file}: {exc}", file=sys.stderr)
+
     subprocess.run(
         ["${pkgs.networkmanager}/bin/nmcli", "connection", "reload"],
         check=False,
     )
-    print(f"nm-agenix-profiles: loaded {written} declarative profile(s)")
+    print(f"nm-agenix-profiles: loaded {written} declarative profile(s) (removed {removed_dups} duplicate local Wi-Fi file(s))")
   '';
 
   nmSyncScript = pkgs.writeShellApplication {

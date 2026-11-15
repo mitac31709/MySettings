@@ -170,14 +170,14 @@ GUI インストーラを経由せず、USB のターミナルから直接この
    - Tailscale: `tailscale-authkey.age` が有効なら自動認証されます（自宅外でのみ必要な場合は `ts-home-routes off` のまま維持）。手動認証またはキー失効時は `sudo tailscale up --operator=mitac`
    - Cloudflare WARP: `warp-cli registration new` → `warp-cli connect`
 4. **暗号化バックアップの復元または新規設定**:
-   - **別機体の既存バックアップから復元する場合**: 「[OS ビルド前に実機へ復元](#os-ビルド前に実機へ復元)」のとおり `./scripts/restore-on-nixos.sh --from <chromebook|vaio|mitac> --new-device` を実行し（`rbw` で Bitwarden の `restic-home` と、登録済みなら `agenix-master-key` を自動取得・**新しい鍵を作らないこと**）、既存の `~/MySettings`・`rbw`・`rclone.conf` を保持しつつ `/home/mitac` と Wi-Fi 設定を復元する（端末 ID 衝突防止のため VPN/BT・P2P・トークン系ログインは新端末で初回サインイン）。各端末の自動バックアップ先はホスト別リポジトリ（`chromebook-home` / `vaio-home`）へ分離されているため、既存端末と同時運用しても互いにロックやスナップショットを上書きしません。`/etc/agenix/master.key` が配置され `restic-home-password.age` / `rclone-conf.age` がある環境では、自動バックアップは `rbw` 解錠不要で動作します（未移行時は `rbw unlocked` を確認し、必要なら `backup unlock-key` を実行）。
-   - **新規でバックアップを初期構築する場合**: 「`/home の暗号化バックアップ` → `初回セットアップ`」に従い、GCP OAuth クライアント作成 → `backup setup` を実行し、Bitwarden の `restic-home` への保存および `secrets import-restic` / `secrets import-rclone` で agenix へ登録してから `backup run` を実行する。
+   - **別機体の既存バックアップから復元する場合**: 「[OS ビルド前に実機へ復元](#os-ビルド前に実機へ復元)」のとおり `./scripts/restore-on-nixos.sh --from <chromebook|vaio|mitac> --new-device` を実行し（`rbw` で Bitwarden の `restic-home` と `agenix-master-key` を自動取得・**新しい鍵を作らないこと**）、既存の `~/MySettings`・`rbw`・一時 `rclone.conf` を保持しつつ `/home/mitac` を復元する（端末 ID 衝突防止のため Bluetooth/WARP・P2P・トークン系ログインは新端末で初回サインイン。Wi-Fi と Tailscale は `/etc/agenix/master.key` 導入＋`rebuild` で自動展開）。各端末の自動バックアップ先はホスト別リポジトリ（`chromebook-home` / `vaio-home`）へ分離されているため、既存端末と同時運用しても互いにロックやスナップショットを上書きしません。`/etc/agenix/master.key` が配置され `rebuild` 済みであれば、日次バックアップおよび `backup` CLI は追加の `rbw` 解錠不要で動作します。
+   - **新規でバックアップを初期構築する場合**: 「`/home の暗号化バックアップ` → `初回セットアップ`」に従い、GCP OAuth クライアント作成 → `backup setup` を実行して `secrets/rclone-conf.age` と `secrets/restic-home-password.age` を agenix へ登録し、`rebuild` 後 `backup run` を実行する。
 5. **ヒラギノフォント（任意）**:
    `/home/mitac/Documents/hiragino-otf/` に OTF ファイルを配置し、`rebuild` を実行する（ディレクトリが存在すると `rebuild` が自動で `--impure` を付けて同梱します）。
 6. **Vivaldi × ChatGPT 拡張（利用する場合）**:
    Vivaldi で Web Store 版を入れた後、`vivaldi-chatgpt-extension-patch` が `~/.local/share/vivaldi-chatgpt-extension` を生成するため、`vivaldi://extensions` で Store 版を無効化し、Developer mode → Load unpacked で同ディレクトリを読み込む。
 7. **その他の任意設定と実機確認**:
-   - **リモートビルダー**（`modules/nixos/remote-builder.nix`）: `id-wsl-builder.age` を登録済みなら `/run/agenix/id-wsl-builder-root`（`nix-daemon` 用）と `~/.ssh/id_wsl_builder` が自動展開されます（公開鍵は `galleria-mitac` 側へ登録）。未配置でもタイムアウト後にローカルビルドへフォールバック。待ち時間を省くなら `sudo nixos-rebuild switch --flake .#vaio --option builders ""` を実行。
+   - **リモートビルダー**（`modules/nixos/remote-builder.nix`）: `id-wsl-builder.age` を登録済みなら `/run/agenix/id-wsl-builder-root`（`nix-daemon` 用）と `/run/agenix/id-wsl-builder-user`（`ssh` / `~/.ssh/id_wsl_builder`）が自動展開されます（公開鍵は `galleria-mitac` 側へ登録）。未配置でもタイムアウト後にローカルビルドへフォールバック。待ち時間を省くなら `sudo nixos-rebuild switch --flake .#vaio --option builders ""` を実行。
    - **dsh-TUI**: `npm i -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui`
    - **ハードウェア確認**: 下記「VAIO オーディオ確認」「Chromebook オーディオ確認」「VA-API / Parsec 確認」を実行する。
 
@@ -193,11 +193,8 @@ Chromebook（delbin）を既存の `ext4` から `btrfs`（`compress=zstd:1`）�
    backup log
    backup snapshots
    ```
-2. `~/MySettings` に未プッシュの変更があれば確認して GitHub へプッシュする（`git status`）。`secrets/*.age` を利用中の場合もコミット・プッシュ済みか確認する（`secrets check --decrypt`）。
-3. 再インストール後に `./scripts/restore-on-nixos.sh` が `rbw` で自動取得できるよう、Bitwarden の **`restic-home`** に暗号化パスワード（パスワード欄）と `client_id` / `client_secret` / `refresh_token`（メモ欄またはカスタムフィールド）が保存されており、agenix 利用時は **`agenix-master-key`** も保存されていることを確認しておく。あわせて、必要に応じて **別の USB メモリ等へ秘密ファイルを退避**しておくこともできます（Git には絶対に含めない）：
-   - `~/.config/rclone/rclone.conf`（OAuth `client_id` / `client_secret`・トークン入り。これを戻せば `gdrive:` の取得を省略可能）
-   - agenix 利用時は `/etc/agenix/master.key`（事前に `sudo cat /etc/agenix/master.key` 等で退避した場合、Bitwarden 経由なしでも即展開可能）
-   - 未 agenix 移行でリモートビルダーを利用している場合は `~/.ssh/id_wsl_builder`
+2. `~/MySettings` に未プッシュの変更があれば確認して GitHub へプッシュする（`git status`）。`secrets/*.age` もコミット・プッシュ済みか確認する（`secrets check --decrypt`）。
+3. 再インストール後に `./scripts/restore-on-nixos.sh` が `rbw` で自動取得できるよう、Bitwarden に **`agenix-master-key`** と緊急復旧用 **`restic-home`**（暗号化パスワード + OAuth 情報）が保存されていることを確認しておく。あわせて、必要に応じて **別の USB メモリ等へ `/etc/agenix/master.key` を退避**しておくこともできます（Git には絶対に含めない；`sudo cat /etc/agenix/master.key` 等で退避しておけば Bitwarden 経由なしでも即展開可能）。
 
 #### Live USB からの `btrfs` 導入（CLI 手順）
 
@@ -268,8 +265,8 @@ Calamares（Graphical ISO）で `btrfs` を選ぶと初回導入時は `compress
 #### 再起動後の復元と圧縮確認
 
 1. `tuigreet` で `mitac` にログインする（日本語 Sway 環境が起動します。端末は **Ctrl+Alt+T**）。
-2. USB へ退避した `~/.config/rclone/rclone.conf` がある場合は戻し（`chmod 600 ~/.config/rclone/rclone.conf`）、`cd ~/MySettings && ./scripts/restore-on-nixos.sh --from <vaio|chromebook|mitac> --new-device` を実行する（VAIO 側の最新環境を戻すなら `--from vaio --new-device`、旧来の単一バックアップから戻すなら `--from mitac --new-device`）。`rbw` の設定・ロック解除・同期を経て Bitwarden の `restic-home` から暗号化パスワードと（未配置なら）Google OAuth 情報が自動取得され、Bitwarden に **`agenix-master-key`** がある場合は `/etc/agenix/master.key` も同時に配置されます。
-3. 上記コマンド（`--new-device` 付き）により、新しく生成済みの `~/MySettings`（新しい Btrfs UUID の `hosts/chromebook/hardware-configuration.nix`）や現在の `rbw` / `rclone.conf` を壊さずに `/home/mitac` と Wi-Fi 設定（NIC 名縛り自動解除済み）が復元され、Tailscale / Cloudflare WARP / Bluetooth・P2P 鍵・トークン系認証は他端末と競合しないよう初期状態にリセットされます（反映時のみ `sudo` が自動実行）。その後 `rebuild` を実行すると（agenix 利用時は）`/run/agenix/*` の各種シークレット・`restic`/`rclone` 設定・GitHub CLI 認証・SSH 鍵・Tailscale 鍵が宣言的に展開されます（未 agenix 環境では `rbw unlocked` / `backup unlock-key` と初回サインインを実施）。
+2. `cd ~/MySettings && ./scripts/restore-on-nixos.sh --from <vaio|chromebook|mitac> --new-device` を実行する（VAIO 側の最新環境を戻すなら `--from vaio --new-device`、旧来の単一バックアップから戻すなら `--from mitac --new-device`）。`rbw` の設定・ロック解除・同期を経て Bitwarden の `restic-home` から暗号化パスワードと Google OAuth 情報が自動取得され、Bitwarden に **`agenix-master-key`** がある場合は `/etc/agenix/master.key` も同時に配置されます。
+3. 上記コマンド（`--new-device` 付き）により、新しく生成済みの `~/MySettings`（新しい Btrfs UUID の `hosts/chromebook/hardware-configuration.nix`）や現在の `rbw` / `rclone.conf` を壊さずに `/home/mitac` が復元され、Bluetooth / WARP・P2P 鍵・トークン系認証は他端末と競合しないよう初期状態にリセットされます。その後 `rebuild` を実行すると、`/run/agenix/*` の各種シークレット・`restic`/`rclone` 設定・保存済み Wi-Fi・GitHub CLI 認証・SSH 鍵・Tailscale 鍵が agenix から宣言的に展開されます。
 4. 圧縮率と scrub タイマーを確認する：
    ```bash
    sudo compsize / /nix/store /home
@@ -419,19 +416,19 @@ Nerd Font のアイコンが空白に見える場合: `fc-cache -rf` を実行�
 
 - **全端末共通のマスター鍵**: Bitwarden の **`agenix-master-key`** 項目に保存した 1 本の `age` 秘密鍵を、各機体の `/etc/agenix/master.key`（`root:root` / `0400`）へ配置します（`age.identityPaths = [ "/etc/agenix/master.key" ]`）。新端末や SSD 再構築時も `secrets/agenix-rules.nix` の追記・`rekey` なしでそのまま複号できます。
 - **インメモリ複号と権限分離**: `modules/nixos/secrets.nix` が NixOS 起動時に `/run/agenix/*`（`tmpfs`）へ複号します。平文は Nix ストアにも永続ディスクにも書き出されません。ユーザー領域向けの鍵・認証・環境変数は `home/secrets.nix`（Home Manager `osConfig` 参照）が `/run/agenix/*` へ安全にシンボリックリンク／ロードするため、`/etc/agenix/master.key` は **`root` 専用** のまま維持されます。
-- **未移行状態の互換性**: `builtins.pathExists` による段階的有効化（`hasSecretFile`）になっているため、`secrets/*.age` がまだ存在しない状態でもシステム・バックアップは従来どおりエラーなく評価・動作します。
+- **新規フォーク時のブートストラップ安全性**: `builtins.pathExists`（`hasSecretFile`）で宣言しているため、`secrets/*.age` をまだ生成していない初期フォークでもシステム評価が失敗しません。
 
 | 暗号化ファイル (`secrets/`) | 展開先（ランタイム） | 用途 |
 |-----------------------------|----------------------|------|
-| `restic-home-password.age` | `/run/agenix/restic-home-password` | `restic-backups-home` の自動実行用パスワード（Bitwarden `restic-home` にも同一パスワードを保持） |
+| `restic-home-password.age` | `/run/agenix/restic-home-password` | `restic-backups-home` 用の唯一のリポジトリ暗号化パスワード（緊急復旧用に Bitwarden `restic-home` にも同一値を保存可） |
 | `rclone-conf.age` | `/run/agenix/rclone-conf` | `rclone` 用 Google Drive 設定（実行時に書き込み可能な `/run/restic-backups-home/rclone.conf` 等へコピーし OAuth 自動更新に対応） |
-| `nm-connections.age` | `/run/agenix/nm-connections` | NetworkManager Wi-Fi プロファイル群（`nm-agenix-profiles.service` が `interface-name=` / `mac-address=` を除いて `/run/NetworkManager/system-connections/agenix-*.nmconnection` へ展開。さらに `nm-agenix-sync.{path,service}` と `secrets sync-wifi` が `nmcli` / `nmtui` で追加・編集された Wi-Fi を既存プロファイルを保持したまま自動マージ同期） |
+| `nm-connections.age` | `/run/agenix/nm-connections` | NetworkManager Wi-Fi プロファイル群（`nm-agenix-profiles.service` が `interface-name=` / `mac-address=` を除いて `/run/NetworkManager/system-connections/agenix-*.nmconnection` へ展開し、重複する `/etc/NetworkManager/system-connections/*.nmconnection` の Wi-Fi を自動削除。さらに `nm-agenix-sync.{path,service}` と `secrets sync-wifi` が `nmcli` / `nmtui` で追加・編集された Wi-Fi を既存プロファイルを保持したまま自動マージ同期） |
 | `tailscale-authkey.age` | `/run/agenix/tailscale-authkey` | Tailscale 事前認証／OAuth キー（`services.tailscale.authKeyFile`） |
-| `id-wsl-builder.age` | `/run/agenix/id-wsl-builder-{root,user}` | `nix-daemon` 用ビルド鍵（`nix.buildMachines[0].sshKey`）兼 `~/.ssh/id_wsl_builder`（`secrets/id_wsl_builder.pub` があれば `~/.ssh/id_wsl_builder.pub` もリンク） |
+| `id-wsl-builder.age` | `/run/agenix/id-wsl-builder-{root,user}` | `nix-daemon` 用ビルド鍵（`nix.buildMachines[0].sshKey`）兼 `~/.ssh/id_wsl_builder`（`secrets/id-wsl-builder.pub` があれば `~/.ssh/id-wsl-builder.pub` もリンク） |
 | `id-ed25519.age` | `/run/agenix/id-ed25519` | 個人用 SSH 秘密鍵 `~/.ssh/id_ed25519`（`secrets/id_ed25519.pub` があれば `.pub` もリンク） |
 | `gh-hosts.yml.age` | `/run/agenix/gh-hosts.yml` | GitHub CLI 認証 `~/.config/gh/hosts.yml` |
 | `user-env.age` | `/run/agenix/user-env` | `export KEY=...` 形式の API トークン等（`bash` 初期化時読込 + `mitac-agenix-user-env.service` で `systemd --user` へ反映） |
-| `wol-pc-env.age` | `/run/agenix/wol-pc-env` | Wake-on-LAN 設定（`wake-pc` が参照する `config.env`） |
+| `wol-pc-env.age` | `/run/agenix/wol-pc-env` | Wake-on-LAN 設定（`wake-pc` が `/run/agenix/wol-pc-env` または `$WOL_PC_CONFIG` を参照） |
 | `adbkey.age` | `/run/agenix/adbkey` | ADB USB デバッグ秘密鍵 `~/.android/adbkey`（`secrets/adbkey.pub` があれば `~/.android/adbkey.pub` もリンク） |
 | `opencode-service.json.age` | `/run/agenix/opencode-service.json` | OpenCode ローカルサービスパスワード `~/.config/opencode/service.json` |
 
@@ -446,7 +443,7 @@ secrets init
 # 2. 現在のマシン上の秘密情報から .age を対話的に一括作成
 secrets import
 # 個別に取り込む場合:
-#   secrets import-restic / import-rclone / import-ssh / import-gh / import-wifi
+#   secrets import-restic / import-rclone [FILE] / import-ssh / import-gh / import-wifi
 #   secrets import-wol / import-adb / import-opencode / sync-wifi
 #   secrets set-tailscale-key
 
@@ -466,16 +463,16 @@ rebuild
 - **リポジトリ公開設定・セキュリティ注意**:
   - 平文鍵ファイル（`secrets/*.key`, `secrets/*.plain`, `secrets/*.tmp`, `secrets/*~`）は `.gitignore` で除外しています。
   - `.age` 自体はマスター鍵なしでは複号できませんが、ファイル名と暗号文が Git 履歴に残るため GitHub リポジトリの可視設定（Private 推奨）や公開鍵ファイルの扱いに注意してください。
-  - `restic-home` の暗号化パスワードと Google OAuth 情報は引き続き Bitwarden（`restic-home`）にも残すため、他端末から `agenix` を使わずにバックアップを検査・救出する運用も維持されます。
+  - 緊急リカバリ（OS ビルド前の `restore-on-nixos.sh`）用に、Bitwarden の `agenix-master-key`（および任意で `restic-home`）も保持できます。
 
 ## /home の暗号化バックアップ
 
-`modules/nixos/backup.nix` は、ユーザーのホームと**一部のシステム状態**を暗号化して **Google Drive** へバックアップします。
+`modules/nixos/backup.nix` は、ユーザーのホームと**非シークレットのシステム状態**を暗号化して **Google Drive** へバックアップします。
 
-- **restic** — `/home/mitac`（PlatformIO/Arduino/npm/pnpm store や Electron/browser キャッシュ、`.cache`、Steam ランタイム等の再取得可能な巨大ディレクトリは `modules/nixos/backup.nix` で除外）に加え、NetworkManager の Wi-Fi プロファイル・Bluetooth ペアリング・Cloudflare WARP 状態・Tailscale ノード状態の一時コピー（staged）を暗号化・重複排除してスナップショット保存します。
-  なお、起動・編集で都度書き換わる Writable アプリ設定の一部（Cursor `settings.json` / `argv.json`、Lan Mouse 承認済み指紋、JQuake 設定既定値など）は Flake でも宣言的に再現されるため、`restic` バックアップは「日々の未反映変更や動的状態・OAuth トークンの保険」として機能します。
-- **rclone** — Google Drive バックエンド（ホスト別 restic リポジトリ: `rclone:gdrive:restic/<host>-home` — `.#chromebook` は `chromebook-home`、`.#vaio` は `vaio-home`。旧単一構成の移行前バックアップは `mitac-home` に残ります）。各端末は共通の `gdrive:` リモートと下記の暗号化鍵を共有しつつリポジトリ自体が分かれているため、複数端末を同時起動してもロック競合や世代削除（`forget`）の干渉は起きません。
-- **agenix × Bitwarden (`rbw`)** — `secrets/restic-home-password.age` と `secrets/rclone-conf.age` が有効な環境では `/run/agenix/restic-home-password`・`/run/agenix/rclone-conf` から復号して自動バックアップを実行するため、**タイマー実行に `rbw` のアンロック状態や GUI を要しません**（平文は `/run` のみで、`rclone.conf` は OAuth リフレッシュ対応のため一時ファイルへコピーして使用）。同一のパスワードと Google OAuth の `client_id` / `client_secret` / `refresh_token` は他端末復旧用として Bitwarden の **`restic-home`** にも引き続き保持します。未移行環境（`.age` 未配置時）は従来どおり `RESTIC_PASSWORD_COMMAND=rbw get restic-home` へフォールバックします。`rbw` 自体の宣言的設定は `home/programs.nix`（`programs.rbw`）にあります。
+- **restic** — `/home/mitac`（PlatformIO/Arduino/npm/pnpm store や Electron/browser キャッシュ、`.cache`、Steam ランタイム、agenix で管理している秘密情報・`.backup` 残骸等は `modules/nixos/backup.nix` で除外）に加え、agenix で表現できない端末固有状態（Bluetooth ペアリング・Cloudflare WARP 状態）の一時コピー（staged）を暗号化・重複排除してスナップショット保存します（Wi-Fi と Tailscale 鍵は `agenix` に一元化したためバックアップ対象外）。
+  なお、起動・編集で都度書き換わる Writable アプリ設定の一部（Cursor `settings.json` / `argv.json`、Lan Mouse 承認済み指紋、JQuake 設定既定値など）は Flake でも宣言的に再現されるため、`restic` バックアップは「日々の未反映変更や動的状態の保険」として機能します。
+- **rclone** — Google Drive バックエンド（ホスト別 restic リポジトリ: `rclone:gdrive:restic/<host>-home` — `.#chromebook` は `chromebook-home`、`.#vaio` は `vaio-home`。旧単一構成の移行前バックアップは `mitac-home` に残ります）。各端末は共通の `gdrive:` リモートと暗号化鍵を agenix 経由で共有しつつリポジトリ自体が分かれているため、複数端末を同時起動してもロック競合や世代削除（`forget`）の干渉は起きません。
+- **agenix 一元管理** — `services.restic.backups.home` と `backup` CLI は `/run/agenix/restic-home-password` と `/run/agenix/rclone-conf` のみを参照して動作するため、**タイマー実行・CLI ともに `rbw` 解錠や `~/.config/rclone/rclone.conf` の平文保存を要しません**（平文は `/run` のみで、`rclone.conf` は OAuth リフレッシュ対応のため実行時一時ファイルへコピーして使用）。`backup reconnect` で OAuth 再認証した場合も自動で `secrets import-rclone` 経由で `secrets/rclone-conf.age` を更新します。
 
 日次の `systemd` タイマー（`restic-backups-home.timer`）がバックアップを実行し、古いスナップショットを整理します（`--keep-daily 7 --keep-weekly 5 --keep-monthly 12`）。グラフィカルセッションへのログイン中は **Sway の waybar** に進捗（`バックアップ N%`、`$XDG_RUNTIME_DIR/restic-home-status` 経由）が表示され、開始・完了（または失敗）が mako 通知で知らされます。
 
@@ -483,7 +480,7 @@ rebuild
 
 1. 必要に応じて識別子・設定を確認します。
    - `home/programs.nix`: `programs.rbw.settings.email` → 自分の Bitwarden メールアドレス。
-   - `modules/nixos/backup.nix`（任意）: `repository`、`bitwardenItem`、`paths`。
+   - `modules/nixos/backup.nix`（任意）: `repository`、`paths`。
 2. **rebuild**: `sudo nixos-rebuild switch --flake .#vaio`（または `.#chromebook`）。
 3. **自分専用の Google Drive OAuth クライアントを作成**（必須: rclone 共有の `client_id` は 2026 年に廃止予定であり、共有クォータでは復元が極端に遅くなるため）。[Making your own client_id](https://rclone.org/drive/#making-your-own-client-id) も参照してください。
    1. [Google Cloud Console](https://console.cloud.google.com/) → 新規プロジェクトを作成（例: `rclone-mitac`）。
@@ -523,15 +520,14 @@ rebuild
 
    # 既存リモートが共有 client_id のままの場合:
    backup reconnect
-   # または: rclone config → e (edit) → gdrive → client_id/secret を設定 → replace token (Y)
    ```
-   `backup setup`（ステップ 2 後）および `backup reconnect` の完了時に、`client_id: ...`・`client_secret: ...`・`refresh_token: ...` が画面へ表示されます。再インストール時や他端末リカバリに備え、表示された 3 項目をそのまま Bitwarden の **`restic-home`** のメモ欄（または同名カスタムフィールド）へコピーして保存／更新してください（`rbw edit` の暗号化破損リスクを避けるため自動書込みは行いません。また固定値 `gdrive` / `type = drive` / `scope = drive` の保存は不要です）。agenix を併用している場合は、あわせて案内されるとおり `secrets import-rclone`（初回パスワード設定時は `secrets import-restic` も）→ `git add secrets/` → `rebuild` を実行すると `/run/agenix/` 側も最新状態に同期されます。
+   `backup setup` および `backup reconnect` を実行すると一時設定ファイル上で対話認証し、`secrets import-rclone` を自動実行して **`secrets/rclone-conf.age` を直接更新**します（`~/.config/rclone/rclone.conf` は生成しません）。その後 `git add secrets/rclone-conf.age && rebuild` を実行すると `/run/agenix/rclone-conf` へ反映されます（緊急リカバリ用に Bitwarden `restic-home` のメモ欄に OAuth 情報を控えておくことも任意で可能です）。
 
-   手動で agenix / Bitwarden 連携の初回バックアップを実行する場合は次のとおりです。
+   手動で agenix 連携の初回セットアップを行う場合は次のとおりです。
    ```bash
-   rbw login && backup unlock-key
-   rbw generate 40 restic-home   # パスワード欄 = restic 暗号化鍵
-   secrets import-restic && secrets import-rclone   # agenix を有効化する場合
+   secrets init
+   secrets import-restic
+   secrets import-rclone /path/to/tmp-rclone.conf
    git add secrets/ && rebuild
    backup run
    backup log
@@ -561,12 +557,12 @@ rebuild
    - `rbw` が未設定ならメールアドレス（`RBW_EMAIL`、既定 `mitac31709@gmail.com`）、公式 EU クラウドのエンドポイント（`home/programs.nix` と同一、`RBW_BASE_URL` 等で変更可）、および `pinentry`（GUI は `pinentry-qt`、非 GUI は `pinentry-curses`）を自動設定してから `rbw login && rbw unlock` と `rbw sync` を実行します（端末初回登録が必要な場合は回復メニューの `[r]` で `rbw register` → Personal API Key を入力可能）。
 2. **`restic-home`（環境変数 `RBW_ITEM` で変更可）からの自動読込**
    - **暗号化パスワード**: パスワード欄を自動取得し、そのまま restic リポジトリの検証に使用します。
-   - **Google Drive OAuth**: カスタムフィールド（優先）またはメモ欄（`key: value` / `key = value` 形式、`backup setup` / `backup reconnect` の出力貼り付けに対応）から `client_id`・`client_secret`・`refresh_token`（または `token` JSON）を読み取ります。3 項目すべてが揃っていれば `~/.config/rclone/rclone.conf`（権限 `0600`）を無操作で自動生成します。
+   - **Google Drive OAuth**: カスタムフィールド（優先）またはメモ欄（`key: value` / `key = value` 形式）から `client_id`・`client_secret`・`refresh_token`（または `token` JSON）を読み取ります。3 項目すべてが揃っていれば復元用 `rclone.conf`（権限 `0600`）を無操作で自動生成します。
 3. **不足・失敗時の対話フォールバック**
    - Bitwarden 側に一部の項目しか無い場合は取得できた値を既定値（`[Enter で維持]`）として残りの項目だけ入力でき、`refresh_token` を空 Enter にすると対話式ブラウザ OAuth（`rclone config reconnect gdrive:`）へ進みます。
    - `rclone about gdrive:` の接続確認に失敗した場合は `[b]Bitwarden (rbw) を同期して再読込 / [r]値を手動入力 / [o]OAuth ブラウザ再接続 / [t]再試行 / [q]中止`、パスワード取得に失敗／不一致の場合は `[b]Bitwarden (rbw) を同期して再試行 / [m]パスワードを手動入力（非表示） / [q]中止` からそのままやり直せます。
 
-固定値（リモート名 `gdrive`、`type = drive`、`scope = drive`、既定リポジトリ `rclone:gdrive:restic/<host>-home`）の入力は不要です。取得・入力した OAuth 設定は `$RCLONE_CONFIG`（既定 `~/.config/rclone/rclone.conf`、権限 `0600`）へ保存されるため、ビルド後の `backup` でもそのまま再利用できます。
+固定値（リモート名 `gdrive`、`type = drive`、`scope = drive`、既定リポジトリ `rclone:gdrive:restic/<host>-home`）の入力は不要です。取得・入力した OAuth 設定は OS 再ビルド前の復元処理でそのまま再利用されます（`rebuild` 後は agenix `/run/agenix/rclone-conf` のみが使われるため、復旧後に平文ファイルが残った場合は削除してください）。
 
 `RCLONE_CONFIG`（または既存の `~/.config/rclone/rclone.conf` / `~/.rclone.conf`）に有効な `gdrive:` がある場合や、`RESTIC_PASSWORD` / `RESTIC_PASSWORD_FILE` / `RESTIC_PASSWORD_COMMAND` が設定済みの場合はそちらを優先してプロンプトを省略します。復元には**元の暗号化パスワード**が必要です。新しい鍵の生成や `backup setup` は行わないでください。
 
@@ -574,18 +570,18 @@ rebuild
 
 - **既定（`EXTRACT_DIR` なし）**: `/home/mitac` と同一ファイルシステム上の一時領域（`/var/tmp` が同一 FS なら `/var/tmp/restore-mitac-XXXXXXXX`、`/home/mitac` が別パーティションまたは Btrfs 別サブボリュームなら `/home/mitac/.restore-mitac-XXXXXXXX`）で検証後、進捗を表示しながら**元の位置へ高速に反映**し、成功時に一時ディレクトリを削除します（`復元と検証が完了しました。` を表示）。
   - ホーム: `/home/mitac/`（`~/MySettings`・`/home/mitac/Documents/hiragino-otf/` を含む。今回の実行中に Bitwarden 反映・手動入力・OAuth 再接続で新規取得／更新した `$RCLONE_CONFIG` は保持）
-  - システム状態（空でないディレクトリのみ自動で `sudo` 実行）: `/etc/NetworkManager/system-connections`（ファイル権限 `0600`）・`/var/lib/bluetooth`・`/var/lib/cloudflare-warp`・`/var/lib/tailscale`（`root:root` 所有に変更し、稼働中のサービス／`nmcli` を再読み込み）
+  - システム状態（空でないディレクトリのみ自動で `sudo` 実行）: `/var/lib/bluetooth`・`/var/lib/cloudflare-warp`（`root:root` 所有に変更し、稼働中のサービスを再起動）。※ Wi-Fi と Tailscale は `agenix` 一元管理のためシステム状態からは復元しません。
 - **`--from HOST` / `--repo REPO`（リポジトリ指定）**: 別のホスト用リポジトリ（`rclone:gdrive:restic/<HOST>-home`）やローカルコピーしたリポジトリ URI を指定します。未指定時は環境変数 `RESTIC_REPOSITORY`、次に `RESTORE_HOST`／現在ホスト名に基づく `<host>-home`（`nixos` / `localhost` の場合は `mitac-home`）を使います。
 - **`--new-device`（複数端末の同時運用・初期化後クリーン構築向け）**: 同一アカウント内の別端末や再インストール後の環境で衝突・競合が起きないよう、次の処理を行います：
-  - **保持**: SSH 鍵（`.ssh`）・GNOME Keyring・`gh` 認証・個人データ・エディタ/IME 設定・ブラウザのブックマーク/ノート・Wi-Fi パスワード（`.nmconnection` から `interface-name=` / `mac-address=` を自動除去して別 NIC でも接続可能化）、および現在の **`~/MySettings`（既存チェックアウト・新規生成済み `hardware-configuration.nix`）**・**`rbw`（端末別 `device_id`）**・**`$RCLONE_CONFIG`**
-  - **初期化（新端末で初回サインイン）**: `tailscale` / `cloudflare-warp` / `bluetooth` 状態、UniClipboard・Lan Mouse 鍵・LocalSend・RQuickShare・Parsec 端末認証、Vivaldi Sync / Cookie / アカウント状態（`Bookmarks` 等は保持）、Cursor 認証/秘密情報/テレメトリ ID（`User/settings.json` 等は保持）、Codex / ChatGPT・Grok Bot・Discord・Steam・AGY/OpenCode インストール ID 等のトークン系ログイン状態、`SingletonLock`
+  - **保持**: GNOME Keyring・個人データ・エディタ/IME 設定・ブラウザのブックマーク/ノート、および現在の **`~/MySettings`（既存チェックアウト・新規生成済み `hardware-configuration.nix`）**・**`rbw`（端末別 `device_id`）**・**`$RCLONE_CONFIG`**
+  - **初期化（新端末で初回サインイン／agenix 再展開）**: `bluetooth` / `cloudflare-warp`（および旧スナップショットに残る `tailscale` / `nm-connections`）ステージ領域、UniClipboard・Lan Mouse 鍵・LocalSend・RQuickShare・Parsec 端末認証、Vivaldi Sync / Cookie / アカウント状態（`Bookmarks` 等は保持）、Cursor 認証/秘密情報/テレメトリ ID（`User/settings.json` 等は保持）、Codex / ChatGPT・Grok Bot・Discord・Steam・AGY/OpenCode インストール ID 等のトークン系ログイン状態、`SingletonLock`
 - **引数 `[EXTRACT_DIR]` 指定時**: `/home`・`/etc`・`/var/lib` には一切触れず、`EXTRACT_DIR`（`home/mitac/`・`run/restic-backups-home/system/`・`.restored-snapshot-id`）へ展開と検証のみを行います（`--new-device` 併用時はそのステージ領域内で初期化済み状態を検査できます）。
 
-バックアップ対象には `~/MySettings`（`.git` や未コミットの作業を含む）も含まれますが、再生成可能な大容量キャッシュ／ゲーム本体（Steam `common` 等）および `/etc/shadow` は含まれません。ヒラギノ（`/home/mitac/Documents/hiragino-otf`）が復元された場合は、直後の OS ビルドで `--impure`（`rebuild` 導入後は自動付与）を指定してください（未配置時の既定は Noto CJK）。使い方は `./scripts/restore-on-nixos.sh --help` でも確認できます。
+バックアップ対象には `~/MySettings`（`.git` や未コミットの作業を含む）も含まれますが、再生成可能な大容量キャッシュ／ゲーム本体（Steam `common` 等）・agenix 管理済みシークレット・`/etc/shadow` は含まれません。ヒラギノ（`/home/mitac/Documents/hiragino-otf`）が復元された場合は、直後の OS ビルドで `--impure`（`rebuild` 導入後は自動付与）を指定してください（未配置時の既定は Noto CJK）。使い方は `./scripts/restore-on-nixos.sh --help` でも確認できます。
 
 ### 復元・確認（適用済みの環境）
 
-このモジュールはセットアップ、systemd ユニット、rclone 確認、および restic（リポジトリ／Bitwarden パスワードコマンド設定済み）をまとめて扱う `backup` CLI を導入します（`restic-home-setup` も `backup setup` のエイリアスとして利用できます）。
+このモジュールはセットアップ、systemd ユニット、rclone 確認、および restic（agenix のパスフレーズ／rclone 設定を読み込み済み）をまとめて扱う `backup` CLI を導入します（`restic-home-setup` も `backup setup` のエイリアスとして利用できます）。
 
 すべてのファイルを元の位置へ一括復元する場合は `cd ~/MySettings && ./scripts/restore-on-nixos.sh`（別端末からは `--from <host> --new-device`）を実行します。一部ファイルだけ別ディレクトリへ取り出して確認・手動反映する場合は `backup restore latest --target /tmp/restore` を使います。他ホストのリポジトリを `backup` CLI から確認したい場合は `RESTIC_REPOSITORY=rclone:gdrive:restic/chromebook-home backup snapshots` のように環境変数で指定できます。
 
@@ -597,16 +593,9 @@ backup snapshots
 backup restore latest --target /tmp/restore
 ```
 
-`--target /tmp/restore` で抽出した場合、システム状態は `/tmp/restore/run/restic-backups-home/system/` 配下に展開されます。
+`--target /tmp/restore` で抽出した場合、非シークレットのシステム状態は `/tmp/restore/run/restic-backups-home/system/` 配下に展開されます（Wi-Fi と Tailscale は `agenix` + `rebuild` で自動展開されます）。
 
 ```bash
-# Wi-Fi
-sudo cp /tmp/restore/run/restic-backups-home/system/nm-connections/* \
-  /etc/NetworkManager/system-connections/
-sudo chown root:root /etc/NetworkManager/system-connections/*
-sudo chmod 600 /etc/NetworkManager/system-connections/*
-sudo nmcli connection reload
-
 # Bluetooth ペアリング情報
 sudo cp -a /tmp/restore/run/restic-backups-home/system/bluetooth/. \
   /var/lib/bluetooth/
@@ -618,12 +607,6 @@ sudo cp -a /tmp/restore/run/restic-backups-home/system/cloudflare-warp/. \
   /var/lib/cloudflare-warp/
 sudo chown -R root:root /var/lib/cloudflare-warp
 sudo systemctl restart cloudflare-warp 2>/dev/null || true
-
-# Tailscale ノード状態（ログイン／鍵）
-sudo cp -a /tmp/restore/run/restic-backups-home/system/tailscale/. \
-  /var/lib/tailscale/
-sudo chown -R root:root /var/lib/tailscale
-sudo systemctl restart tailscaled
 ```
 
 Google Drive からの復元でレート制限にかかる場合は、先にリポジトリをローカルへコピーしてからディスクから復元します。
@@ -635,18 +618,17 @@ rclone copy gdrive:restic/chromebook-home /var/tmp/restic-chromebook-home \
 # または部分抽出:
 restic restore latest \
   --repo /var/tmp/restic-chromebook-home \
-  --password-command 'rbw get restic-home' \
+  --password-file /run/agenix/restic-home-password \
   --target /tmp/restore
 ```
 
 ### 注意事項
 
-- **`restic-home-password.age` / `rclone-conf.age` が有効な環境（推奨）**: `restic-backups-home.timer` および `backup` コマンドは `/run/agenix/` の復号済み秘密情報を使って動作するため、`rbw` がロックされていても日次バックアップが無監視で成功します（手動再認証後のみ `secrets import-rclone` + `rebuild` で `/run/agenix/rclone-conf` を更新してください）。
-- **agenix 未移行環境（フォールバック）**: `rbw` がロック解除済み／到達可能である必要があります。グラフィカルセッション内で `rbw-agent` をアンロック状態に保つか、セッションがない環境では先に `backup unlock-key` でアンロックしてから `backup run` を実行してください（タイマー実行時はセッションの D-Bus / Wayland 等を取り込んで `pinentry-qt` で入力を促します）。
-- root のみ読める領域（Wi-Fi、Bluetooth、Cloudflare WARP、Tailscale）は root 権限の `ExecStartPre` で `/run/restic-backups-home/system/…` へ一時コピーされ、停止時に削除されます。`/etc/shadow`（ログインパスワード）は**バックアップされません**。`~/MySettings`（`.git` や未コミットの作業を含む flake チェックアウト一式）は `/home/mitac` の他のファイルと**一緒に含まれ**、同一端末向けの `./scripts/restore-on-nixos.sh` では `~/MySettings` へそのまま上書き復元されますが、`--new-device` 指定時かつ既存の `~/MySettings`（`.git` または `hosts/`）がある場合はそちら（新規生成した `hardware-configuration.nix` 等）を保持して上書きしません（`backup restore … --target /tmp/restore` 時は `/tmp/restore/home/mitac/MySettings`）。
+- **`agenix` 一元管理**: `restic-backups-home.timer` および `backup` コマンドは `/run/agenix/restic-home-password`・`/run/agenix/rclone-conf` のみを使って動作するため、`rbw` のアンロック状態や `~/.config/rclone/rclone.conf` の平文コピーを一切必要としません（`/etc/agenix/master.key` 未配置時のみ `secrets bootstrap && rebuild` を実行してください）。
+- root のみ読める非シークレット領域（Bluetooth、Cloudflare WARP）は root 権限の `ExecStartPre` で `/run/restic-backups-home/system/…` へ一時コピーされ、停止時に削除されます（Wi-Fi プロファイル・Tailscale 鍵・各種 API/SSH/gh/ADB/WOL 秘密情報は `agenix` 管理のため restic バックアップから除外済み）。`/etc/shadow`（ログインパスワード）は**バックアップされません**。`~/MySettings`（`.git` や未コミットの作業を含む flake チェックアウト一式）は `/home/mitac` の他のファイルと**一緒に含まれ**、同一端末向けの `./scripts/restore-on-nixos.sh` では `~/MySettings` へそのまま上書き復元されますが、`--new-device` 指定時かつ既存の `~/MySettings`（`.git` または `hosts/`）がある場合はそちら（新規生成した `hardware-configuration.nix` 等）を保持して上書きしません（`backup restore … --target /tmp/restore` 時は `/tmp/restore/home/mitac/MySettings`）。
 - 再生成可能な大容量データは除外されます（Steam クライアント／ランタイムとゲーム本体 ※ `userdata` / `compatdata` のセーブデータは保持、Cursor の agent-worker バイナリとキャッシュ、Vivaldi のキャッシュ／WebStorage、Firefox の `storage`）。Vivaldi の `Default/Extensions` は Preferences のインストール記録と対になるため**含めます**（除外すると復元後に拡張が壊れる）。
-- `/home` **全体**（複数ユーザー）をバックアップしたい場合は、サービスの実行ユーザーを `root` に変更し、`root` 側の `rclone` / `rbw` を設定してください。
-- rclone の OAuth トークンと Bitwarden ログイン情報は `~/.config` 配下に保存され、このリポジトリには一切含まれません。
+- `/home` **全体**（複数ユーザー）をバックアップしたい場合は、サービスの実行ユーザーを `root` に変更し、`agenix` の秘密ファイル所有者を確認してください。
+- OAuth トークンや SSH/gh 秘密鍵などのシークレットは平文でホームやリポジトリに残さず、`secrets/*.age`（agenix）で一元管理します（リポジトリ内には暗号化済み `.age` のみをコミット）。
 
 ## Neovim 設定
 
@@ -779,7 +761,7 @@ hosts/chromebook/                 # delbin Chromebook エントリ + hardware-co
 hosts/vaio/                       # VAIO エントリ + hardware-configuration.nix（要実機生成）
 modules/nixos/common.nix          # locale、ユーザー、Meltype/Fcitx5、フォント
 modules/nixos/secrets.nix         # agenix 複号設定、nm-agenix-profiles、Tailscale authKeyFile
-modules/nixos/remote-builder.nix  # wsl-builder リモートビルダー設定（agenix / ~/.ssh フォールバック）
+modules/nixos/remote-builder.nix  # wsl-builder リモートビルダー設定（agenix 経由）
 modules/nixos/desktop.nix         # sway + greetd + console-gui + portals + XKB/印刷
 modules/nixos/sway.nix            # Sway システム側（greetd 既定セッション等）
 modules/nixos/greetd.nix          # tuigreet（Sway のみ）
@@ -790,7 +772,7 @@ modules/nixos/vaio.nix            # VAIO 固有集約（./vaio/*）
 modules/nixos/vaio/               # audio（PipeWire + WirePlumber + Bluetooth）
 modules/nixos/chromebook.nix      # delbin Chromebook 固有集約（./chromebook/*）
 modules/nixos/chromebook/         # audio（PulseAudio + UCM）/ power（Type-C EC）/ input（cros keyd + Flip）
-modules/nixos/backup.nix          # 暗号化 /home → Google Drive バックアップ（agenix / restic / rclone / rbw）
+modules/nixos/backup.nix          # 暗号化 /home → Google Drive バックアップ（agenix / restic / rclone）
 modules/nixos/release.nix         # system.nixos.tags（世代ラベルのスラッグ）
 home/mitac.nix                    # HM エントリ（identity + imports）
 home/secrets.nix                  # agenix ユーザーシークレット連携（~/.ssh / ~/.config/gh / user-env）

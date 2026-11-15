@@ -1657,12 +1657,6 @@ let
     }
     {
       section = "バックアップ";
-      label = "backup unlock-key（rbw 解錠・手動確認用）";
-      run = "backup unlock-key";
-      mode = "term";
-    }
-    {
-      section = "バックアップ";
       label = "backup run";
       run = "backup run";
       mode = "term";
@@ -1729,7 +1723,7 @@ let
     }
     {
       section = "バックアップ";
-      label = "注: agenix 有効時は rbw 解錠不要で自動実行（他端末用に restic-home も Bitwarden 保持）";
+      label = "注: rclone / restic / Wi-Fi / Tailscale は agenix 一元管理（backup / rebuild とも rbw 解錠不要）";
     }
     # シークレット（Bitwarden × agenix）
     {
@@ -1758,7 +1752,7 @@ let
     }
     {
       section = "シークレット";
-      label = "更新: rclone 再取込（reconnect 後）";
+      label = "更新: rclone 手動再取込（通常は backup reconnect が自動反映）";
       run = "secrets import-rclone && rebuild";
       mode = "term";
     }

@@ -9,21 +9,23 @@ alwaysApply: true
 
 ## 手順（この順）
 
-1. **NixOS / Home Manager で宣言できないか**を先に見る  
+1. **NixOS / Home Manager / agenix で宣言できないか**を先に見る  
    - 設定・鍵マップ・フラグ・パッケージは flake に書く（例: `services.keyd`、HM の設定）  
-   - 宣言で足りるなら **バックアップに足さない**
-2. 宣言できない **端末固有の秘密・登録**だけ、restic の allowlist に足す  
-   - 例: Tailscale ノード鍵、Wi‑Fi プロファイル、Bluetooth ペアリング、WARP 登録
+   - 秘密鍵・API トークン・認証状態（Wi-Fi プロファイル、Tailscale 鍵、`rclone.conf`、`restic` 鍵、SSH/gh/ADB/OpenCode/WOL）は **`secrets/*.age`（agenix）に一元化し、`backup.nix` には足さない**
+2. 宣言・agenix 化できない **端末固有の非シークレット状態**だけ、restic の allowlist に足す  
+   - 例: Bluetooth ペアリング、Cloudflare WARP 登録
 3. 足す場所: `modules/nixos/backup.nix` の `systemStagingSources`  
-4. 同じ変更で `README.md` の Restore 手順（`cp` / `chown` / `systemctl restart`）も更新する
+4. 同じ変更で `scripts/restore-on-nixos.sh` と `README.md` の復元手順も更新する
 
 ## やらないこと
 
 - `/var` や `/var/lib` の一括バックアップ
 - 再生成可能なもの（キャッシュ、ログ、fwupd メタデータ、Nix プロファイル）
-- すでに `/home/mitac` にあり home バックアップで足りるもの（rbw、rclone、LocalSend 等）
+- agenix で管理している秘密情報や設定ファイル（`nm-connections`、`tailscale-authkey`、`~/.config/rclone/rclone.conf`、SSH/ADB/gh/opencode/wol-pc 等、および Home Manager の `.backup` 残骸）
+- すでに `/home/mitac` にあり home バックアップで足りるもの（rbw、LocalSend 等）
 
 ## 参照
 
-- 現状のステージング: Wi‑Fi / Bluetooth / WARP / Tailscale（`backup.nix`）
+- 現状のステージング: Bluetooth / Cloudflare WARP のみ（`backup.nix`）
+- agenix 管理: `modules/nixos/secrets.nix`、`home/secrets.nix`、`secrets/agenix-rules.nix`
 - 復元手順: `README.md` → Encrypted /home backup → Restore

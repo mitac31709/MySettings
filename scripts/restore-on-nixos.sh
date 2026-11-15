@@ -13,9 +13,9 @@ usage() {
                  例: --from vaio --new-device / --from chromebook --new-device
   --repo REPO    restic リポジトリ URI を明示指定（--from と併用不可）
   --new-device   別端末や初期化後のクリーン構築向けに衝突する端末 ID・P2P 鍵・
-                 VPN/BT 状態・トークン系認証状態を除外/初期化して復元する
-                 （Wi-Fi パスワードの NIC 名/MAC 縛りも自動解除、既存の ~/MySettings
-                 チェックアウト・rbw・rclone.conf は保持）
+                 Bluetooth/WARP 状態・トークン系認証状態を除外/初期化して復元する
+                 （Wi-Fi や Tailscale 鍵は agenix 一元管理のためシステム状態からは復元しない。
+                 既存の ~/MySettings チェックアウト・rbw・rclone.conf は保持）
   --agenix-only  restic 復元を行わず、Bitwarden (rbw) の 'agenix-master-key'
                  から ${RESTORE_ROOT:-/}/etc/agenix/master.key (0400 root:root) のみ導入
   -h, --help     このヘルプを表示
@@ -33,9 +33,8 @@ usage() {
     - ホーム: /home/mitac（既存ファイルを上書き。今回の実行で新規取得／再認証
       した rclone.conf、および --new-device 時は既存の rclone.conf・rbw・
       ~/MySettings も保持）
-    - システム状態（必要時のみ sudo）: /etc/NetworkManager/system-connections,
-      /var/lib/bluetooth, /var/lib/cloudflare-warp, /var/lib/tailscale
-      （--new-device 時は bluetooth / cloudflare-warp / tailscale を除外）
+    - システム状態（必要時のみ sudo）: /var/lib/bluetooth, /var/lib/cloudflare-warp
+      （--new-device 時は除外。Wi-Fi と Tailscale は agenix 一元管理）
 EXTRACT_DIR 指定時（未作成の絶対パス）:
   /home や /etc には触れず、EXTRACT_DIR 配下への展開と検証のみを行います
   （--new-device 併用時は EXTRACT_DIR 内のステージ領域に同じ初期化処理を適用）。
@@ -474,10 +473,8 @@ restore_system_state() {
   [[ -d $stage_sys ]] || return 0
 
   local -a entries=(
-    "nm-connections|${root_prefix}/etc/NetworkManager/system-connections|600|nmcli"
     "bluetooth|${root_prefix}/var/lib/bluetooth||bluetooth.service"
     "cloudflare-warp|${root_prefix}/var/lib/cloudflare-warp||cloudflare-warp.service"
-    "tailscale|${root_prefix}/var/lib/tailscale||tailscaled.service"
   )
 
   local entry sub dest fmode reload_target src_dir prompted=0
@@ -499,15 +496,8 @@ restore_system_state() {
       run_sudo find "$dest" -type f -exec chmod "$fmode" {} +
     fi
     # Only reload/restart live host daemons when restoring directly into /.
-    if [[ -z $root_prefix ]]; then
-      if [[ $reload_target == nmcli ]]; then
-        if command -v nmcli >/dev/null && [[ -d /run/systemd/system ]] &&
-           systemctl is-active --quiet NetworkManager.service 2>/dev/null; then
-          run_sudo nmcli connection reload || true
-        fi
-      elif [[ -n $reload_target ]]; then
-        reload_unit_if_active "$reload_target"
-      fi
+    if [[ -z $root_prefix && -n $reload_target ]]; then
+      reload_unit_if_active "$reload_target"
     fi
   done
 }
@@ -1526,24 +1516,6 @@ def write_atomic_text(path: Path, text: str, mode: int) -> None:
         raise
 
 
-def scrub_nm_connections(nm_dir: Path) -> None:
-    if not nm_dir.is_dir():
-        return
-    pattern = re.compile(r"^\s*(?:interface-name|mac-address)\s*=")
-    for entry in nm_dir.iterdir():
-        if not entry.is_file() or entry.is_symlink():
-            continue
-        mode = ensure_writable_mode(entry)
-        try:
-            raw = entry.read_text(encoding="utf-8", errors="surrogateescape")
-        except OSError:
-            continue
-        lines = raw.splitlines(keepends=True)
-        filtered = [ln for ln in lines if not pattern.match(ln)]
-        if len(filtered) != len(lines):
-            write_atomic_text(entry, "".join(filtered), mode or 0o600)
-
-
 def scrub_json_file(path: Path, mutator) -> None:
     if not path.is_file() or path.is_symlink():
         return
@@ -1727,9 +1699,6 @@ def scrub_steam_config_vdf(vdf_path: Path) -> None:
         write_atomic_text(vdf_path, "".join(out), mode)
 
 
-if stage_sys.is_dir():
-    scrub_nm_connections(stage_sys / "nm-connections")
-
 if stage_home.is_dir():
     vivaldi_dir = stage_home / ".config" / "vivaldi"
     scrub_json_file(vivaldi_dir / "Local State", scrub_vivaldi_local_state)
@@ -1750,11 +1719,11 @@ scrub_new_device_stage() {
   local stage_sys="${stage_root}/run/restic-backups-home/system"
   local stage_home="${stage_root}/home/mitac"
 
-  printf '\n--new-device: 別端末と衝突する端末 ID・P2P 鍵・VPN/BT 状態・認証トークンを初期化しています...\n' >&2
+  printf '\n--new-device: 別端末と衝突する端末 ID・P2P 鍵・Bluetooth/WARP 状態・認証トークンを初期化しています...\n' >&2
 
   if [[ -d $stage_sys ]]; then
     local sub
-    for sub in tailscale cloudflare-warp bluetooth; do
+    for sub in tailscale cloudflare-warp bluetooth nm-connections; do
       remove_staged_path "${stage_sys}/${sub}"
     done
   fi
@@ -1886,12 +1855,11 @@ print_new_device_checklist() {
   cat <<'EOF'
 
 新規端末 (--new-device) の初回サインイン・確認項目:
-  - ネットワーク: 保存済み Wi-Fi の interface-name / mac-address 縛りを解除済み（agenix 管理なら自動復元）
-  - VPN / Bluetooth: Tailscale（`tailscale-authkey.age` が無ければ `sudo tailscale up`）/ Cloudflare WARP / Bluetooth ペアリング
-  - 開発認証 / SSH: `agenix-master-key` 導入＋`rebuild` 後、gh / SSH 鍵 / AI 環境変数が自動展開
+  - ネットワーク / SSH / 開発認証: `agenix-master-key` 導入 (`secrets bootstrap`)＋`rebuild` で Wi-Fi・gh・SSH 鍵・ADB・OpenCode・WOL・環境変数が自動展開
+  - VPN / Bluetooth: Tailscale（`tailscale-authkey.age` が無ければ `sudo tailscale up`）/ Cloudflare WARP（`warp-cli registration new`）/ Bluetooth ペアリング
   - ブラウザ・アプリ: Vivaldi (Vivaldi Sync 再サインイン) / Cursor / ChatGPT & Codex / Grok Bot / Discord / Steam
   - P2P / KVM: UniClipboard / Lan Mouse / LocalSend / RQuickShare / Parsec
-  - バックアップ: `rebuild` 後に `backup status`（agenix 管理なら `rbw unlock` 不要で自動バックアップ可）
+  - バックアップ: `rebuild` 後に `backup status`（agenix 一元管理のため `rbw unlock` 不要で自動実行）
 EOF
 }
 
@@ -2173,9 +2141,9 @@ main() {
     printf 'agenix マスター鍵: %s/etc/agenix/master.key\n' "$root_prefix"
   fi
   if (( NEW_DEVICE == 1 )); then
-    printf 'システム状態: %s/etc/NetworkManager/system-connections（tailscale / cloudflare-warp / bluetooth は --new-device により除外）\n' "$root_prefix"
+    printf 'システム状態: 復元なし（bluetooth / cloudflare-warp は --new-device により除外、Wi-Fi / Tailscale は agenix 一元管理）\n'
   else
-    printf 'システム状態: %s/etc/NetworkManager/system-connections, %s/var/lib/{bluetooth,cloudflare-warp,tailscale}\n' "$root_prefix" "$root_prefix"
+    printf 'システム状態: %s/var/lib/{bluetooth,cloudflare-warp}（Wi-Fi / Tailscale は agenix 一元管理）\n' "$root_prefix"
   fi
   printf 'フォント（バックアップ時）: %s/Documents/hiragino-otf\n' "$target_home"
   printf '%s/MySettings から NixOS を再ビルドする際、Documents/hiragino-otf がある場合は --impure を付けてください。\n' "$target_home"
