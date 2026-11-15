@@ -5,7 +5,7 @@
 # - Sway: AWT SystemTray needs an XEmbed tray host. Offscreen stalonetray hosts
 #   JQuake's icon (avoiding xembedsniproxy's KDE dependency and blank window),
 #   and waybar's dedicated `custom/jquake` module opens it via stalonetray
-#   remote double-click (`--remote-click-icon JavaEmbeddedFrame`).
+#   remote double-click (`--remote-click-icon sun-awt-X11-XCanvasPeer`).
 # - ext-session-lock blocks normal windows above swaylock; on alert we dismiss
 #   swaylock and fullscreen the map (intentional emergency unlock).
 {

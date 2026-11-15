@@ -399,8 +399,11 @@ let
       disp="''${DISPLAY:-:0}"
       clicked=0
       for _ in $(seq 1 40); do
+        # Target AWT's child canvas directly: stalonetray's x11_find_subwindow_at
+        # exits immediately (`old = None` checked as `old != None`), so clicking
+        # JavaEmbeddedFrame stops at the wrapper frame and misses XTrayIconPeer.
         if stalonetray -display "$disp" \
-          --remote-click-icon JavaEmbeddedFrame \
+          --remote-click-icon sun-awt-X11-XCanvasPeer \
           --remote-click-button 1 \
           --remote-click-type double >/dev/null 2>&1; then
           clicked=1
