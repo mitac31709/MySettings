@@ -2526,6 +2526,19 @@ in
     '';
   };
 
+  # wayland.windowManager.sway sets package = null (using NixOS programs.sway),
+  # which disables HM's built-in swaymsg reload onChange hook. Reload active Sway
+  # sessions automatically whenever sway/config changes.
+  xdg.configFile."sway/config".onChange = ''
+    uid="$(id -u)"
+    runtimeDir="''${XDG_RUNTIME_DIR:-/run/user/$uid}"
+    for swaySocket in "$runtimeDir"/sway-ipc."$uid".*.sock; do
+      if [ -S "$swaySocket" ]; then
+        ${pkgs.sway}/bin/swaymsg -s "$swaySocket" reload >/dev/null 2>&1 || true
+      fi
+    done
+  '';
+
   xdg.configFile."satty/config.toml".text = ''
     [general]
     early-exit = ["copy", "save"]

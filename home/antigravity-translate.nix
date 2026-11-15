@@ -145,4 +145,9 @@ in
       WantedBy = [ "default.target" ];
     };
   };
+
+  # Overwrite pre-existing imperative unit files/wants symlinks (e.g. written by
+  # `antigravity remote-control` before Nixification); backupFileExtension ignores symlinks.
+  xdg.configFile."systemd/user/antigravity-cli-daemon.service".force = true;
+  xdg.configFile."systemd/user/default.target.wants/antigravity-cli-daemon.service".force = true;
 }
