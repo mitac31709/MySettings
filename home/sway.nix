@@ -842,11 +842,7 @@ let
     }
     {
       section = "ウィンドウ・WS";
-      label = "Cursor/Grok → WS2、Vivaldi → WS3（手動起動時）";
-    }
-    {
-      section = "ウィンドウ・WS";
-      label = "外部リンク → Vivaldi(WS3)へフォーカス";
+      label = "外部リンク → Vivaldi へフォーカス";
     }
     {
       section = "ウィンドウ・WS";
@@ -900,6 +896,10 @@ let
       section = inputSection;
       label = "Meltype 内: 英数 ⇔ 日本語";
       keys = "半角/全角";
+    }
+    {
+      section = inputSection;
+      label = "注: ghostty/agy は「コード」扱い。半角/全角で日本語にしたあと矢印でキャレットを動かすと英数に戻る（Meltype 仕様）";
     }
     {
       section = inputSection;
@@ -2000,19 +2000,6 @@ in
       terminal = ghosttyBin;
       menu = rofiLauncher;
 
-      # Manual launches: Cursor / Grok Bot → WS2, Vivaldi → WS3 (WS1 stays free).
-      assigns = {
-        "2" = [
-          { app_id = "cursor"; }
-          { app_id = "grok-bot"; }
-          # Pre-Wayland launches (ozone x11 / XWayland).
-          { class = "grok-bot"; }
-        ];
-        "3" = [
-          { app_id = "vivaldi-stable"; }
-        ];
-      };
-
       # Dark solid backdrop + cyan accents (greeter / classic TUI vibe).
       output."*" = {
         bg = "#0b0f14 solid_color";
@@ -2156,7 +2143,7 @@ in
       # Satty screenshot editor floating overlay
       for_window [app_id="com.gabm.satty"] floating enable, border pixel 2
       # External http(s) opens (xdg-open → existing Vivaldi) set urgent but do not
-      # activate across workspaces (focus_on_window_activation is smart). Raise WS3.
+      # activate across workspaces (focus_on_window_activation is smart). Focus Vivaldi's workspace.
       for_window [app_id="vivaldi-stable" urgent=latest] focus
       # Layout-independent cheatsheet (rofi; same as waybar ?)
       # --inhibited: work even when Cursor/Electron inhibit compositor shortcuts.
