@@ -75,7 +75,7 @@ when editing matching files):
 - `backup-staging.mdc` — prefer declarative Nix config; stage only machine-specific state in `backup.nix` + `README.md`
 - `branch-workflow.mdc` — develop and commit only on `main`, never `chromebook`
 - `cheatsheet-expand.mdc` — also update `cheatsheetEntries` in `home/sway.nix` for reusable answers
-- `commit-before-next-unit.mdc` — commit coherent finished units before starting the next unit
+- `commit-before-next-unit.mdc` — commit your own finished changes and before starting the next unit
 - `committing-changes-with-git.mdc` — git safety protocol, HEREDOC commit messages, push boundaries
 - `communication-style.mdc` — concise, direct responses with minimal bolding
 - `creating-pull-requests.mdc` — PR creation steps using `gh`

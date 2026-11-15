@@ -1,11 +1,11 @@
 ---
-description: Git コミットの安全手順とメッセージ規約。明示依頼時または完了単位の区切りで従う
+description: Git コミットの安全手順とメッセージ規約。自身の完了変更・完了単位の区切り・明示依頼時に従う
 alwaysApply: true
 ---
 
 # Committing changes with git
 
-Create commits when requested by the user, or when committing a coherent, finished unit of work before the next unit per `commit-before-next-unit.mdc`. If the user said not to commit, the unit is ambiguous, or it is otherwise unclear whether a commit is wanted, ask first. Whenever creating a git commit, follow these steps carefully:
+Create commits when finishing your own coherent, verified changes, when committing a finished unit of work before the next unit per `commit-before-next-unit.mdc`, or when requested by the user. If the user said not to commit, the unit is ambiguous, or it is otherwise unclear whether a commit is wanted, ask first. Whenever creating a git commit, follow these steps carefully:
 
 ## Git Safety Protocol
 
@@ -19,7 +19,7 @@ Create commits when requested by the user, or when committing a coherent, finish
   3. Commit has NOT been pushed to remote (verify: `git status` shows "Your branch is ahead")
 - CRITICAL: If commit FAILED or was REJECTED by hook, NEVER amend - fix the issue and create a NEW commit
 - CRITICAL: If you already pushed to remote, NEVER amend unless the user explicitly requests it in the user query or in a different user rule (requires force push)
-- Only commit when explicitly requested by the user, when committing a coherent finished unit under `commit-before-next-unit.mdc`, or after confirming with the user. Still ask first if the user said not to commit, if the unit is ambiguous, or if the commit would include secrets or unwanted generated/lockfile churn.
+- Commit your own finished, verified changes at the end of a unit/task, when committing a finished unit before the next unit under `commit-before-next-unit.mdc`, or when explicitly requested by the user. Still ask first if the user said not to commit, if the unit is ambiguous, or if the commit would include secrets or unwanted generated/lockfile churn.
 
 1. You can call multiple tools in a single response. When multiple independent pieces of information are requested, batch your tool calls together for optimal performance. ALWAYS run the following shell commands in parallel, each using the Shell tool:
    - Run a git status command to see all untracked files.
@@ -31,7 +31,7 @@ Create commits when requested by the user, or when committing a coherent, finish
    - Draft a concise (1-2 sentences) commit message that focuses on the "why" rather than the "what"
    - Ensure it accurately reflects the changes and their purpose
 3. Run the following commands sequentially:
-   - Stage only the relevant modified and untracked files belonging to the commit unit (leave unrelated dirty files out).
+   - Stage only the modified and untracked changes belonging to your commit unit (leave unrelated pre-existing dirty files or hunks out without overwriting them).
    - Commit the changes with the message.
    - Run git status after the commit completes to verify success.
 4. If the commit fails due to pre-commit hook, fix the issue and create a NEW commit (see amend rules above)
