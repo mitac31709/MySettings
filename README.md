@@ -367,9 +367,13 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **Super+Space**: Fcitx Trigger（IME 有効 ⇔ 無効）。グループが Meltype だけなので、どちらもエンジンは Meltype のまま
 - Meltype 内の英数 ⇔ 日本語: **半角/全角**（Fcitx の Trigger には割り当てない。ChatGPT 等 Electron で直接入力に落ちて戻せなくなるのを防ぐ）
 - **z + 記号 / hjkl**: `zl`→`→`、`zh`→`←`、`zj`→`↓`、`zk`→`↑`、`z/`→`・`、`z.`→`…` など（Meltype 1.4+、既定 ON）
-- 学習・設定: `~/.local/share/Meltype`
+- 学習・設定: `~/.local/share/Meltype`（`home/meltype.nix` が **AppRules** を upsert。エンジンパッチではなくアプリ別設定で制御）
+  - Cursor → **General**（矢印でも日本語維持。Code だと英数に戻る）
+  - Ghostty（`com.mitchellh.ghostty`）→ **General** を指定（本家が `Terminal` トレイトを AppRules より優先するため、agy はまだ Code 相当のままになることがある）
+  - rofi → Wayland では `program` が空のため、Meltype アドオンが `app="_empty"` とラベルし、AppRules で `Enabled: false`（英語のみ）
 - 詳細設定: `meltype-settings`（または **Fcitx5 設定** `fcitx5-configtool`）
-- プロファイル／config／ClassicUI: NixOS モジュールが生成する INI を、Home Manager が `~/.config/fcitx5/{profile,config,conf/classicui.conf}` へシンボリックリンクする（ClassicUI は本家準拠のダークテーマ `meltype-dark` と縦型候補、パッチ済み `pkgs/meltype` の注記・折り返し意味/翻訳ペインを有効化）。Fcitx は `~/.config` を `/etc/xdg` より先に読むので、古いユーザコピー（`keyboard-jp` や半角/全角 Trigger）が勝たない。リンク先はストアで読み取り専用。変更は `modules/nixos/common.nix` の `i18n.inputMethod.fcitx5.settings`
+- プロファイル／config／ClassicUI: NixOS モジュールが生成する INI を、Home Manager が `~/.config/fcitx5/{profile,config,conf/classicui.conf}` へシンボリックリンクする（ClassicUI は本家準拠のダークテーマ `meltype-dark` と縦型候補、パッチ済み `pkgs/meltype` の注記・折り返し意味/翻訳ペインと empty-program ラベルを有効化）。Fcitx は `~/.config` を `/etc/xdg` より先に読むので、古いユーザコピー（`keyboard-jp` や半角/全角 Trigger）が勝たない。リンク先はストアで読み取り専用。変更は `modules/nixos/common.nix` の `i18n.inputMethod.fcitx5.settings`
+- **rofi**: 英語のみ（AppRules `_empty`）+ `wayland-layer = top`
 - **Cursor / ChatGPT** など Electron: `NIXOS_OZONE_WL=1` と Wayland IME フラグ。`ShareInputState=All` でフォーカス間の active/inactive ずれを抑える。適用後はアプリを**完全終了**してから開き直す
 - 適用後: `rebuild` してから **fcitx5 再起動**（例: `fcitx5 -d --replace`）かセッション再ログイン
 

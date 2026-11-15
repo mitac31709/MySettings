@@ -31,7 +31,7 @@ let
   openFlakeUpdate = "${ghosttyBin} -e ${flakeUpdateRunner}";
   swaylockBin = "${pkgs.swaylock}/bin/swaylock";
   swayidleBin = "${pkgs.swayidle}/bin/swayidle";
-  rofiBin = "${pkgs.rofi}/bin/rofi";
+  rofiBin = lib.getExe config.programs.rofi.package;
   yaziBin = "${pkgs.yazi}/bin/yazi";
   polkitAgent = "${pkgs.lib.getExe pkgs.cmd-polkit} -s -c ${pkgs.lib.getExe' pkgs.rofi-prompt "rofi-polkit"}";
   pactl = "${pkgs.pulseaudio}/bin/pactl";
@@ -75,7 +75,7 @@ let
       pkgs.jq
       pkgs.libnotify
       pkgs.procps
-      pkgs.rofi
+      config.programs.rofi.package
       pkgs.satty
       pkgs.slurp
       pkgs.sway
@@ -902,7 +902,11 @@ let
     }
     {
       section = inputSection;
-      label = "注: ghostty/agy は「コード」扱い。半角/全角で日本語にしたあと矢印でキャレットを動かすと英数に戻る（Meltype 仕様）";
+      label = "注: Cursor=General（AppRules）。Code だと矢印で英数に戻る";
+    }
+    {
+      section = inputSection;
+      label = "注: rofi は AppRules _empty=OFF（Wayland program 空）+ wayland-layer=top";
     }
     {
       section = inputSection;

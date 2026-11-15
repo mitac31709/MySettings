@@ -84,6 +84,11 @@ in
       display-run = "$";
       display-dmenu = ">";
       location = 0;
+      # overlay sits above Fcitx5 ClassicUI, so Meltype candidates never appear.
+      # top keeps the launcher above windows but below the IME panel.
+      wayland-layer = "top";
+      # click-to-exit steals focus from the Meltype candidate surface (upstream #2278).
+      click-to-exit = false;
     };
     theme = {
       "*" = {

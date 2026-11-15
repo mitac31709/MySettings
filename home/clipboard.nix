@@ -1,7 +1,12 @@
 # Clipboard history picker (cliphist + rofi). Sway binds Super+V.
 # Selecting an entry copies it and pastes into the previously focused window.
 # Store watchers run as user systemd units under every graphical session.
-{ pkgs, lib, ... }:
+{
+  pkgs,
+  lib,
+  config,
+  ...
+}:
 
 let
   clipboardHistory = pkgs.writeShellScriptBin "clipboard-history" ''
@@ -9,7 +14,7 @@ let
     export PATH="${
       lib.makeBinPath [
         pkgs.cliphist
-        pkgs.rofi
+        config.programs.rofi.package
         pkgs.wl-clipboard
         pkgs.wtype
         pkgs.coreutils

@@ -231,7 +231,8 @@ def build_rofi_cmd(
         prompt,
     ]
     if env.get("WAYLAND_DISPLAY"):
-        cmd.extend(["-wayland-layer", "overlay", "-global-kb"])
+        # top: Meltype/Fcitx5 candidates stay above the prompt (overlay hid them).
+        cmd.extend(["-wayland-layer", "top", "-global-kb"])
     if mesg:
         cmd.extend(["-markup", "-mesg", mesg])
     else:

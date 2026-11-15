@@ -1,0 +1,16 @@
+--- a/linux/fcitx5/meltype.cpp
++++ b/linux/fcitx5/meltype.cpp
+@@ -623,9 +623,12 @@
+                                           std::pair{fcitx::CapabilityFlag::Sensitive, "Private"}}) {
+             if (flags.test(flag)) traits += std::string(traits.empty() ? "" : ",") + "\"" + name + "\"";
+         }
++        // Wayland clients that omit app_id (rofi layer-shell) leave program empty,
++        // so Meltype AppRules can never match. Label them "_empty" for config.json.
++        const std::string app = ic->program().empty() ? "_empty" : ic->program();
+         return "{\"before\":" + before + ",\"after\":" + after + ",\"selection\":" + selection +
+             ",\"composing\":" + boolean(ic->propertyFor(&factory_)->preeditVisible) + ",\"traits\":[" + traits + "]" +
+-            (ic->program().empty() ? "" : ",\"app\":" + quote(ic->program())) + ",\"canRemove\":" + boolean(surrounding) + "}";
++            ",\"app\":" + quote(app) + ",\"canRemove\":" + boolean(surrounding) + "}";
+     }
+ 
+     // 入力モード (A / あ) をカーソル位置に、本体が決めた時間だけ出す (Mozc と同じ入力パネルの枠)

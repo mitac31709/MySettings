@@ -98,6 +98,14 @@ class DisplayEnvTests(unittest.TestCase):
         self.assertIn("-theme-str", cmd)
         self.assertTrue(any("#e06c75" in arg for arg in cmd))
 
+    def test_build_rofi_cmd_uses_top_layer_on_wayland(self) -> None:
+        cmd = rofi_prompt.build_rofi_cmd(
+            {"WAYLAND_DISPLAY": "wayland-1"}, prompt="PIN", mesg="hi", error=""
+        )
+        self.assertIn("-wayland-layer", cmd)
+        self.assertEqual(cmd[cmd.index("-wayland-layer") + 1], "top")
+        self.assertIn("-global-kb", cmd)
+
 
 class PinentryTests(unittest.TestCase):
     def test_getpin_preserves_spaces_and_clears_error(self) -> None:

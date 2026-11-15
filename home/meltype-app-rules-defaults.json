@@ -1,0 +1,636 @@
+{
+  "AppRules": [
+    {
+      "Process": "mstsc.exe",
+      "Enabled": false,
+      "Profile": "General",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "msrdc.exe",
+      "Enabled": false,
+      "Profile": "General",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "vmconnect.exe",
+      "Enabled": false,
+      "Profile": "General",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "VirtualBoxVM.exe",
+      "Enabled": false,
+      "Profile": "General",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "vmware-vmx.exe",
+      "Enabled": false,
+      "Profile": "General",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "vmware.exe",
+      "Enabled": false,
+      "Profile": "General",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "Resolve.exe",
+      "Enabled": true,
+      "Profile": "General",
+      "Kind": null,
+      "Commit": "Paste",
+      "TextInput": false
+    },
+    {
+      "Process": "Code.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "Code - Insiders.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "Cursor.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "Windsurf.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "zed.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "devenv.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "idea64.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "pycharm64.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "webstorm64.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "rider64.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "clion64.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "goland64.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "phpstorm64.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "rubymine64.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "datagrip64.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "studio64.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "sublime_text.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "notepad++.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "WindowsTerminal.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "cmd.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "powershell.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "pwsh.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "wezterm-gui.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "alacritty.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "mintty.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "rio.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "maya.exe",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.microsoft.VSCode",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.microsoft.VSCodeInsiders",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.vscodium",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.todesktop.230313mzl4w4u92",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.exafunction.windsurf",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "dev.zed.Zed",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.apple.dt.Xcode",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.jetbrains.intellij",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.jetbrains.intellij.ce",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.jetbrains.pycharm",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.jetbrains.pycharm.ce",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.jetbrains.WebStorm",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.jetbrains.rider",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.jetbrains.CLion",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.jetbrains.goland",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.google.android.studio",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.sublimetext.4",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.apple.Terminal",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.googlecode.iterm2",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.github.wez.wezterm",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "org.alacritty",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "com.mitchellh.ghostty",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "net.kovidgoyal.kitty",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "dev.warp.Warp-Stable",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "code",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "code-insiders",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "codium",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "cursor",
+      "Enabled": true,
+      "Profile": "General",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "_empty",
+      "Enabled": false,
+      "Profile": "General",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "rofi",
+      "Enabled": false,
+      "Profile": "General",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "windsurf",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "zed",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "zeditor",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "sublime_text",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "gnome-terminal-server",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "konsole",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "kitty",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "alacritty",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "wezterm-gui",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "foot",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "ghostty",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "xterm",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "tilix",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "terminator",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    },
+    {
+      "Process": "xfce4-terminal",
+      "Enabled": true,
+      "Profile": "Code",
+      "Kind": null,
+      "Commit": "Auto",
+      "TextInput": false
+    }
+  ]
+}

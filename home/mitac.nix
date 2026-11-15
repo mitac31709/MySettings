@@ -8,6 +8,7 @@
     ./secrets.nix
     ./shell.nix
     ./programs.nix
+    ./meltype.nix
     ./clipboard.nix
     ./cursor.nix
     ./lan-mouse.nix

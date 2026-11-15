@@ -37,7 +37,11 @@ stdenv.mkDerivation (finalAttrs: {
     hash = "sha256-FgGwenucotyhxFY8Gx/3pz2EFmCklE0WGJxCFeAxUIU=";
   };
 
-  patches = [ ./fcitx5-meaning-pane.patch ];
+  patches = [
+    ./fcitx5-meaning-pane.patch
+    # Wayland clients with empty program (rofi) → app "_empty" for AppRules.
+    ./fcitx5-empty-program.patch
+  ];
 
   nativeBuildInputs = [
     unzip
