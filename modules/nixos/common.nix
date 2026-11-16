@@ -396,12 +396,18 @@ in
   # LocalSend (LAN file transfer); opens TCP/UDP 53317 by default.
   programs.localsend.enable = true;
 
-  # Lan Mouse (software KVM from Windows); default UDP 4242.
+  # Trust Tailscale so Lan Mouse (UDP 4242) and UniClipboard iroh QUIC
+  # (ephemeral UDP ports) traverse tailscale0 without per-port rules.
+  networking.firewall.trustedInterfaces = [ "tailscale0" ];
+
+  # Lan Mouse (software KVM); default UDP 4242.
+  # UniClipboard mDNS LAN peer discovery; UDP 5353.
   # iperf3 server defaults to TCP/UDP 5201.
   networking.firewall.allowedTCPPorts = [ 5201 ];
   networking.firewall.allowedUDPPorts = [
     4242
     5201
+    5353
   ];
 
   hardware.enableRedistributableFirmware = true;

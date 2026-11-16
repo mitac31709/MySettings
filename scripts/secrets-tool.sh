@@ -496,6 +496,8 @@ cmd_status() {
   say "宣言シークレット状態 (.age / /run/agenix):"
   local -a rules_files=()
   mapfile -t rules_files < <(nix-instantiate --json --eval --strict -E "(builtins.attrNames (import ${RULES_FILE}))" | jq -r '.[]')
+  local host_name=""
+  host_name=$(hostname 2>/dev/null || true)
   local rel age_mark run_name run_mark
   for rel in "${rules_files[@]}"; do
     if [[ -f "${SECRETS_DIR}/${rel}" ]]; then
@@ -506,6 +508,15 @@ cmd_status() {
     case $rel in
       id-wsl-builder.age)
         run_name="id-wsl-builder-user"
+        ;;
+      lan-mouse-chromebook.pem.age|lan-mouse-vaio.pem.age)
+        local target_host=${rel#lan-mouse-}
+        target_host=${target_host%.pem.age}
+        if [[ -n $host_name && $host_name != "$target_host" ]]; then
+          printf '  - %-26s [%s]  %s\n' "$rel" "$age_mark" "他ホスト用 (${target_host})"
+          continue
+        fi
+        run_name="lan-mouse-pem"
         ;;
       *)
         run_name="${rel%.age}"

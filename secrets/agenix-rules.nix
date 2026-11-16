@@ -24,4 +24,6 @@ in
   "wol-pc-env.age".publicKeys = masterKeys;
   "adbkey.age".publicKeys = masterKeys;
   "opencode-service.json.age".publicKeys = masterKeys;
+  "lan-mouse-chromebook.pem.age".publicKeys = masterKeys;
+  "lan-mouse-vaio.pem.age".publicKeys = masterKeys;
 }

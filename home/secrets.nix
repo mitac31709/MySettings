@@ -21,6 +21,7 @@ let
   hasUserEnvSecret = ageSecrets ? "user-env";
   hasAdbKeySecret = ageSecrets ? "adbkey";
   hasOpenCodeServiceSecret = ageSecrets ? "opencode-service.json";
+  hasLanMousePemSecret = ageSecrets ? "lan-mouse-pem";
 
   importUserEnvScript = pkgs.writeShellScript "mitac-import-user-env" ''
     set -eu
@@ -51,6 +52,12 @@ in
   home.activation.ensureAndroidDir = lib.mkIf hasAdbKeySecret (
     lib.hm.dag.entryBefore [ "checkLinkTargets" ] ''
       ${pkgs.coreutils}/bin/install -d -m 750 "${config.home.homeDirectory}/.android"
+    ''
+  );
+
+  home.activation.ensureLanMouseDir = lib.mkIf hasLanMousePemSecret (
+    lib.hm.dag.entryBefore [ "checkLinkTargets" ] ''
+      ${pkgs.coreutils}/bin/install -d -m 700 "${config.home.homeDirectory}/.config/lan-mouse"
     ''
   );
 
@@ -85,6 +92,11 @@ in
       "opencode/service.json".source =
         config.lib.file.mkOutOfStoreSymlink
           ageSecrets."opencode-service.json".path;
+    })
+    (lib.optionalAttrs hasLanMousePemSecret {
+      "lan-mouse/lan-mouse.pem".source =
+        config.lib.file.mkOutOfStoreSymlink
+          ageSecrets."lan-mouse-pem".path;
     })
   ];
 

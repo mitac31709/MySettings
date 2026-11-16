@@ -1,4 +1,4 @@
-# greetd + tuigreet: login greeter and curated Sway session list.
+# greetd + ReGreet on minimal Sway with receive-only Lan Mouse for remote login.
 {
   config,
   pkgs,
@@ -7,56 +7,113 @@
 }:
 
 let
-  sessionData = config.services.displayManager.sessionData.desktops;
+  lanMouse = import ../../lib/lan-mouse.nix;
 
-  # Curated tuigreet list (hide any stray desktop files; Name= sort).
-  curatedSessions =
-    pkgs.runCommand "mitac-greetd-sessions" { nativeBuildInputs = [ pkgs.gnused ]; }
-      ''
-        mkdir -p "$out/wayland-sessions"
-        if [ -f ${sessionData}/share/wayland-sessions/sway.desktop ]; then
-          sed -e 's/^Name=.*/Name=Sway/' \
-            ${sessionData}/share/wayland-sessions/sway.desktop \
-            > "$out/wayland-sessions/sway.desktop"
-        fi
-      '';
+  greeterLanMouseConfig = (pkgs.formats.toml { }).generate "greeter-lan-mouse.toml" {
+    port = lanMouse.port;
+    release_bind = lanMouse.releaseBind;
+    authorized_fingerprints = lanMouse.authorizedFingerprints;
+  };
+
+  greeterCertPath =
+    config.age.secrets."lan-mouse-greeter-pem".path or "/run/agenix/lan-mouse-greeter-pem";
+
+  greeterRunner = pkgs.writeShellScript "regreet-with-lan-mouse" ''
+    set -u
+
+    # Ensure ReGreet sees NixOS desktop sessions (Sway) and GTK themes/icons.
+    export XDG_DATA_DIRS="${config.services.displayManager.sessionData.desktops}/share:/run/current-system/sw/share''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
+
+    cert_path=${lib.escapeShellArg greeterCertPath}
+    if [ ! -r "$cert_path" ]; then
+      cert_path="/var/lib/regreet/lan-mouse.pem"
+    fi
+
+    ${lib.getExe pkgs.lan-mouse} \
+      --config ${greeterLanMouseConfig} \
+      --cert-path "$cert_path" \
+      daemon &
+    lm_pid=$!
+
+    cleanup() {
+      # Wait for the greeter daemon to exit so UDP port 4242 is free before Sway starts.
+      if kill -0 "$lm_pid" 2>/dev/null; then
+        kill "$lm_pid" 2>/dev/null || true
+        wait "$lm_pid" 2>/dev/null || true
+      fi
+      ${pkgs.sway}/bin/swaymsg exit >/dev/null 2>&1 || true
+    }
+    trap cleanup EXIT INT TERM
+
+    ${lib.getExe config.services.displayManager.regreet.package}
+  '';
+
+  greeterSwayConfig = pkgs.writeText "greeter-sway.conf" ''
+    xwayland disable
+    output * bg #0b0f14 solid_color
+    default_border none
+    default_floating_border none
+    focus_follows_mouse yes
+
+    input "type:keyboard" {
+      xkb_layout "jp"
+      xkb_numlock "enabled"
+    }
+
+    input "type:touchpad" {
+      natural_scroll disabled
+      tap enabled
+      click_method clickfinger
+      dwt disabled
+    }
+
+    exec ${greeterRunner}
+  '';
 in
 {
-  services.greetd = {
+  services.displayManager.regreet = {
     enable = true;
+    font = {
+      package = pkgs.nerd-fonts.jetbrains-mono;
+      name = "JetBrainsMono Nerd Font";
+      size = 12;
+    };
     settings = {
-      default_session = {
-        user = "greeter";
-        # --time uses strftime under LANG=ja_JP.UTF-8 ("2026年 10月 …"), but the
-        # greeter TTY has no CJK console glyphs → garbled. Keep digits/ASCII only.
-        command = lib.concatStringsSep " " [
-          "${lib.getExe pkgs.tuigreet}"
-          "--time"
-          "--time-format"
-          "'%Y-%m-%d %H:%M:%S'"
-          "--asterisks"
-          "--remember"
-          "--remember-session"
-          # Fallback when no remembered session.
-          "--cmd"
-          "sway"
-          "--user-menu"
-          "--sessions"
-          "${curatedSessions}/wayland-sessions"
+      GTK = {
+        application_prefer_dark_theme = true;
+      };
+      appearance = {
+        greeting_msg = "Welcome (${config.networking.hostName})";
+      };
+      commands = {
+        reboot = [
+          "${pkgs.systemd}/bin/systemctl"
+          "reboot"
+        ];
+        poweroff = [
+          "${pkgs.systemd}/bin/systemctl"
+          "poweroff"
         ];
       };
+      widget.clock = {
+        format = "%Y-%m-%d %H:%M:%S";
+        resolution = "1s";
+        timezone = "Asia/Tokyo";
+      };
     };
+    extraCss = ''
+      window {
+        background-color: #0b0f14;
+        color: #e6edf3;
+      }
+      entry, button {
+        border-radius: 0px;
+      }
+    '';
   };
 
-  systemd.services.greetd.serviceConfig = {
-    Type = "idle";
-    StandardInput = "tty";
-    StandardOutput = "tty";
-    StandardError = "journal";
-    TTYReset = true;
-    TTYVHangup = true;
-    TTYVTDisallocate = true;
-  };
+  services.greetd.settings.default_session.command =
+    "${pkgs.dbus}/bin/dbus-run-session ${lib.getExe pkgs.sway} --config ${greeterSwayConfig}";
 
   # UniClipboard (and other libsecret apps) need an unlocked Secret Service.
   # KWallet's ksecretd rejects UniClipboard's binary probe; use gnome-keyring.
@@ -67,7 +124,7 @@ in
   security.pam.services.greetd.enableGnomeKeyring = true;
   security.pam.services.login.enableGnomeKeyring = true;
 
-  # NumLock on before tuigreet (and as the default for new VTs).
+  # NumLock on before greetd (and as the default for new VTs).
   # Compositors that reset LED state still need their own session option.
   systemd.services.numLockOnTty = {
     description = "Enable NumLock on TTYs";

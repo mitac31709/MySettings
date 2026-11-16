@@ -9,6 +9,7 @@
   inputs,
   lib,
   pkgs,
+  flakeTarget ? "chromebook",
   ...
 }:
 
@@ -16,6 +17,7 @@ let
   user = "mitac";
   secretsDir = ../../secrets;
   hasSecretFile = filename: builtins.pathExists (secretsDir + "/${filename}");
+  lanMouseSecretFile = "lan-mouse-${flakeTarget}.pem.age";
 
   nmProfilesScript = pkgs.writeScript "nm-agenix-profiles" ''
     #!${pkgs.python3}/bin/python3
@@ -263,6 +265,22 @@ in
         file = secretsDir + "/opencode-service.json.age";
         owner = user;
         group = "users";
+        mode = "0400";
+      };
+    })
+    (lib.optionalAttrs (hasSecretFile lanMouseSecretFile) {
+      # Share one per-host TLS identity across mitac and regreet's greeter so
+      # peers see the same fingerprint at the login screen and in Sway.
+      "lan-mouse-pem" = {
+        file = secretsDir + "/${lanMouseSecretFile}";
+        owner = user;
+        group = "users";
+        mode = "0400";
+      };
+      "lan-mouse-greeter-pem" = {
+        file = secretsDir + "/${lanMouseSecretFile}";
+        owner = "greeter";
+        group = "greeter";
         mode = "0400";
       };
     })

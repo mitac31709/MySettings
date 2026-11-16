@@ -20,11 +20,11 @@ in
 
   # --- Keyboard: WeirdTreeThing cros-keyboard-map (keyd) ---
   # Chromebook top-row scancodes are Vivaldi keys (back/refresh/zoom/...), not
-  # F1–F10. Remapping only `fN` never reaches tuigreet. Use the layout from
+  # F1–F10. Remapping only `fN` never reaches greeter/TTY. Use the layout from
   # https://github.com/WeirdTreeThing/cros-keyboard-map for this board's
   # function_row_physmap (delbin: EA E7 91 92 93 94 95 A0 AE B0):
   #   bare top row → ChromeOS actions; Search+top row → F1–F10.
-  # tuigreet sessions (F3): hold Search + 3rd key (zoom / 全画面).
+  # F3 key (e.g. Search+3rd key zoom / 全画面).
   # Manual OOM: Ctrl+Alt+Del (内蔵は Ctrl+Alt+Backspace).
   services.keyd.keyboards.cros = {
     # Match cros_ec / AT / Hammer IDs from cros-keyboard-map (not all USB boards).

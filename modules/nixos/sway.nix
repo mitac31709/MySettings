@@ -1,4 +1,4 @@
-# Sway: primary keyboard-first Wayland session (tuigreet-adjacent TUI feel).
+# Sway: primary keyboard-first Wayland session (greetd + ReGreet on Sway).
 { lib, pkgs, ... }:
 
 {

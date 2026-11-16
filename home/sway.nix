@@ -1609,43 +1609,53 @@ let
       run = "orca-slicer";
       mode = "exec";
     }
-    # Windows 連携
+    # Windows / Chromebook 連携
     {
-      section = "Windows 連携";
+      section = "端末連携";
       label = "lan-mouse GUI（先に stop daemon）";
       run = "lan-mouse";
       mode = "exec";
     }
     {
-      section = "Windows 連携";
+      section = "端末連携";
+      label = "lan-mouse クライアント一覧";
+      run = "lan-mouse cli list";
+      mode = "term";
+    }
+    {
+      section = "端末連携";
       label = "stop lan-mouse";
       run = "systemctl --user stop lan-mouse";
       mode = "exec";
     }
     {
-      section = "Windows 連携";
+      section = "端末連携";
       label = "start lan-mouse";
       run = "systemctl --user start lan-mouse";
       mode = "exec";
     }
     {
-      section = "Windows 連携";
+      section = "端末連携";
       label = "uniclipboard GUI";
       run = "uniclipboard";
       mode = "exec";
     }
     {
-      section = "Windows 連携";
+      section = "端末連携";
       label = "restart uniclipd";
       run = "systemctl --user restart uniclipd";
       mode = "exec";
     }
     {
-      section = "Windows 連携";
+      section = "端末連携";
+      label = "注: vaio 左端 → chromebook (ReGreet ログイン画面も可・解除 Ctrl+Shift+Super+Alt)";
+    }
+    {
+      section = "端末連携";
       label = "注: uniclip は --user。再起動後は GUI も開き直す";
     }
     {
-      section = "Windows 連携";
+      section = "端末連携";
       label = "注: 起動失敗(1223)→ seahorse で鍵環解錠。版上げは flake";
     }
     # バックアップ

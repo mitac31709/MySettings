@@ -751,6 +751,8 @@ in
       "/home/${user}/.config/opencode/service.json"
       "/home/${user}/.config/opencode/service.json.backup"
       "/home/${user}/.config/rclone/rclone.conf"
+      "/home/${user}/.config/lan-mouse/lan-mouse.pem"
+      "/home/${user}/.config/lan-mouse/lan-mouse.pem.backup"
       "/home/${user}/.config/wol-pc/config.env"
       "/home/${user}/Projects/wol-pc/config.env"
     ];
