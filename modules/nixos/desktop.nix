@@ -1,4 +1,4 @@
-# Graphical desktop stack: greeter + Sway + console-gui + portals.
+# Graphical desktop stack: greeter + Hyprland + console-gui + portals.
 {
   pkgs,
   ...
@@ -6,12 +6,12 @@
 
 {
   imports = [
-    ./sway.nix
+    ./hyprland.nix
     ./greetd.nix
     ./console-gui.nix
   ];
 
-  # Layout + printing (used by the Sway session).
+  # Layout + printing (used by the Hyprland session).
   services.xserver.enable = true;
   services.xserver.xkb = {
     layout = "jp";
@@ -19,14 +19,19 @@
   };
   services.printing.enable = true;
 
-  # Desktop portals. Sway's config (gtk default + wlr ScreenCast/Screenshot)
-  # comes from nixpkgs programs.sway — do not redefine
-  # xdg.portal.config.sway.default here (conflicts at equal priority).
+  # Desktop portals. Hyprland provides its own portal; keep gtk as fallback.
   xdg.portal = {
     enable = true;
-    extraPortals = [ pkgs.xdg-desktop-portal-gtk ];
+    extraPortals = [
+      pkgs.xdg-desktop-portal-hyprland
+      pkgs.xdg-desktop-portal-gtk
+    ];
     config = {
       common.default = [ "gtk" ];
+      hyprland.default = [
+        "hyprland"
+        "gtk"
+      ];
     };
   };
 }

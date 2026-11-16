@@ -1,6 +1,6 @@
 # MySettings — NixOS flake（mitac）
 
-ホスト／ユーザー `mitac` 向けの Flakes + Home Manager 構成。ログインは **greetd + ReGreet（Sway 上＋`lan-mouse` 受信）**、デスクトップは **Sway のみ**。**VAIO（Intel 第8世代以降）** と **Chromebook（ASUS CX5500FE / delbin）** の両対応です。
+ホスト／ユーザー `mitac` 向けの Flakes + Home Manager 構成。ログインは **greetd + ReGreet（最小 Hyprland 上＋`lan-mouse` 受信）**、デスクトップは **Hyprland（UWSM）のみ**。**VAIO（Intel 第8世代以降）** と **Chromebook（ASUS CX5500FE / delbin）** の両対応です。
 
 ## ブランチ
 
@@ -11,13 +11,13 @@
 
 ## セッション（greetd + ReGreet）
 
-起動後は最小構成 Sway 上で **ReGreet**（`modules/nixos/greetd.nix`）と受信専用の **Lan Mouse** が起動します（他端末からログイン入力可能、提供セッションは **Sway** のみ）。
+起動後は最小構成 Hyprland 上で **ReGreet**（`modules/nixos/greetd.nix`）と受信専用の **Lan Mouse** が起動します（他端末からログイン入力可能、提供セッションは **Hyprland (UWSM)** のみ）。
 
-起動時から lan-mouse でログイン入力するには Wayland compositor（ここでは greeter 用 Sway）が必須のため、TTY 直の **tuigreet** とは同じ段階では両立できません。純 tuigreet にする場合は greeter 中の lan-mouse を諦める必要があります。
+起動時から lan-mouse でログイン入力するには Wayland compositor（ここでは greeter 用 Hyprland）が必須のため、TTY 直の **tuigreet** とは同じ段階では両立できません。純 tuigreet にする場合は greeter 中の lan-mouse を諦める必要があります。
 
 | セッション | 内容 |
 |------------|------|
-| **Sway** | キーボード中心のタイル WM。waybar / mako / swayidle。ランチャーは **rofi**（Super+D / Alt+Space）。キーボード配列は **jp** |
+| **Sway** | キーボード中心のタイル WM。waybar / mako / hypridle。ランチャーは **rofi**（Super+D / Alt+Space）。キーボード配列は **jp** |
 
 ### 操作感
 
@@ -28,9 +28,9 @@
 | 検索／ランチャー | **Super+D** / **Alt+Space** | **rofi** |
 | 端末 | **Ctrl+Alt+T** / **Super+Return** | **Ghostty** |
 | ファイルマネージャ | **Super+E** | **Yazi**（Ghostty 内） |
-| ロック | **Super+L** | swaylock |
+| ロック | **Super+L** | hyprlock |
 | クリップボード履歴 | **Super+V** | **cliphist** + rofi |
-| スクショ | **Super+Shift+S** / **Shift+Print** / **Print** / **Super+Print** | **wayfreeze**+**grim**+**slurp**+**satty**（画面停止して範囲選択／全画面／ウィンドウ → 注釈・切り抜き・クリップボード・`~/Pictures/Screenshots/` 保存。`screenshot` CLI） |
+| スクショ | **Super+Shift+S** / **Shift+Print** / **Print** / **Super+Print** | **hyprshot** + **satty**（画面停止して範囲選択／全画面／ウィンドウ → 注釈・切り抜き・クリップボード・`~/Pictures/Screenshots/` 保存。`screenshot` CLI） |
 | タッチパッド | — | 自然スクロール off・タップクリック on・入力中もポインタ有効 |
 
 電源ボタン（`power-chords`）: 短押し=suspend / 長押し≈2.5s=poweroff / **電源+F1（Chromebook は 電源+Back）=強制ログアウト** / **電源+F2（Chromebook は 電源+Refresh）=再起動**。
@@ -340,7 +340,7 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **Vivaldi** — `vivaldi`
 - **Firefox** — `firefox`
 - **Tor Browser** — `tor-browser`
-- **JQuake** — `JQuake` / `jquake`（1.8.4 + `pkgs/jquake` ラッパー。Sway AWT 修正・更新ダイアログ無効化）。ログイン時に `jquake.service` で常駐し、Sway では offscreen `stalonetray` にトレイを保持しつつ左 waybar の専用枠（`custom/jquake`）を表示（左クリックでウィンドウを開く／右クリックでメニュー）。警報時は全画面＋`swaylock` 解除（`home/jquake.nix` / `home/sway.nix`）
+- **JQuake** — `JQuake` / `jquake`（1.8.4 + `pkgs/jquake` ラッパー。Hyprland/XWayland AWT 修正・更新ダイアログ無効化）。ログイン時に `jquake.service` で常駐し、Sway では offscreen `stalonetray` にトレイを保持しつつ左 waybar の専用枠（`custom/jquake`）を表示（左クリックでウィンドウを開く／右クリックでメニュー）。警報時は hyprlock 解除＋前面化/全画面（`home/jquake.nix` / `home/hyprland.nix`）
 - **ONLYOFFICE** — `onlyoffice-desktopeditors`（文書・表計算・プレゼン）
 - **Affinity** — 未導入（`affinity-v3` なし。flake 入力も overlay も外してある）。戻すときは次の 3 箇所です。
   1. `flake.nix` の `inputs` に `affinity-nix.url = "github:mrshmllow/affinity-nix";` を足し、`nixpkgs.overlays` の先頭に `inputs.affinity-nix.overlays.default` を戻す
@@ -407,7 +407,7 @@ Nerd Font のアイコンが空白に見える場合: `fc-cache -rf` を実行�
 
 ## タッチパッド
 
-ナチュラルスクロールはオフ（従来型: 指を上 → 内容が上）。キーボード入力中もタッチパッドは有効（`dwt = disabled`）。右クリックは **2本指タップ／2本指押し**（`tap` + `click_method = clickfinger`）。端を押すソフトボタン領域は使わない。VAIO（`.#vaio`）のみ `scroll_factor = 0.6` でスクロール速度をやや抑えている。Sway の `input type:touchpad`（`home/sway.nix`）。
+ナチュラルスクロールはオフ（従来型: 指を上 → 内容が上）。キーボード入力中もタッチパッドは有効（`dwt = disabled`）。右クリックは **2本指タップ／2本指押し**（`tap` + `click_method = clickfinger`）。端を押すソフトボタン領域は使わない。VAIO（`.#vaio`）のみ `scroll_factor = 0.6` でスクロール速度をやや抑えている。Sway の `input type:touchpad`（`home/hyprland.nix`）。
 
 ## クリップボード履歴
 
@@ -770,7 +770,7 @@ modules/nixos/common.nix          # locale、ユーザー、Meltype/Fcitx5、フ
 modules/nixos/secrets.nix         # agenix 複号設定、nm-agenix-profiles、Tailscale authKeyFile
 modules/nixos/remote-builder.nix  # wsl-builder リモートビルダー設定（agenix 経由）
 modules/nixos/desktop.nix         # sway + greetd + console-gui + portals + XKB/印刷
-modules/nixos/sway.nix            # Sway システム側（greetd 既定セッション等）
+modules/nixos/hyprland.nix            # Sway システム側（greetd 既定セッション等）
 modules/nixos/greetd.nix          # ReGreet + 受信専用 Lan Mouse（Sway 上）
 modules/nixos/console-gui.nix     # gui / apps（Sway ランチャー等）
 modules/nixos/laptop.nix          # ノート PC 共通ハードウェア集約（./laptop/*）
@@ -791,7 +791,7 @@ home/startup-sound.nix            # ランダム起動音（startup-sound.servic
 home/startup-sounds/              # 起動音の宣言的ローカル追加置き場（README 参照）
 home/lazy-plugins.nix             # nixpkgs 由来 LazyVim プラグイン + treesitter パーサ
 home/clipboard.nix                # cliphist + clipboard-history
-home/sway.nix                     # Sway（waybar/mako/swayidle・rofi・jp・チートシート）
+home/hyprland.nix                     # Sway（waybar/mako/hypridle・rofi・jp・チートシート）
 home/nvim/
 scripts/secrets-tool.sh           # secrets CLI（init / bootstrap / import / edit / rekey / check）
 scripts/restore-on-nixos.sh       # 実機復元（--from / --new-device / --agenix-only）

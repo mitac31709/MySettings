@@ -1,4 +1,4 @@
-# Shared user programs and packages (Sway session).
+# Shared user programs and packages (Hyprland session).
 {
   lib,
   pkgs,

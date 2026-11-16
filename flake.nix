@@ -1,5 +1,5 @@
 {
-  description = "NixOS configuration for mitac (Sway + greetd, Chromebook delbin & VAIO)";
+  description = "NixOS configuration for mitac (Hyprland (UWSM) + greetd, Chromebook delbin & VAIO)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";

@@ -1,4 +1,4 @@
-# greetd + ReGreet on minimal Sway with receive-only Lan Mouse for remote login.
+# greetd + ReGreet on minimal Hyprland with receive-only Lan Mouse for remote login.
 {
   config,
   pkgs,
@@ -21,7 +21,7 @@ let
   greeterRunner = pkgs.writeShellScript "regreet-with-lan-mouse" ''
     set -u
 
-    # Ensure ReGreet sees NixOS desktop sessions (Sway) and GTK themes/icons.
+    # Ensure ReGreet sees NixOS desktop sessions (Hyprland UWSM) and GTK themes/icons.
     export XDG_DATA_DIRS="${config.services.displayManager.sessionData.desktops}/share:/run/current-system/sw/share''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
 
     cert_path=${lib.escapeShellArg greeterCertPath}
@@ -36,38 +36,60 @@ let
     lm_pid=$!
 
     cleanup() {
-      # Wait for the greeter daemon to exit so UDP port 4242 is free before Sway starts.
+      # Wait for the greeter daemon to exit so UDP port 4242 is free before the user session starts.
       if kill -0 "$lm_pid" 2>/dev/null; then
         kill "$lm_pid" 2>/dev/null || true
         wait "$lm_pid" 2>/dev/null || true
       fi
-      ${pkgs.sway}/bin/swaymsg exit >/dev/null 2>&1 || true
+      ${pkgs.hyprland}/bin/hyprctl dispatch exit >/dev/null 2>&1 || true
     }
     trap cleanup EXIT INT TERM
 
     ${lib.getExe config.services.displayManager.regreet.package}
   '';
 
-  greeterSwayConfig = pkgs.writeText "greeter-sway.conf" ''
-    xwayland disable
-    output * bg #0b0f14 solid_color
-    default_border none
-    default_floating_border none
-    focus_follows_mouse yes
+  greeterHyprlandConfig = pkgs.writeText "greeter-hyprland.conf" ''
+    monitor=,preferred,auto,1
+    exec-once = ${greeterRunner}
 
-    input "type:keyboard" {
-      xkb_layout "jp"
-      xkb_numlock "enabled"
+    misc {
+      disable_hyprland_logo = true
+      disable_splash_rendering = true
+      force_default_wallpaper = 0
+      background_color = rgb(0b0f14)
     }
 
-    input "type:touchpad" {
-      natural_scroll disabled
-      tap enabled
-      click_method clickfinger
-      dwt disabled
+    input {
+      kb_layout = jp
+      numlock_by_default = true
+      follow_mouse = 1
+      touchpad {
+        natural_scroll = false
+        tap-to-click = true
+        clickfinger_behavior = true
+        disable_while_typing = false
+      }
     }
 
-    exec ${greeterRunner}
+    general {
+      border_size = 0
+      gaps_in = 0
+      gaps_out = 0
+    }
+
+    decoration {
+      rounding = 0
+      shadow {
+        enabled = false
+      }
+      blur {
+        enabled = false
+      }
+    }
+
+    animations {
+      enabled = false
+    }
   '';
 in
 {
@@ -113,7 +135,7 @@ in
   };
 
   services.greetd.settings.default_session.command =
-    "${pkgs.dbus}/bin/dbus-run-session ${lib.getExe pkgs.sway} --config ${greeterSwayConfig}";
+    "${pkgs.dbus}/bin/dbus-run-session ${pkgs.hyprland}/bin/Hyprland --config ${greeterHyprlandConfig}";
 
   # UniClipboard (and other libsecret apps) need an unlocked Secret Service.
   # KWallet's ksecretd rejects UniClipboard's binary probe; use gnome-keyring.

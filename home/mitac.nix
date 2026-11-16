@@ -21,7 +21,7 @@
     ./vivaldi-extensions-repair.nix
     ./vivaldi-pwa-desktop.nix
     ./jquake.nix
-    ./sway.nix
+    ./hyprland.nix
   ];
 
   home.username = "mitac";

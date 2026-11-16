@@ -1,13 +1,10 @@
-# JQuake: login autostart, offscreen tray background, alert fullscreen over swaylock.
+# JQuake: login autostart, offscreen tray background, alert raise over hyprlock.
 #
-# - Patches a few Settings.properties keys on each start (tray / always-on-top /
-#   wake screen / no window until alert) without rewriting the whole file.
-# - Sway: AWT SystemTray needs an XEmbed tray host. Offscreen stalonetray hosts
-#   JQuake's icon (avoiding xembedsniproxy's KDE dependency and blank window),
-#   and waybar's dedicated `custom/jquake` module opens it via stalonetray
-#   remote double-click (`--remote-click-icon sun-awt-X11-XCanvasPeer`).
-# - ext-session-lock blocks normal windows above swaylock; on alert we dismiss
-#   swaylock and fullscreen the map (intentional emergency unlock).
+# - Patches a few Settings.properties keys on each start without rewriting the whole file.
+# - Hyprland: AWT SystemTray needs an XEmbed tray host. Offscreen stalonetray hosts
+#   JQuake's icon and waybar's `custom/jquake` module opens it via stalonetray
+#   remote click.
+# - On alert we dismiss hyprlock and focus/fullscreen the map window.
 {
   pkgs,
   lib,
@@ -20,7 +17,8 @@ let
   propsFile = "${confDir}/Settings.properties";
 
   jquakeClass = "net-jquake-app-Main";
-  swayCriteria = ''[class="^${jquakeClass}$"]'';
+  hyprctl = "${pkgs.hyprland}/bin/hyprctl";
+  jq = "${pkgs.jq}/bin/jq";
 
   stalonetrayBin = "${pkgs.stalonetray}/bin/stalonetray";
 
@@ -58,17 +56,11 @@ let
         dpy.sync()
       '';
 
-  # for_window alone races map; re-apply after the tray window exists.
   hideStalonetray = pkgs.writeShellScript "stalonetray-jquake-hide" ''
     set -euo pipefail
     for _ in $(seq 1 40); do
-      if ${pkgs.sway}/bin/swaymsg -t get_tree \
-        | ${pkgs.jq}/bin/jq -e '
-            [.. | objects | select(.window_properties.class? == "stalonetray")] | length > 0
-          ' >/dev/null; then
-        ${pkgs.sway}/bin/swaymsg \
-          '[class="^stalonetray$"] floating enable, border none, sticky enable, opacity 0, move absolute position -2000 px -2000 px' \
-          >/dev/null
+      if ${hyprctl} clients -j 2>/dev/null | ${jq} -e '[.[] | select(.class == "stalonetray")] | length > 0' >/dev/null; then
+        ${hyprctl} dispatch focuswindow class:^stalonetray$ >/dev/null 2>&1 || true
         ${clearStalonetrayInput} >/dev/null 2>&1 || true
         exit 0
       fi
@@ -211,66 +203,58 @@ let
       # Start in tray; popEEW / popShindo / … open the window on events.
       set_prop openOnStartup false
 
-      # Sway: wait for stalonetray so AWT SystemTray.isSupported() is true.
-      if [[ "''${XDG_CURRENT_DESKTOP:-}" == "sway" ]]; then
-        for _ in $(seq 1 40); do
-          if pgrep -x stalonetray >/dev/null 2>&1; then
-            break
-          fi
-          sleep 0.25
-        done
-      fi
+      # Hyprland/XWayland: wait for stalonetray so AWT SystemTray.isSupported() is true.
+      for _ in $(seq 1 40); do
+        if pgrep -x stalonetray >/dev/null 2>&1; then
+          break
+        fi
+        sleep 0.25
+      done
 
       exec JQuake "$@"
     '';
   };
 
-  jquakeSwayAlert = pkgs.writeShellApplication {
-    name = "jquake-sway-alert";
+  jquakeHyprAlert = pkgs.writeShellApplication {
+    name = "jquake-hypr-alert";
     runtimeInputs = [
+      pkgs.socat
       pkgs.jq
-      pkgs.sway
       pkgs.procps
       pkgs.systemd
       pkgs.coreutils
+      pkgs.hyprland
     ];
     text = ''
-      criteria=${lib.escapeShellArg swayCriteria}
-
       refresh_jquake_bar() {
         systemctl --user kill --kill-who=main --signal=RTMIN+12 waybar.service >/dev/null 2>&1 || true
       }
 
       raise_alert() {
-        # Wake outputs (pairs with JQuake wakeUpScreen).
-        swaymsg 'output * power on' >/dev/null 2>&1 || true
-        # Session lock sits above all app surfaces; dismiss so the map is visible.
-        if pgrep -x swaylock >/dev/null 2>&1; then
-          pkill -x swaylock || true
+        ${hyprctl} dispatch dpms on >/dev/null 2>&1 || true
+        if pgrep -x hyprlock >/dev/null 2>&1; then
+          pkill -x hyprlock || true
         fi
-        swaymsg "$criteria fullscreen enable, sticky enable, focus" >/dev/null 2>&1 || true
+        ${hyprctl} dispatch focuswindow class:^${jquakeClass}$ >/dev/null 2>&1 || true
+        ${hyprctl} dispatch fullscreenstate 2 2 >/dev/null 2>&1 || true
+        ${hyprctl} dispatch pin active >/dev/null 2>&1 || true
       }
 
-      is_jquake_event() {
-        jq -e --arg class ${lib.escapeShellArg jquakeClass} '
-          (.change == "new" or .change == "urgent" or .change == "fullscreen_mode")
-          and (.container.window_properties.class? == $class)
-        ' >/dev/null 2>&1
-      }
+      sock="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
+      if [ ! -S "$sock" ]; then
+        exit 0
+      fi
 
-      is_jquake_close() {
-        jq -e --arg class ${lib.escapeShellArg jquakeClass} '
-          (.change == "close") and (.container.window_properties.class? == $class)
-        ' >/dev/null 2>&1
-      }
-
-      swaymsg -t subscribe -m '["window"]' | while IFS= read -r line; do
-        if printf '%s\n' "$line" | is_jquake_event; then
-          raise_alert
-          refresh_jquake_bar
-        elif printf '%s\n' "$line" | is_jquake_close; then
-          refresh_jquake_bar
-        fi
+      socat -u UNIX-CONNECT:"$sock" - | while IFS= read -r line; do
+        case "$line" in
+          openwindow*${jquakeClass}*|activewindow*${jquakeClass}*|urgent*${jquakeClass}*)
+            raise_alert
+            refresh_jquake_bar
+            ;;
+          closewindow*)
+            refresh_jquake_bar
+            ;;
+        esac
       done
     '';
   };
@@ -278,7 +262,7 @@ in
 {
   home.packages = [
     jquakeAutostart
-    jquakeSwayAlert
+    jquakeHyprAlert
   ];
 
   # Graphical session autostart.
@@ -291,7 +275,6 @@ in
       ];
       Wants = [ "stalonetray-jquake.service" ];
       BindsTo = [ "graphical-session.target" ];
-      # Logout: AWT dies with Broken pipe then Restart would storm until stop.
       StartLimitIntervalSec = 30;
       StartLimitBurst = 3;
     };
@@ -300,7 +283,6 @@ in
       ExecStart = "${jquakeAutostart}/bin/jquake-autostart";
       Restart = "on-failure";
       RestartSec = 5;
-      # AWT / tray need a display; inherit from the graphical session.
       Environment = [
         "_JAVA_AWT_WM_NONREPARENTING=1"
       ];
@@ -310,21 +292,18 @@ in
     };
   };
 
-  # Offscreen XEmbed tray host for JQuake; waybar's `custom/jquake` opens the
-  # main window via stalonetray --remote-click-icon.
+  # Offscreen XEmbed tray host for JQuake.
   systemd.user.services.stalonetray-jquake = {
     Unit = {
-      Description = "Offscreen XEmbed tray for JQuake (Sway)";
+      Description = "Offscreen XEmbed tray for JQuake (Hyprland/XWayland)";
       After = [ "graphical-session.target" ];
       BindsTo = [ "graphical-session.target" ];
-      ConditionEnvironment = "XDG_CURRENT_DESKTOP=sway";
+      ConditionEnvironment = "XDG_CURRENT_DESKTOP=Hyprland";
       StartLimitIntervalSec = 30;
       StartLimitBurst = 3;
     };
     Service = {
       Type = "simple";
-      # Sway keeps the window opacity 0 and hideStalonetray clears X11
-      # ShapeInput so it can never intercept pointer clicks.
       ExecStart = "${stalonetrayBin} --background '#0b0f14' --geometry 1x1+-2000+-2000 --max-geometry 1x1 --slot-size 16 --icon-size 16 --scrollbars none --sticky --window-type utility --window-strut none --kludges force_icons_size,fix_window_pos";
       ExecStartPost = "${hideStalonetray}";
       Restart = "on-failure";
@@ -335,22 +314,22 @@ in
     };
   };
 
-  # Sway-only: fullscreen + unlock on alert window map/urgent.
-  systemd.user.services.jquake-sway-alert = {
+  # Hyprland: raise/unlock on alert window events.
+  systemd.user.services.jquake-hypr-alert = {
     Unit = {
-      Description = "Raise JQuake fullscreen over swaylock on alert";
+      Description = "Raise JQuake over hyprlock on alert";
       After = [
         "graphical-session.target"
         "jquake.service"
       ];
       BindsTo = [ "graphical-session.target" ];
-      ConditionEnvironment = "XDG_CURRENT_DESKTOP=sway";
+      ConditionEnvironment = "XDG_CURRENT_DESKTOP=Hyprland";
       StartLimitIntervalSec = 30;
       StartLimitBurst = 3;
     };
     Service = {
       Type = "simple";
-      ExecStart = "${jquakeSwayAlert}/bin/jquake-sway-alert";
+      ExecStart = "${jquakeHyprAlert}/bin/jquake-hypr-alert";
       Restart = "on-failure";
       RestartSec = 3;
     };
@@ -359,12 +338,19 @@ in
     };
   };
 
-  # Compositor-side sticky/fullscreen when the main window maps (alert / tray open).
-  wayland.windowManager.sway.extraConfig = lib.mkAfter ''
-    # JQuake (XWayland): alert / tray-open → sticky fullscreen.
-    for_window ${swayCriteria} fullscreen enable, sticky enable
-    # Hide stalonetray host off-screen (scratchpad is wrong: Super+- reveals it).
-    for_window [class="^stalonetray$"] floating enable, border none, sticky enable, opacity 0, move absolute position -2000 px -2000 px
-    for_window [title="^JavaEmbeddedFrame$"] floating enable, border none, sticky enable, opacity 0, move absolute position -2000 px -2000 px
+  wayland.windowManager.hyprland.extraConfig = lib.mkAfter ''
+    # JQuake / tray host window rules (XWayland)
+    windowrulev2 = float,class:^(stalonetray)$
+    windowrulev2 = noborder,class:^(stalonetray)$
+    windowrulev2 = pin,class:^(stalonetray)$
+    windowrulev2 = nofocus,class:^(stalonetray)$
+    windowrulev2 = opacity 0.0 override,class:^(stalonetray)$
+    windowrulev2 = move -2000 -2000,class:^(stalonetray)$
+    windowrulev2 = float,title:^(JavaEmbeddedFrame)$
+    windowrulev2 = noborder,title:^(JavaEmbeddedFrame)$
+    windowrulev2 = pin,title:^(JavaEmbeddedFrame)$
+    windowrulev2 = nofocus,title:^(JavaEmbeddedFrame)$
+    windowrulev2 = opacity 0.0 override,title:^(JavaEmbeddedFrame)$
+    windowrulev2 = move -2000 -2000,title:^(JavaEmbeddedFrame)$
   '';
 }

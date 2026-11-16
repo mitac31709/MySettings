@@ -1,4 +1,4 @@
-# Clipboard history picker (cliphist + rofi). Sway binds Super+V.
+# Clipboard history picker (cliphist + rofi). Hyprland binds Super+V.
 # Selecting an entry copies it and pastes into the previously focused window.
 # Store watchers run as user systemd units under every graphical session.
 {
