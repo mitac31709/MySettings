@@ -1260,6 +1260,36 @@ let
     }
     {
       section = "開発";
+      label = "T3 Code（サーバ + Web）";
+      run = "t3";
+      mode = "term";
+    }
+    {
+      section = "開発";
+      label = "T3 Code Desktop";
+      run = "t3code-desktop";
+      mode = "exec";
+    }
+    {
+      section = "開発";
+      label = "Hermes";
+      run = "hermes";
+      mode = "term";
+    }
+    {
+      section = "開発";
+      label = "Hermes 初回セットアップ";
+      run = "hermes setup";
+      mode = "term";
+    }
+    {
+      section = "開発";
+      label = "Hermes ACP 確認";
+      run = "hermes acp --check";
+      mode = "term";
+    }
+    {
+      section = "開発";
       label = "Antigravity（思考日本語訳: 現在設定に従う）";
       run = "agy";
       mode = "term";

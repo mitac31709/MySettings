@@ -13,6 +13,8 @@
 
 起動後は最小構成 Sway 上で **ReGreet**（`modules/nixos/greetd.nix`）と受信専用の **Lan Mouse** が起動します（他端末からログイン入力可能、提供セッションは **Sway** のみ）。
 
+起動時から lan-mouse でログイン入力するには Wayland compositor（ここでは greeter 用 Sway）が必須のため、TTY 直の **tuigreet** とは同じ段階では両立できません。純 tuigreet にする場合は greeter 中の lan-mouse を諦める必要があります。
+
 | セッション | 内容 |
 |------------|------|
 | **Sway** | キーボード中心のタイル WM。waybar / mako / swayidle。ランチャーは **rofi**（Super+D / Alt+Space）。キーボード配列は **jp** |
@@ -325,6 +327,8 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **Zed** — `zed-editor`（起動: `zeditor`、アプリメニュー: Zed）
 - **OpenCode** — ターミナル AI コーディングエージェント（`opencode`、`pkgs/opencode` で V2 をピン留め。nixpkgs の 1.x は使わない）
 - **Claude Code** — Anthropic のターミナルエージェント（`claude`、nixpkgs `claude-code`）
+- **T3 Code** — 複数コーディングエージェントを束ねるデスクトップ／CLI（nixpkgs `t3code`。`t3` / `t3code-desktop`）。Claude・Cursor・OpenCode を PATH に載せて起動。更新は `flake-update`（nixpkgs）
+- **Hermes** — Nous Research のエージェント（`hermes` / `hermes-acp`）。flake 入力 `hermes-agent` + `home/hermes.nix`（CLI + ACP。gateway / Desktop は無し）。状態は `~/.hermes`。初回は `hermes setup` でプロバイダ認証し、T3 の Providers で Hermes / Local ACP を有効化。ACP 確認は `hermes acp --check`
 - **Antigravity** — Google のターミナルエージェント（`pkgs/antigravity` で CLI バイナリをピン留め）。既定では対話 TTY での `agy` 起動時に `tmux` 2ペインを開き、メイン・サブエージェントの思考と `cli.log` Monitor 理由をリアルタイム翻訳する（`home/antigravity-translate.nix`）。`agy-ja on` / `off` / `toggle` / `status`（または `agy translate on|off|toggle|status`）で自動翻訳の既定 ON/OFF を切り替えられ、起動中セッションでも `F9` / `Ctrl+b t` / tmux ステータスバーの `[翻訳: ON/OFF]` クリックで翻訳ペインを即座に表示・非表示できる（最後の監視終了でモデル RAM も解放）。単発指定は `agy --translate` / `agy --no-translate` / `AGY_NO_TRANSLATE=1` / `agy-ja` / `agy-raw`、非対話・サブコマンド（`-p`, `acp`, `changelog` 等）は素の `antigravity` として直通起動。`plamo-translate` が `llama-cpp` の `llama-server`（PFN `plamo-3-translate-0.8b-GGUF` Q4_K_M）を初回のみ `~/.cache/plamo-translate/` へ自動取得してオンデマンド起動し、無通信 300 秒で自動終了（非使用時 RAM 0）
 - **dsh-TUI** — DeepSeek Harness の TUI（`dsh-tui` / `dst`）。Node のグローバル npm（`~/.npm-global`、`.npmrc` の `prefix`）へ `npm i -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui`。初回起動でプロファイルを初期化（`pnpm` 必須）。モデル利用は `DEEPSEEK_API_KEY` または `/auth`
 - **ChatGPT** — 公式 Linux デスクトップ（Codex 含む、`pkgs/chatgpt`、`.deb`）。アプリメニュー / `chatgpt`。起動時に Vivaldi 等向け Native Messaging（`com.openai.codexextension`）を入れ、ブラウザ拡張の Browser Use を有効化する
@@ -778,10 +782,11 @@ modules/nixos/chromebook/         # audio（PulseAudio + UCM）/ power（Type-C 
 modules/nixos/backup.nix          # 暗号化 /home → Google Drive バックアップ（agenix / restic / rclone）
 modules/nixos/release.nix         # system.nixos.tags（世代ラベルのスラッグ）
 home/mitac.nix                    # HM エントリ（identity + imports）
+home/hermes.nix                   # Hermes Agent CLI + ACP（flake 入力 hermes-agent）
 home/secrets.nix                  # agenix ユーザーシークレット連携（~/.ssh / ~/.config/gh / user-env）
 home/flake-tools.nix              # repoPath / flakeHost / scripts（secrets・flake-update・waybar 等）
 home/shell.nix                    # bash エイリアス / rebuild / audio-panic / runbtop
-home/programs.nix                 # git / rbw / neovim / mime / 共通パッケージ
+home/programs.nix                 # git / rbw / neovim / mime / 共通パッケージ（T3 Code 含む）
 home/startup-sound.nix            # ランダム起動音（startup-sound.service / Waybar トレイ管理 / Windows・Mac・GC・Wii）
 home/startup-sounds/              # 起動音の宣言的ローカル追加置き場（README 参照）
 home/lazy-plugins.nix             # nixpkgs 由来 LazyVim プラグイン + treesitter パーサ

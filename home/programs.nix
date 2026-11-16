@@ -439,6 +439,13 @@ in
     opencode
     # Anthropic Claude Code CLI (`claude`).
     claude-code
+    # T3 Code: desktop + `t3` CLI; PATH wraps already-installed agents.
+    (t3code.override {
+      enableClaude = true;
+      enableCursor = true;
+      enableCursorCli = true;
+      enableOpencode = true;
+    })
     # Google Antigravity CLI (`agy` / `antigravity`; pkgs/antigravity) is installed
     # via home/antigravity-translate.nix (wrapping `agy` with PLaMo 2-pane watch).
     # ChatGPT desktop (Codex included). App menu: ChatGPT.

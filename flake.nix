@@ -26,6 +26,8 @@
     # Fresher nixpkgs solely for Cursor packages (avoid bumping the whole system).
     # flake-update does not move this input; flake-update-cursor does.
     nixpkgs-cursor.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # Hermes Agent (CLI + ACP). Do not follow nixpkgs — uv2nix lock pins upstream.
+    hermes-agent.url = "github:NousResearch/hermes-agent";
     # Vendor .debs (flake update re-fetches; see scripts/flake-update.sh).
     # Keep URL version in sync with uniclipboardVersion below (flake-update.sh).
     uniclipboard-deb = {
