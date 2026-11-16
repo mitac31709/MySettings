@@ -9,29 +9,10 @@
 
 let
   email = "mitac31709@gmail.com";
-  isPipewirePulse = osConfig != null && (osConfig.services.pipewire.pulse.enable or false);
-  audioServiceAfter =
-    if isPipewirePulse then
-      [
-        "pipewire-pulse.service"
-        "wireplumber.service"
-      ]
-    else
-      [ "pulseaudio.service" ];
-  audioServiceRequires =
-    if isPipewirePulse then [ "pipewire-pulse.service" ] else [ "pulseaudio.service" ];
   # Rasi unquoted value (same shape as config.lib.formats.rasi.mkLiteral).
   mkLiteral = value: {
     _type = "literal";
     inherit value;
-  };
-
-  # Windows 7 / Vista startup cue for paplay / PulseAudio (same Fripp boot sound).
-  # Official Media/Windows Startup.wav in Win7 is a ~0.2s stub; this is the iconic one.
-  windows7StartupWav = pkgs.fetchurl {
-    url = "https://archive.org/download/10-.-wav/Vista%20.WAV.wav";
-    name = "windows-7-startup.wav";
-    hash = "sha256-fOaAm7YsloolLoknFqr1Tqh81p9gFkq+T17LFwRg8vM=";
   };
 
   ghostty = "${pkgs.ghostty}/bin/ghostty";
@@ -355,22 +336,6 @@ in
       "x-scheme-handler/about" = [ "vivaldi-stable.desktop" ];
       "x-scheme-handler/unknown" = [ "vivaldi-stable.desktop" ];
       "x-scheme-handler/codex" = [ "chatgpt.desktop" ];
-    };
-  };
-
-  systemd.user.services.windows-7-startup-sound = {
-    Unit = {
-      Description = "Windows 7 startup sound";
-      After = audioServiceAfter ++ [ "graphical-session.target" ];
-      Requires = audioServiceRequires;
-    };
-    Service = {
-      Type = "oneshot";
-      ExecStartPre = "${pkgs.coreutils}/bin/sleep 3";
-      ExecStart = "${pkgs.pulseaudio}/bin/paplay ${windows7StartupWav}";
-    };
-    Install = {
-      WantedBy = [ "graphical-session.target" ];
     };
   };
 

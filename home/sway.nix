@@ -17,6 +17,7 @@ let
   repoPath = config.mitac.repoPath;
   flakeUpdateCheck = lib.getExe config.mitac.scripts.flakeUpdateCheck;
   flakeUpdate = lib.getExe config.mitac.scripts.flakeUpdate;
+  startupSoundBin = lib.getExe config.mitac.scripts.startupSound;
   # Family string from nerd-fonts.jetbrains-mono (same as Ghostty).
   # CSS does not name a CJK face. Missing glyphs go through fontconfig's
   # defaultFonts (Hiragino, then Noto Sans CJK JP).
@@ -888,6 +889,31 @@ let
       section = "スクショ・音量・輝度";
       label = "±5%（音量は最大100%） / ミュート / 輝度";
       keys = "音量 / MicMute / 輝度キー";
+    }
+    {
+      section = "スクショ・音量・輝度";
+      label = "起動音メニュー（一覧・編集・ON/OFF・再生）";
+      keys = "左バー ♪";
+      run = "startup-sound --menu";
+      mode = "exec";
+    }
+    {
+      section = "スクショ・音量・輝度";
+      label = "起動音をランダム再生（テスト）";
+      run = "startup-sound";
+      mode = "exec";
+    }
+    {
+      section = "スクショ・音量・輝度";
+      label = "起動音 ON/OFF 切替";
+      run = "startup-sound --toggle-and-notify";
+      mode = "exec";
+    }
+    {
+      section = "スクショ・音量・輝度";
+      label = "起動音一覧 (CLI)";
+      run = "startup-sound --list";
+      mode = "term";
     }
     # 入力（Chromebook / VAIO）
     {
@@ -2332,10 +2358,21 @@ in
         margin-bottom = 8;
         modules-left = [ "custom/updates" ];
         modules-right = [
+          "custom/startup-sound"
           "custom/jquake"
           "custom/services"
           "tray"
         ];
+        "custom/startup-sound" = {
+          exec = "${startupSoundBin} --waybar";
+          return-type = "json";
+          interval = 10;
+          signal = 13;
+          tooltip = true;
+          on-click = "${startupSoundBin} --menu";
+          on-click-right = "${startupSoundBin} --toggle-and-notify";
+          on-click-middle = "${startupSoundBin} --play-bg";
+        };
         "custom/updates" = {
           exec = pkgs.writeShellScript "waybar-flake-updates" ''
             f="''${XDG_RUNTIME_DIR}/flake-update-status"
@@ -2459,8 +2496,9 @@ in
         color: #e06c75;
         background: #3a1a1e;
       }
-      /* Side bar: updates (top), JQuake + services + tray (bottom). */
+      /* Side bar: updates (top), startup-sound + JQuake + services + tray (bottom). */
       window.side #custom-updates,
+      window.side #custom-startup-sound,
       window.side #custom-jquake,
       window.side #custom-services,
       window.side #tray {
@@ -2469,6 +2507,7 @@ in
         background: transparent;
       }
       window.side #custom-updates,
+      window.side #custom-startup-sound,
       window.side #custom-jquake,
       window.side #custom-services {
         font-family: "${waybarFont}", sans-serif;
@@ -2484,6 +2523,17 @@ in
         color: #9fe7e7;
         background: #15383a;
         border-top: 2px solid #33c5c5;
+      }
+      window.side #custom-startup-sound {
+        padding: 6px 0;
+        border-top: 1px solid #15383a;
+      }
+      window.side #custom-startup-sound.disabled {
+        color: #6b7785;
+      }
+      window.side #custom-startup-sound.empty {
+        color: #e5c07b;
+        border-left: 2px solid #e5c07b;
       }
       window.side #custom-jquake {
         padding: 7px 0;
