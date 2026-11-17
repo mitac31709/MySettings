@@ -4,5 +4,6 @@
 {
   imports = [
     ./vaio/audio.nix
+    ./vaio/power.nix
   ];
 }
