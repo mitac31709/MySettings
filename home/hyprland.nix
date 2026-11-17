@@ -72,8 +72,8 @@ let
       pkgs.satty
       pkgs.wl-clipboard
     ];
-    text = '
-      mode="'${1:-region}'"
+    text = ''
+      mode="''${1:-region}"
       out_dir="$HOME/Pictures/Screenshots"
       mkdir -p "$out_dir"
       out_pattern="$out_dir/screenshot-%Y%m%d-%H%M%S.png"
@@ -151,7 +151,7 @@ let
           exit 2
           ;;
       esac
-    ';
+    '';
   };
 
   # Presentation marker toggled with waybar scr / scr ON. XDG_RUNTIME_DIR is
