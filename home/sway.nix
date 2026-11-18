@@ -1857,8 +1857,8 @@ let
     }
     {
       section = powerSection;
-      label = "バッテリー状態（健康度・W・残り）";
-      run = "awk -v en=$(cat /sys/class/power_supply/BAT1/energy_now) -v ef=$(cat /sys/class/power_supply/BAT1/energy_full) -v ed=$(cat /sys/class/power_supply/BAT1/energy_full_design) -v pw=$(cat /sys/class/power_supply/BAT1/power_now) -v cap=$(cat /sys/class/power_supply/BAT1/capacity) -v st=$(cat /sys/class/power_supply/BAT1/status) 'BEGIN{printf \"%s %s%%  now=%.2fWh full=%.2fWh design=%.2fWh health=%.0f%%  %.2fW  ETA=%.1fh\\n\", st,cap,en/1e6,ef/1e6,ed/1e6,100*ef/ed,pw/1e6,(pw>0?en/pw:0)}'";
+      label = "バッテリー状態（電圧・健康度・W・残り）";
+      run = "for b in /sys/class/power_supply/BAT*; do [ -d \"$b\" ] || continue; st=$(cat \"$b/status\"); cap=$(cat \"$b/capacity\"); vn=$(cat \"$b/voltage_now\"); if [ -r \"$b/energy_now\" ]; then en=$(cat \"$b/energy_now\"); ef=$(cat \"$b/energy_full\"); ed=$(cat \"$b/energy_full_design\"); pw=$(cat \"$b/power_now\"); awk -v nm=\"$(basename \"$b\")\" -v st=\"$st\" -v cap=\"$cap\" -v vn=\"$vn\" -v en=\"$en\" -v ef=\"$ef\" -v ed=\"$ed\" -v pw=\"$pw\" 'BEGIN{printf \"%s %s %s%%  V=%.2fV  now=%.2fWh full=%.2fWh design=%.2fWh health=%.0f%%  %.2fW  ETA=%.1fh\\n\", nm,st,cap,vn/1e6,en/1e6,ef/1e6,ed/1e6,(ed>0?100*ef/ed:0),pw/1e6,(pw>0?en/pw:0)}'; elif [ -r \"$b/charge_now\" ]; then cn=$(cat \"$b/charge_now\"); cf=$(cat \"$b/charge_full\"); cd=$(cat \"$b/charge_full_design\"); cw=$(cat \"$b/current_now\"); awk -v nm=\"$(basename \"$b\")\" -v st=\"$st\" -v cap=\"$cap\" -v vn=\"$vn\" -v cn=\"$cn\" -v cf=\"$cf\" -v cd=\"$cd\" -v cw=\"$cw\" 'BEGIN{if(cw<0)cw=-cw; pw=(vn/1e6)*(cw/1e6); en=(vn/1e6)*(cn/1e6); printf \"%s %s %s%%  V=%.2fV  now=%.2fAh full=%.2fAh design=%.2fAh health=%.0f%%  %.2fW  ETA=%.1fh\\n\", nm,st,cap,vn/1e6,cn/1e6,cf/1e6,cd/1e6,(cd>0?100*cf/cd:0),pw,(pw>0?en/pw:0)}'; fi; done";
       mode = "term";
     }
     {
@@ -2336,6 +2336,7 @@ in
           on-click = openBtop;
         };
         battery = {
+          interval = 10;
           format = "{capacity}% {icon}";
           format-icons = [
             "batt"
@@ -2349,7 +2350,16 @@ in
             warning = 30;
             critical = 15;
           };
-        };
+        }
+        // (
+          if isChromebook then
+            { adapter = "AC"; }
+          else
+            {
+              bat = "BAT1";
+              adapter = "ACAD";
+            }
+        );
         network = {
           interval = 2;
           format-wifi = "{essid}";
