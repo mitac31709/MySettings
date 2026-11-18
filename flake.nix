@@ -135,6 +135,8 @@
                     rofi-prompt = final.callPackage ./pkgs/rofi-prompt { };
                     # Wake-on-LAN SSH relay client (`wake-pc`) & desktop entry.
                     wol-pc = final.callPackage ./pkgs/wol-pc { };
+                    # Cursor Gothic sans-serif typeface (OpenType extracted from WOFF2).
+                    cursor-gothic = final.callPackage ./pkgs/cursor-gothic { };
                     # Sway 1.12 / wlroots 0.20.2: keep a valid XKB keymap on the seat across
                     # virtual keyboard destroy, never emit wl_keyboard.modifiers without an
                     # XKB_V1 keymap (fixes Electron/Chromium xkb_state_update_mask NULL

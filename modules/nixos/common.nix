@@ -291,6 +291,8 @@ in
       noto-fonts-cjk-sans
       # Serif fallback (Hiragino Mincho ProN) when the local OTFs are absent.
       noto-fonts-cjk-serif
+      # Cursor's bespoke geometric sans-serif typeface ("Cursor Gothic").
+      cursor-gothic
     ]
     ++ lib.optionals hiraginoEnabled [
       (pkgs.callPackage ../../pkgs/hiragino {

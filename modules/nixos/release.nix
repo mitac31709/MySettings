@@ -8,5 +8,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "sway-wayland-kbd-fix" ];
+  system.nixos.tags = [ "cursor-gothic-font" ];
 }

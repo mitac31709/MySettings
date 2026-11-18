@@ -386,6 +386,7 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - sans / 等幅の日本語: `Noto Sans CJK JP`（`noto-fonts-cjk-sans`）
 - serif: `Noto Serif CJK JP`（`noto-fonts-cjk-serif`）
 - 等幅のラテン: `JetBrainsMono Nerd Font`（Ghostty も 12pt）
+- Cursor Gothic: `Cursor Gothic`（`pkgs/cursor-gothic`、Regular / Italic / Bold / BoldItalic の OTF を `fonts.packages` に同梱）
 
 ヒラギノは flake input にしていません。`path:` 入力は、そのディレクトリが無いマシンで flake 全体の評価が失敗するためです。
 
