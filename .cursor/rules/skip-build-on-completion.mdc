@@ -1,0 +1,25 @@
+---
+description: 作業完了時の不要な nix build を避け、フルビルドは rebuild 時に任せる
+alwaysApply: true
+---
+
+# 作業完了時に不要な Build をしない
+
+NixOS / Home Manager の変更後、完了確認のためだけに重いビルドを毎回走らせない。システム全体のビルドは、ユーザーが `rebuild`（`nixos-rebuild switch`）を実行するときに行えばよい。
+
+## やらないこと（通常時）
+
+- 作業完了のたびに「念のため」で `nix build .#nixosConfigurations.<host>.config.system.build.toplevel` や `nix flake check` を実行して作業を遅らせること
+
+## 完了時の軽量な確認
+
+変更内容に応じて、速く終わる確認だけに留める（変更がドキュメントやルールのみなら評価も不要）:
+
+- フォーマット / 構文: `nix run nixpkgs#nixfmt -- --check <変更ファイル>`、`bash -n <スクリプト>`
+- 評価確認が必要な場合のみ狭い `config.…` を eval:
+  `nix eval .#nixosConfigurations.chromebook.config.networking.hostName`
+
+## Build してよい場合（例外）
+
+- derivation・パッケージ定義・ビルドエラー修正など、ビルドが通ること自体を確認する必要があるとき
+- ユーザーが明示的に `nix build` や `nix flake check` の実行を求めたとき

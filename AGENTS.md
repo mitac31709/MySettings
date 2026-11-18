@@ -84,3 +84,4 @@ when editing matching files):
 - `investigate-before-conclude.mdc` — read logs, configs, and source before concluding
 - `nix-eval-avoid-options.mdc` — avoid heavy `options` evals; use narrow `config.` or source reads
 - `prefer-native-tools.mdc` — prefer native CLI / `nix run` over ad-hoc Python for simple tasks
+- `skip-build-on-completion.mdc` — skip routine full `nix build` at task completion; leave it to `rebuild` unless build verification is needed
