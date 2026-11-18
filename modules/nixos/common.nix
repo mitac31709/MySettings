@@ -349,6 +349,7 @@ in
       "wheel"
       "systemd-journal" # restic backup notify reads unit logs for progress/summary
       "dialout" # /dev/ttyUSB* / ttyACM* (ESP32, Arduino, …)
+      "vboxusers" # VirtualBox host / USB passthrough
     ];
     # Set a password after first boot: passwd mitac
   };
@@ -402,6 +403,13 @@ in
   # Steam needs the NixOS module (32-bit libs, FHS, steam-hardware).
   # Also pulls in hardware.graphics.enable32Bit, which Bottles/Wine need.
   programs.steam.enable = true;
+
+  # VirtualBox host (builds vboxdrv/vboxnet* kernel modules and suid wrappers;
+  # do not also add pkgs.virtualbox to environment.systemPackages).
+  virtualisation.virtualbox.host = {
+    enable = true;
+    enableExtensionPack = true;
+  };
 
   # LocalSend (LAN file transfer); opens TCP/UDP 53317 by default.
   programs.localsend.enable = true;

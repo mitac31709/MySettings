@@ -8,5 +8,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "local-llm-t3code-acp" ];
+  system.nixos.tags = [ "virtualbox" ];
 }
