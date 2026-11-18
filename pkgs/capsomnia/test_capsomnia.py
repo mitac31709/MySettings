@@ -153,6 +153,71 @@ class CapsomniaCoreTests(unittest.TestCase):
         norm = normalize_prefs({"language": "invalid"})
         self.assertEqual(norm["language"], "auto")
 
+    def test_swaymsg_argv_separator(self) -> None:
+        from capsomniad import build_swaymsg_argv
+
+        self.assertEqual(
+            build_swaymsg_argv("/tmp/sway.sock", "-t", "get_outputs"),
+            ["swaymsg", "-s", "/tmp/sway.sock", "-t", "get_outputs"],
+        )
+        self.assertEqual(
+            build_swaymsg_argv(
+                "/tmp/sway.sock",
+                "bindsym",
+                "--inhibited",
+                "--locked",
+                "Mod4+Mod1+c",
+                "exec",
+                "cpsm",
+                "toggle",
+                "--no-sleep",
+            ),
+            [
+                "swaymsg",
+                "-s",
+                "/tmp/sway.sock",
+                "--",
+                "bindsym",
+                "--inhibited",
+                "--locked",
+                "Mod4+Mod1+c",
+                "exec",
+                "cpsm",
+                "toggle",
+                "--no-sleep",
+            ],
+        )
+
+    def test_inhibitor_steal_fds_and_release_closes_fd(self) -> None:
+        import os
+        from unittest.mock import MagicMock
+        from capsomniad import CapsomniaDaemon
+
+        r_fd, w_fd = os.pipe()
+        try:
+            fake_fd_list = MagicMock()
+            fake_fd_list.steal_fds.return_value = [w_fd]
+            fake_res = MagicMock()
+            fake_res.unpack.return_value = (0,)
+            fake_bus = MagicMock()
+            fake_bus.call_with_unix_fd_list_sync.return_value = (fake_res, fake_fd_list)
+
+            daemon = CapsomniaDaemon.__new__(CapsomniaDaemon)
+            daemon.bus = fake_bus
+            daemon.inhibit_fd = None
+            daemon.last_error_msg = None
+
+            self.assertTrue(daemon.acquire_inhibitor())
+            self.assertEqual(daemon.inhibit_fd, w_fd)
+            fake_fd_list.steal_fds.assert_called_once_with()
+
+            self.assertTrue(daemon.release_inhibitor())
+            self.assertIsNone(daemon.inhibit_fd)
+            # Writing end was closed; reading from r_fd must immediately hit EOF.
+            self.assertEqual(os.read(r_fd, 1), b"")
+        finally:
+            os.close(r_fd)
+
 
 if __name__ == "__main__":
     unittest.main()

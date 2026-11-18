@@ -472,7 +472,11 @@ class CapsomniaWindow(Gtk.ApplicationWindow):
                 self.led_dot.remove_css_class(cls)
             if st.get("status_error"):
                 self.led_dot.add_css_class("led-err")
-                self.lbl_subtitle.set_text(tr(lang, "subtitle_err"))
+                err_msg = st.get("error_message")
+                err_txt = tr(lang, "subtitle_err")
+                if err_msg:
+                    err_txt = f"{err_txt} ({err_msg})"
+                self.lbl_subtitle.set_text(err_txt)
             elif st.get("awake_on"):
                 self.led_dot.add_css_class("led-on")
                 self.lbl_subtitle.set_text(tr(lang, "subtitle_on"))

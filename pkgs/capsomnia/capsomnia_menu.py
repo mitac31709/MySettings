@@ -133,7 +133,13 @@ def main() -> int:
 
     for lbl, fn in actions:
         if lbl == choice:
-            fn()
+            res = fn()
+            if isinstance(res, dict) and not res.get("ok"):
+                subprocess.run(
+                    ["notify-send", "Capsomnia", f"Error: {res.get('error')}"],
+                    check=False,
+                )
+                return 1
             return 0
     return 0
 

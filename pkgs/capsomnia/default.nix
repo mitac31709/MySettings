@@ -55,7 +55,7 @@ stdenvNoCC.mkDerivation {
 
   checkPhase = ''
     runHook preCheck
-    ${py.interpreter} -B -m unittest discover -s . -v
+    GI_TYPELIB_PATH="${giTypelibPath}" ${py.interpreter} -B -m unittest discover -s . -v
     runHook postCheck
   '';
 

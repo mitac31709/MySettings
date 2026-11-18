@@ -71,19 +71,29 @@ def find_sway_socket() -> str | None:
     return None
 
 
+def build_swaymsg_argv(sock: str, *args: str) -> list[str]:
+    if args and not args[0].startswith("-"):
+        return ["swaymsg", "-s", sock, "--", *args]
+    return ["swaymsg", "-s", sock, *args]
+
+
 def run_swaymsg(*args: str, timeout: float = 2.0) -> tuple[bool, str]:
     sock = find_sway_socket()
     if not sock:
         return False, "sway socket unavailable"
     try:
         proc = subprocess.run(
-            ["swaymsg", "-s", sock, *args],
+            build_swaymsg_argv(sock, *args),
             capture_output=True,
             text=True,
             timeout=timeout,
             check=False,
         )
-        return proc.returncode == 0, proc.stdout.strip()
+        out = proc.stdout.strip()
+        err = proc.stderr.strip()
+        if proc.returncode == 0:
+            return True, out
+        return False, err or out or f"swaymsg exited with code {proc.returncode}"
     except (OSError, subprocess.SubprocessError) as err:
         return False, str(err)
 
@@ -284,9 +294,24 @@ class CapsomniaDaemon:
                 None,
                 None,
             )
-            idx = res.unpack()[0]
-            raw_fd = fd_list.get(idx)
-            self.inhibit_fd = os.dup(raw_fd)
+            idx = int(res.unpack()[0])
+            if fd_list is None:
+                raise RuntimeError("logind Inhibit returned no FD list")
+            fds = [int(fd) for fd in fd_list.steal_fds()]
+            if not (0 <= idx < len(fds)):
+                for fd in fds:
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
+                raise RuntimeError(f"invalid FD index {idx} in stolen FD list")
+            self.inhibit_fd = fds[idx]
+            for i, fd in enumerate(fds):
+                if i != idx:
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
             return True
         except Exception as err:
             self.last_error_msg = f"logind Inhibit failed: {err}"
@@ -1029,6 +1054,8 @@ class CapsomniaDaemon:
         # XKB clean on daemon exit.
         if self.applied_xkb_dedicated:
             run_swaymsg("input", "type:keyboard", "xkb_options", "")
+        if self.applied_shortcut:
+            run_swaymsg("unbindsym", "--inhibited", "--locked", self.applied_shortcut)
         self.loop.quit()
         return False
 
