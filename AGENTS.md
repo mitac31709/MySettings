@@ -79,6 +79,7 @@ when editing matching files):
 - `committing-changes-with-git.mdc` — git safety protocol, HEREDOC commit messages, push boundaries
 - `communication-style.mdc` — concise, direct responses with minimal bolding
 - `creating-pull-requests.mdc` — PR creation steps using `gh`
+- `generation-tags.mdc` — bump `system.nixos.tags` in `modules/nixos/release.nix` on meaningful config changes
 - `graphify-knowledge-graph.mdc` — hybrid use of `graphify-out/` and native search
 - `investigate-before-conclude.mdc` — read logs, configs, and source before concluding
 - `nix-eval-avoid-options.mdc` — avoid heavy `options` evals; use narrow `config.` or source reads
