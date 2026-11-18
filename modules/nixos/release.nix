@@ -8,5 +8,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "cursor-gothic-font" ];
+  system.nixos.tags = [ "agent-desktop" ];
 }
