@@ -8,5 +8,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "vaio-wake-sounds" ];
+  system.nixos.tags = [ "jquake-maximized" ];
 }

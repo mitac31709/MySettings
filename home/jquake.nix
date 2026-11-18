@@ -1,4 +1,4 @@
-# JQuake: login autostart, offscreen tray background, alert fullscreen over swaylock.
+# JQuake: login autostart, offscreen tray background, alert maximize over swaylock.
 #
 # - Patches a few Settings.properties keys on each start (tray / always-on-top /
 #   wake screen / no window until alert) without rewriting the whole file.
@@ -7,7 +7,7 @@
 #   and waybar's dedicated `custom/jquake` module opens it via stalonetray
 #   remote double-click (`--remote-click-icon sun-awt-X11-XCanvasPeer`).
 # - ext-session-lock blocks normal windows above swaylock; on alert we dismiss
-#   swaylock and fullscreen the map (intentional emergency unlock).
+#   swaylock and maximize the map while keeping Waybar visible (intentional emergency unlock).
 {
   pkgs,
   lib,
@@ -248,12 +248,12 @@ let
         if pgrep -x swaylock >/dev/null 2>&1; then
           pkill -x swaylock || true
         fi
-        swaymsg "$criteria fullscreen enable, sticky enable, focus" >/dev/null 2>&1 || true
+        swaymsg "$criteria fullscreen disable, floating enable, border pixel 2, sticky enable, resize set 100 ppt 100 ppt, move position 0 px 0 px, focus" >/dev/null 2>&1 || true
       }
 
       is_jquake_event() {
         jq -e --arg class ${lib.escapeShellArg jquakeClass} '
-          (.change == "new" or .change == "urgent" or .change == "fullscreen_mode")
+          (.change == "new" or .change == "urgent")
           and (.container.window_properties.class? == $class)
         ' >/dev/null 2>&1
       }
@@ -335,10 +335,10 @@ in
     };
   };
 
-  # Sway-only: fullscreen + unlock on alert window map/urgent.
+  # Sway-only: maximize + unlock on alert window map/urgent (keep Waybar visible).
   systemd.user.services.jquake-sway-alert = {
     Unit = {
-      Description = "Raise JQuake fullscreen over swaylock on alert";
+      Description = "Raise JQuake maximized over swaylock on alert";
       After = [
         "graphical-session.target"
         "jquake.service"
@@ -359,10 +359,10 @@ in
     };
   };
 
-  # Compositor-side sticky/fullscreen when the main window maps (alert / tray open).
+  # Compositor-side sticky maximize within the workspace (Waybar stays visible).
   wayland.windowManager.sway.extraConfig = lib.mkAfter ''
-    # JQuake (XWayland): alert / tray-open → sticky fullscreen.
-    for_window ${swayCriteria} fullscreen enable, sticky enable
+    # JQuake (XWayland): alert / tray-open → sticky floating maximized (keep Waybar visible).
+    for_window ${swayCriteria} floating enable, border pixel 2, sticky enable, resize set 100 ppt 100 ppt, move position 0 px 0 px
     # Hide stalonetray host off-screen (scratchpad is wrong: Super+- reveals it).
     for_window [class="^stalonetray$"] floating enable, border none, sticky enable, opacity 0, move absolute position -2000 px -2000 px
     for_window [title="^JavaEmbeddedFrame$"] floating enable, border none, sticky enable, opacity 0, move absolute position -2000 px -2000 px
