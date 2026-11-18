@@ -8,5 +8,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "chatgpt-hud-turns" ];
+  system.nixos.tags = [ "vaio-wake-sounds" ];
 }
