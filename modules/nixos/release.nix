@@ -8,5 +8,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "agent-desktop" ];
+  system.nixos.tags = [ "disktui" ];
 }

@@ -367,6 +367,7 @@ in
       alsa-utils # amixer/alsactl — mute SOF amps if audio wedges
       libva-utils # vainfo — verify VA-API / Parsec hw encode
       iperf3 # LAN / WAN bandwidth test (server: -s, client: -c HOST)
+      (callPackage ../../pkgs/disktui { }) # TUI disk & partition manager (wrapped with parted/cryptsetup/mkfs/smartctl)
     ]
     ++ lib.optionals hasBtrfs [ compsize ];
 

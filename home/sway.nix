@@ -1680,6 +1680,12 @@ let
     }
     {
       section = "ディスク容量";
+      label = "disktui（パーティション管理 TUI）";
+      run = "disktui";
+      mode = "term";
+    }
+    {
+      section = "ディスク容量";
       label = "du home top";
       run = "du -xh --max-depth=1 ~ | sort -hr | head";
       mode = "term";
