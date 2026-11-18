@@ -1,0 +1,14 @@
+--- a/types/seat/wlr_seat_keyboard.c	2026-11-18 20:57:15.537999516 +0900
++++ b/types/seat/wlr_seat_keyboard.c	2026-11-18 20:57:15.895530002 +0900
+@@ -197,6 +197,11 @@
+ 
+ void wlr_seat_keyboard_send_modifiers(struct wlr_seat *seat,
+ 		const struct wlr_keyboard_modifiers *modifiers) {
++	struct wlr_keyboard *keyboard = seat->keyboard_state.keyboard;
++	if (keyboard == NULL || keyboard->keymap == NULL) {
++		return;
++	}
++
+ 	struct wlr_seat_client *client = seat->keyboard_state.focused_client;
+ 	if (client == NULL) {
+ 		return;

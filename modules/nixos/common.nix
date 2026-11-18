@@ -231,12 +231,19 @@ in
       kdePackages.fcitx5-qt
       kdePackages.fcitx5-configtool
     ];
-    fcitx5.settings.addons.classicui.globalSection = {
-      "Vertical Candidate List" = true;
-      Font = "Sans 11";
-      Theme = "meltype-dark";
-      DarkTheme = "meltype-dark";
-      UseDarkTheme = true;
+    fcitx5.settings.addons = {
+      classicui.globalSection = {
+        "Vertical Candidate List" = true;
+        Font = "Sans 11";
+        Theme = "meltype-dark";
+        DarkTheme = "meltype-dark";
+        UseDarkTheme = true;
+      };
+      # Keep zwp_virtual_keyboard_v1 alive across deactivate/activate instead of
+      # destroying it on every focus switch (avoids Sway active-keyboard -> NULL).
+      waylandim.globalSection = {
+        PersistentVirtualKeyboard = true;
+      };
     };
     fcitx5.settings.inputMethod = {
       GroupOrder."0" = "Default";

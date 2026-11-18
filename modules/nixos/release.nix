@@ -8,5 +8,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "waybar-battery-tooltip" ];
+  system.nixos.tags = [ "sway-wayland-kbd-fix" ];
 }

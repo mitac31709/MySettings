@@ -135,6 +135,21 @@
                     rofi-prompt = final.callPackage ./pkgs/rofi-prompt { };
                     # Wake-on-LAN SSH relay client (`wake-pc`) & desktop entry.
                     wol-pc = final.callPackage ./pkgs/wol-pc { };
+                    # Sway 1.12 / wlroots 0.20.2: keep a valid XKB keymap on the seat across
+                    # virtual keyboard destroy, never emit wl_keyboard.modifiers without an
+                    # XKB_V1 keymap (fixes Electron/Chromium xkb_state_update_mask NULL
+                    # SIGSEGV), and fix input-method popup list/NULL crashes.
+                    wlroots_0_20 = prev.wlroots_0_20.overrideAttrs (old: {
+                      patches = (old.patches or [ ]) ++ [
+                        ./pkgs/sway/wlroots-no-modifiers-without-keymap.patch
+                      ];
+                    });
+                    sway-unwrapped = prev.sway-unwrapped.overrideAttrs (old: {
+                      patches = (old.patches or [ ]) ++ [
+                        ./pkgs/sway/sway-keyboard-fallback.patch
+                        ./pkgs/sway/sway-text-input-popup-fixes.patch
+                      ];
+                    });
                   }
                 )
               ];

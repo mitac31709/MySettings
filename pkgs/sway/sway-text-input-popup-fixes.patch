@@ -1,0 +1,69 @@
+--- a/sway/input/text_input.c	2026-11-18 20:57:15.587244169 +0900
++++ b/sway/input/text_input.c	2026-11-18 20:57:15.896787760 +0900
+@@ -127,7 +127,10 @@
+ 	struct sway_text_input *text_input =
+ 		relay_get_focused_text_input(popup->relay);
+ 
+-	if (!popup->desc.relative) {
++	if (!popup->desc.relative || !text_input) {
++		return;
++	}
++	if (popup->desc.view && !popup->desc.view->container) {
+ 		return;
+ 	}
+ 
+@@ -368,9 +371,9 @@
+ static void input_popup_set_focus(struct sway_input_popup *popup,
+ 		struct wlr_surface *surface) {
+ 	wl_list_remove(&popup->focused_surface_unmap.link);
++	wl_list_init(&popup->focused_surface_unmap.link);
+ 
+ 	if (!popup->scene_tree) {
+-		wl_list_init(&popup->focused_surface_unmap.link);
+ 		return;
+ 	}
+ 
+@@ -381,7 +384,6 @@
+ 	}
+ 
+ 	if (surface == NULL) {
+-		wl_list_init(&popup->focused_surface_unmap.link);
+ 		wlr_scene_node_set_enabled(&popup->scene_tree->node, false);
+ 		return;
+ 	}
+@@ -393,14 +395,14 @@
+ 
+ 	struct wlr_scene_tree *relative_parent;
+ 	if (layer_surface) {
+-		wl_signal_add(&layer_surface->surface->events.unmap,
+-			&popup->focused_surface_unmap);
+-
+ 		struct sway_layer_surface *layer = layer_surface->data;
+ 		if (layer == NULL) {
+ 			return;
+ 		}
+ 
++		wl_signal_add(&layer_surface->surface->events.unmap,
++			&popup->focused_surface_unmap);
++
+ 		relative_parent = layer->scene->tree;
+ 		popup->desc.view = NULL;
+ 
+@@ -410,14 +412,14 @@
+ 		// destroyed, thus also trickling down to popups.
+ 		popup->fixed_output = layer->layer_surface->output;
+ 	} else if (lock_surface) {
+-		wl_signal_add(&lock_surface->surface->events.unmap,
+-			&popup->focused_surface_unmap);
+-
+ 		struct sway_layer_surface *lock = lock_surface->data;
+ 		if (lock == NULL) {
+ 			return;
+ 		}
+ 
++		wl_signal_add(&lock_surface->surface->events.unmap,
++			&popup->focused_surface_unmap);
++
+ 		relative_parent = lock->scene->tree;
+ 		popup->desc.view = NULL;
+ 

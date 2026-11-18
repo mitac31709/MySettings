@@ -242,6 +242,10 @@ in
         text = osConfig.environment.etc."xdg/fcitx5/conf/classicui.conf".text;
         force = true;
       };
+      "fcitx5/conf/waylandim.conf" = {
+        text = osConfig.environment.etc."xdg/fcitx5/conf/waylandim.conf".text;
+        force = true;
+      };
     })
   ];
 
