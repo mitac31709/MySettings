@@ -358,7 +358,7 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **暗号化バックアップ** — `restic` + `rclone` で `/home` を Google Drive へ。`agenix` 移行時は `/run/agenix/` 経由で自動無監視実行（未移行時・他端末リカバリ時は Bitwarden `rbw`）。詳細は下記。
 - **デスクトップ** — greetd + ReGreet（Sway のみ。ログイン画面も受信専用 Lan Mouse 待機）
 - **bootvine** — 起動コンソールに systemd ジョブの依存ツリーを表示（[bootvine](https://codeberg.org/wvhulle/bootvine)、`services.bootvine.enable`）。反映には `rebuild` のあと再起動が必要
-- **起動音（`startup-sound`）** — ログイン時に `startup-sound.service` が歴代 Windows（3.1 / 95 / 98 / 2000 / XP / 7 / 11）・Mac・GameCube・Nintendo Wii・Wii Sports と `~/.local/share/startup-sounds/`（または `home/startup-sounds/`）の音声からランダム再生（`home/startup-sound.nix`）。左 Waybar の `♪` アイコンから一覧・編集・ON/OFF・再生でき、CLI でも `startup-sound --list` / `--menu` / `--toggle` が利用可能
+- **起動音（`startup-sound`）** — ログイン時に `startup-sound.service` が歴代 Windows（3.1 / 95 / 98 / 2000 / XP / 7 / 11）・Mac・GameCube・Nintendo Wii・Wii Sports・ブルーアーカイブ・マリオカート8 と `~/.local/share/startup-sounds/`（または `home/startup-sounds/`）の音声からランダム再生（`home/startup-sound.nix`）。左 Waybar の `♪` アイコンから一覧・編集・ON/OFF・再生でき、CLI でも `startup-sound --list` / `--menu` / `--toggle` が利用可能
 - **gui** — ディスプレイ無し時は `cage` で単一 GUI アプリを起動（`gui firefox` など）。引数なしは `apps` を起動
 - **apps** — `fzf` アプリ一覧（`gui` 経由起動）。TTY やシェルから利用可。Sway の Super+D は rofi
 
@@ -787,8 +787,8 @@ home/secrets.nix                  # agenix ユーザーシークレット連携�
 home/flake-tools.nix              # repoPath / flakeHost / scripts（secrets・flake-update・waybar 等）
 home/shell.nix                    # bash エイリアス / rebuild / audio-panic / runbtop
 home/programs.nix                 # git / rbw / neovim / mime / 共通パッケージ（T3 Code 含む）
-home/startup-sound.nix            # ランダム起動音（startup-sound.service / Waybar トレイ管理 / Windows・Mac・GC・Wii）
-home/startup-sounds/              # 起動音の宣言的ローカル追加置き場（README 参照）
+home/startup-sound.nix            # ランダム起動音（startup-sound.service / Waybar トレイ管理 / プリセット・同梱音源）
+home/startup-sounds/              # 起動音の宣言的ローカル追加置き場（ブルアカ・マリオカート8 等、README 参照）
 home/lazy-plugins.nix             # nixpkgs 由来 LazyVim プラグイン + treesitter パーサ
 home/clipboard.nix                # cliphist + clipboard-history
 home/sway.nix                     # Sway（waybar/mako/swayidle・rofi・jp・チートシート）
