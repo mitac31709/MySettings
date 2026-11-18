@@ -8,5 +8,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "jquake-maximized" ];
+  system.nixos.tags = [ "waybar-battery-tooltip" ];
 }
