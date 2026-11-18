@@ -181,18 +181,19 @@ let
       esac
     '';
   };
+  capsomniaPkg = pkgs.callPackage ../pkgs/capsomnia { };
   # Manual / before-sleep lock (always runs).
   lockCmd = "${swaylockBin} -f -c 0b0f14";
-  # Presentation marker toggled with waybar scr / scr ON. XDG_RUNTIME_DIR is
-  # session-scoped, so it clears on logout. Idle auto-lock / DPMS no-op while set.
+  # Presentation marker toggled with waybar scr / scr ON, or Capsomnia Keep Display Awake.
+  # XDG_RUNTIME_DIR is session-scoped, so it clears on logout. Idle auto-lock / DPMS no-op while set.
   idleLockCmd = pkgs.writeShellScript "sway-idle-lock" ''
-    if [ -e "''${XDG_RUNTIME_DIR}/sway-keep-screen-on" ]; then
+    if [ -e "''${XDG_RUNTIME_DIR}/sway-keep-screen-on" ] || [ -e "''${XDG_RUNTIME_DIR}/capsomnia/keep-display-awake" ]; then
       exit 0
     fi
     exec ${swaylockBin} -f -c 0b0f14
   '';
   idleDpmsOffCmd = pkgs.writeShellScript "sway-idle-dpms-off" ''
-    if [ -e "''${XDG_RUNTIME_DIR}/sway-keep-screen-on" ]; then
+    if [ -e "''${XDG_RUNTIME_DIR}/sway-keep-screen-on" ] || [ -e "''${XDG_RUNTIME_DIR}/capsomnia/keep-display-awake" ]; then
       exit 0
     fi
     exec swaymsg "output * power off"
@@ -2114,6 +2115,19 @@ let
     # 電源（Chromebook: 電源・Type-C / VAIO: 電源・省電力）
     {
       section = powerSection;
+      label = "Capsomnia（Caps Lock で蓋閉じスリープ抑止・メニュー）";
+      keys = "CapsLock / Super+Alt+c / Waybar ●";
+      run = "${capsomniaPkg}/bin/capsomnia-menu";
+      mode = "exec";
+    }
+    {
+      section = powerSection;
+      label = "Capsomnia 設定画面（画面維持・自動オフタイマー・詳細）";
+      run = "${capsomniaPkg}/bin/capsomnia-settings";
+      mode = "exec";
+    }
+    {
+      section = powerSection;
       label = "輝度 40%（消費の主因を下げる）";
       run = "${brightnessctl} set 40%";
       mode = "exec";
@@ -2545,6 +2559,7 @@ in
         modules-right = [
           "cpu"
           "memory"
+          "custom/capsomnia"
           "custom/keep-screen-on"
           "custom/battery"
           "network"
@@ -2579,6 +2594,18 @@ in
           signal = 8;
           hide-empty-text = true;
           tooltip = true;
+        };
+        # Capsomnia status dot + optional countdown (signal 15 from capsomniad).
+        "custom/capsomnia" = {
+          exec = "${capsomniaPkg}/bin/cpsm waybar";
+          return-type = "json";
+          interval = 5;
+          signal = 15;
+          tooltip = true;
+          hide-empty-text = true;
+          on-click = "${capsomniaPkg}/bin/capsomnia-menu";
+          on-click-right = "${capsomniaPkg}/bin/cpsm toggle --no-sleep";
+          on-click-middle = "${capsomniaPkg}/bin/capsomnia-settings";
         };
         # Keep-screen-on: marker gates swayidle auto-lock / DPMS.
         # (Custom module so the label always matches the skip-lock state.)
@@ -2750,7 +2777,7 @@ in
         color: #9aa7b5;
         padding: 0 8px;
       }
-      #custom-cheatsheet, #cpu, #memory, #custom-keep-screen-on, #custom-battery, #network, #backlight, #pulseaudio, #custom-clock {
+      #custom-cheatsheet, #cpu, #memory, #custom-capsomnia, #custom-keep-screen-on, #custom-battery, #network, #backlight, #pulseaudio, #custom-clock {
         padding: 0 8px;
         color: #9fe7e7;
         /* Stock waybar style + light GTK use white module chrome. */
@@ -2758,6 +2785,19 @@ in
       }
       #custom-cheatsheet {
         color: #33c5c5;
+      }
+      #custom-capsomnia.on {
+        color: #e6edf3;
+        background: #132c20;
+        border-left: 2px solid #34c759;
+      }
+      #custom-capsomnia.off {
+        color: #6b7785;
+      }
+      #custom-capsomnia.error {
+        color: #e06c75;
+        background: #3a1a1e;
+        border-left: 2px solid #e06c75;
       }
       #custom-keep-screen-on.activated {
         color: #e6edf3;

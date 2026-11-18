@@ -8,5 +8,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "disktui" ];
+  system.nixos.tags = [ "capsomnia" ];
 }

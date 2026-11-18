@@ -21,6 +21,7 @@
     ./vivaldi-extensions-repair.nix
     ./vivaldi-pwa-desktop.nix
     ./jquake.nix
+    ./capsomnia.nix
     ./sway.nix
   ];
 
