@@ -109,6 +109,14 @@ let
         ln -s ${pkgs.antigravity}/bin/antigravity $out/bin/antigravity
         ln -s ${pkgs.antigravity}/bin/antigravity $out/bin/agy-raw
       '';
+  antigravityEnsureRcToken = pkgs.writeShellScript "antigravity-ensure-rc-token" ''
+    token="$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
+    if [ ! -s "$token" ]; then
+      # Export the OAuth token from the unlocked keyring for `remote-control serve`.
+      # Ignore the read-only unit write error since the service file is Nix-managed.
+      ${pkgs.antigravity}/bin/antigravity remote-control start >/dev/null 2>&1 || true
+    fi
+  '';
 in
 {
   home.packages = [
@@ -128,6 +136,7 @@ in
 
     Service = {
       Type = "simple";
+      ExecStartPre = "${antigravityEnsureRcToken}";
       ExecStart = "${pkgs.antigravity}/bin/antigravity remote-control serve";
       # user@.service overrides PATH before Sway updates activation env; supply system/profile bins for boot-time linger
       Environment = [
@@ -142,7 +151,10 @@ in
     };
 
     Install = {
-      WantedBy = [ "default.target" ];
+      WantedBy = [
+        "default.target"
+        "graphical-session.target"
+      ];
     };
   };
 
@@ -150,4 +162,6 @@ in
   # `antigravity remote-control` before Nixification); backupFileExtension ignores symlinks.
   xdg.configFile."systemd/user/antigravity-cli-daemon.service".force = true;
   xdg.configFile."systemd/user/default.target.wants/antigravity-cli-daemon.service".force = true;
+  xdg.configFile."systemd/user/graphical-session.target.wants/antigravity-cli-daemon.service".force =
+    true;
 }
