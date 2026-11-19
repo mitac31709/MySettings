@@ -7,6 +7,8 @@
 }:
 let
   machine = import ../../lib/machine.nix;
+  theme = import ../../lib/theme.nix;
+  p = theme.palette;
   hiraginoDir = machine.hiraginoDir;
   # Pure eval cannot read an absolute path outside the flake: pathExists is
   # false, so `nix flake check` and machines without the fonts still evaluate.
@@ -15,7 +17,7 @@ let
   hiraginoEnabled = builtins.pathExists hiraginoDir;
   hasBtrfs = lib.any (fs: (fs.fsType or null) == "btrfs") (lib.attrValues config.fileSystems);
 
-  # Dark candidate panel matching upstream Meltype Windows UI (CandidateWindow.cpp).
+  # Dark candidate panel matching Nocturne Slate theme and Meltype vertical UI.
   meltypeFcitx5Theme = pkgs.runCommand "meltype-fcitx5-theme" { } ''
         dir="$out/share/fcitx5/themes/meltype-dark"
         mkdir -p "$dir"
@@ -24,41 +26,41 @@ let
         done
         cat > "$dir/theme.conf" << 'EOF'
     [Metadata]
-    Name=Meltype Dark
-    Version=1
+    Name=Meltype Nocturne
+    Version=2
     Author=MySettings
-    Description=Dark vertical candidate & meaning pane theme matching upstream Meltype
+    Description=Nocturne Slate dark vertical candidate & meaning pane theme for Meltype
     ScaleWithDPI=True
 
     [InputPanel]
-    NormalColor=#ffffff
-    HighlightCandidateColor=#ffffff
-    HighlightColor=#ffffff
-    HighlightBackgroundColor=#285577
-    CandidateLabelColor=#9aa7b5
-    HighlightCandidateLabelColor=#9fe7e7
+    NormalColor=${p.fg}
+    HighlightCandidateColor=${p.fg}
+    HighlightColor=${p.fg}
+    HighlightBackgroundColor=${p.accentSoft}
+    CandidateLabelColor=${p.fgMuted}
+    HighlightCandidateLabelColor=${p.accent}
     LabelTextSizeFactor=85
-    CandidateCommentColor=#7cc7ff
-    HighlightCandidateCommentColor=#9fe7e7
+    CandidateCommentColor=${p.accentAlt}
+    HighlightCandidateCommentColor=${p.accent}
     CommentTextSizeFactor=80
     FullWidthHighlight=True
     PageButtonAlignment=Bottom
 
     [InputPanel/TextMargin]
-    Left=8
-    Right=8
-    Top=5
-    Bottom=5
+    Left=10
+    Right=10
+    Top=6
+    Bottom=6
 
     [InputPanel/ContentMargin]
-    Left=4
-    Right=4
-    Top=4
-    Bottom=4
+    Left=6
+    Right=6
+    Top=6
+    Bottom=6
 
     [InputPanel/Background]
-    Color=#2c2c2c
-    BorderColor=#454a54
+    Color=${p.surface}
+    BorderColor=${p.border}
     BorderWidth=1
 
     [InputPanel/Background/Margin]
@@ -68,7 +70,7 @@ let
     Bottom=2
 
     [InputPanel/Highlight]
-    Color=#285577
+    Color=${p.accentSoft}
 
     [InputPanel/Highlight/Margin]
     Left=6
@@ -95,13 +97,13 @@ let
     Bottom=5
 
     [Menu]
-    NormalColor=#e6edf3
-    HighlightCandidateColor=#ffffff
+    NormalColor=${p.fg}
+    HighlightCandidateColor=${p.accent}
     Spacing=2
 
     [Menu/Background]
-    Color=#2c2c2c
-    BorderColor=#454a54
+    Color=${p.surface}
+    BorderColor=${p.border}
     BorderWidth=1
 
     [Menu/Background/Margin]
@@ -111,10 +113,10 @@ let
     Bottom=2
 
     [Menu/ContentMargin]
-    Left=2
-    Right=2
-    Top=2
-    Bottom=2
+    Left=4
+    Right=4
+    Top=4
+    Bottom=4
 
     [Menu/CheckBox]
     Image=radio.svg
@@ -123,20 +125,20 @@ let
     Image=arrow.svg
 
     [Menu/Highlight]
-    Color=#285577
+    Color=${p.accentSoft}
 
     [Menu/Highlight/Margin]
-    Left=5
-    Right=5
+    Left=6
+    Right=6
     Top=5
     Bottom=5
 
     [Menu/Separator]
-    Color=#454a54
+    Color=${p.border}
 
     [Menu/TextMargin]
-    Left=5
-    Right=5
+    Left=6
+    Right=6
     Top=5
     Bottom=5
     EOF
@@ -219,7 +221,7 @@ in
     LC_TIME = "ja_JP.UTF-8";
   };
 
-  # Fcitx5 + Meltype only — Sway Wayland
+  # Fcitx5 + Meltype only — Hyprland Wayland
   i18n.inputMethod = {
     enable = true;
     type = "fcitx5";
@@ -250,7 +252,7 @@ in
       "Groups/0/Items/0".Name = "meltype";
     };
     # Avoid Super+Shift / lone-Shift hotkeys that steal compositor chords
-    # (Win+Shift+q, etc.) on the same seat as Sway.
+    # (Win+Shift+q, etc.) on the same seat as Hyprland.
     fcitx5.settings.globalOptions = {
       # Electron + text-input-v3: per-IC active/inactive desyncs; share globally
       # so ChatGPT can leave "English" and return to Meltype.
@@ -272,7 +274,7 @@ in
   # when this is set. Without it Cursor still picks Wayland but does not wire
   # text-input to fcitx5, so Meltype cannot compose. Restart Cursor fully
   # after changing this (single-instance ignores flags on --new-window).
-  environment.sessionVariables.NIXOS_OZONE_WL = "1";
+  environment.sessionVariables.NIXOS_OZONE_WL = lib.mkDefault "1";
 
   fonts.packages =
     with pkgs;

@@ -8,7 +8,7 @@
 
 let
   # keyd command(): invoke kernel OOM killer (SysRq-f). Prefer this over a
-  # Sway bind — compositor may be wedged.
+  # Hyprland bind — compositor may be wedged.
   sysrqOom = pkgs.writeShellScript "sysrq-oom" ''
     ${pkgs.coreutils}/bin/printf f > /proc/sysrq-trigger
   '';

@@ -1,4 +1,5 @@
-# greetd + ReGreet on minimal Hyprland with receive-only Lan Mouse for remote login.
+# greetd + ReGreet on minimal Hyprland (Lua 0.57+ config) with receive-only Lan Mouse
+# for remote login across vaio / chromebook.
 {
   config,
   pkgs,
@@ -8,6 +9,9 @@
 
 let
   lanMouse = import ../../lib/lan-mouse.nix;
+  theme = import ../../lib/theme.nix;
+  p = theme.palette;
+  wallpaperPng = theme.mkWallpaper pkgs;
 
   greeterLanMouseConfig = (pkgs.formats.toml { }).generate "greeter-lan-mouse.toml" {
     port = lanMouse.port;
@@ -41,9 +45,7 @@ let
         kill "$lm_pid" 2>/dev/null || true
         wait "$lm_pid" 2>/dev/null || true
       fi
-      ${pkgs.hyprland}/bin/hyprctl dispatch 'hl.dsp.exit()' >/dev/null 2>&1 \
-        || ${pkgs.hyprland}/bin/hyprctl dispatch exit >/dev/null 2>&1 \
-        || true
+      ${pkgs.hyprland}/bin/hyprctl dispatch 'hl.dsp.exit()' >/dev/null 2>&1 || true
     }
     trap cleanup EXIT INT TERM
 
@@ -55,7 +57,7 @@ let
       output = "",
       mode = "preferred",
       position = "auto",
-      scale = 1,
+      scale = "auto",
     })
 
     hl.on("hyprland.start", function()
@@ -67,7 +69,7 @@ let
         disable_hyprland_logo = true,
         disable_splash_rendering = true,
         force_default_wallpaper = 0,
-        background_color = "rgb(0b0f14)",
+        background_color = "rgb(${p.bgHex})",
       },
       input = {
         kb_layout = "jp",
@@ -105,15 +107,19 @@ in
     enable = true;
     font = {
       package = pkgs.nerd-fonts.jetbrains-mono;
-      name = "JetBrainsMono Nerd Font";
+      name = theme.font.mono;
       size = 12;
     };
     settings = {
       GTK = {
         application_prefer_dark_theme = true;
       };
+      background = {
+        path = "${wallpaperPng}";
+        fit = "Cover";
+      };
       appearance = {
-        greeting_msg = "Welcome (${config.networking.hostName})";
+        greeting_msg = "Welcome · ${config.networking.hostName}";
       };
       commands = {
         reboot = [
@@ -126,18 +132,74 @@ in
         ];
       };
       widget.clock = {
-        format = "%Y-%m-%d %H:%M:%S";
+        format = "%Y-%m-%d (%a)  %H:%M:%S";
         resolution = "1s";
         timezone = "Asia/Tokyo";
       };
     };
     extraCss = ''
       window {
-        background-color: #0b0f14;
-        color: #e6edf3;
+        background-color: ${p.bg};
+        color: ${p.fg};
+        font-family: "${theme.font.mono}", sans-serif;
       }
-      entry, button {
-        border-radius: 0px;
+
+      box, grid {
+        color: ${p.fg};
+      }
+
+      frame, .background > box {
+        border-radius: ${toString theme.radius.popup}px;
+      }
+
+      entry {
+        background-color: rgba(${p.surfaceRgb}, 0.90);
+        color: ${p.fg};
+        border: 1px solid ${p.border};
+        border-radius: ${toString theme.radius.control}px;
+        padding: 8px 12px;
+        caret-color: ${p.accent};
+      }
+
+      entry:focus {
+        border-color: ${p.accent};
+        box-shadow: 0 0 0 1px rgba(${p.accentRgb}, 0.35);
+      }
+
+      button {
+        background-color: rgba(${p.surfaceAltRgb}, 0.92);
+        color: ${p.fg};
+        border: 1px solid ${p.border};
+        border-radius: ${toString theme.radius.control}px;
+        padding: 7px 14px;
+        transition: background-color 140ms ease, border-color 140ms ease;
+      }
+
+      button:hover {
+        background-color: ${p.surfaceHover};
+        border-color: ${p.accent};
+      }
+
+      button.suggested-action {
+        background-color: ${p.accentSoft};
+        color: ${p.accent};
+        border-color: ${p.accent};
+      }
+
+      button.destructive-action {
+        background-color: ${p.dangerSoft};
+        color: ${p.danger};
+        border-color: ${p.danger};
+      }
+
+      combobox button {
+        background-color: rgba(${p.surfaceRgb}, 0.90);
+        border: 1px solid ${p.border};
+        border-radius: ${toString theme.radius.control}px;
+      }
+
+      label {
+        color: ${p.fg};
       }
     '';
   };

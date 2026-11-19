@@ -1,4 +1,4 @@
-# Graphical desktop stack: greeter + Hyprland + console-gui + portals.
+# Graphical desktop stack: Hyprland (UWSM) + greetd/ReGreet + console-gui + portals.
 {
   pkgs,
   ...
@@ -11,15 +11,15 @@
     ./console-gui.nix
   ];
 
-  # Layout + printing (used by the Hyprland session).
-  services.xserver.enable = true;
+  # XKB default layout (used by XWayland / console / greeter) and CUPS printing.
+  # No standalone Xorg server is needed for the pure Wayland Hyprland stack.
   services.xserver.xkb = {
     layout = "jp";
     variant = "";
   };
   services.printing.enable = true;
 
-  # Desktop portals. Hyprland provides its own portal; keep gtk as fallback.
+  # Desktop portals: Hyprland native portal with GTK fallback for file dialogs & settings.
   xdg.portal = {
     enable = true;
     extraPortals = [

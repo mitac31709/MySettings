@@ -270,7 +270,7 @@ in
     })
     (lib.optionalAttrs (hasSecretFile lanMouseSecretFile) {
       # Share one per-host TLS identity across mitac and regreet's greeter so
-      # peers see the same fingerprint at the login screen and in Sway.
+      # peers see the same fingerprint at the login screen and in Hyprland.
       "lan-mouse-pem" = {
         file = secretsDir + "/${lanMouseSecretFile}";
         owner = user;

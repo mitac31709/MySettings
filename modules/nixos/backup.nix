@@ -90,7 +90,7 @@ let
 
   # Desktop notifications via the logged-in user's session bus.
   # Same replace-id so start / finish collapse into one bubble.
-  # Mid-run progress is shown on the Sway waybar panel (status file below).
+  # Mid-run progress is shown on the Hyprland waybar panel (status file below).
   notifySend = lib.getExe pkgs.libnotify;
   notifyHint = "string:x-canonical-private-synchronous:restic-home";
 

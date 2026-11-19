@@ -1,6 +1,7 @@
-# Hyprland Home Manager: primary desktop (UWSM) — waybar / mako / hypridle / hyprlock.
-# Visual language stays terminal/greeter-adjacent (dark + cyan).
-# Launcher: rofi (drun). Keyboard layout: jp. Lock/idle: hyprlock/hypridle. Wallpaper: hyprpaper.
+# Hyprland Home Manager: standard Hyprland 0.57+ Lua desktop (UWSM).
+# Visual system: Nocturne Slate (lib/theme.nix) — translucent dark slate, glacial teal
+# & arctic sky accents, rounded geometry, blur/shadow depth, fluid spring/bezier motion.
+# Ecosystem: hyprpaper, hyprlock, hypridle, hyprshot, hyprpicker, satty, waybar, rofi, mako.
 {
   config,
   pkgs,
@@ -10,19 +11,56 @@
 }:
 
 let
+  theme = import ../lib/theme.nix;
+  p = theme.palette;
+  wallpaperPng = theme.mkWallpaper pkgs;
+
   isChromebook = flakeTarget == "chromebook";
   inputSection = if isChromebook then "入力・Chromebook" else "入力・VAIO";
   powerSection = if isChromebook then "電源・Type-C" else "電源・省電力";
-  # Checkout for the waybar timer's ConditionPathExists. Scripts are store paths.
   repoPath = config.mitac.repoPath;
   flakeUpdateCheck = lib.getExe config.mitac.scripts.flakeUpdateCheck;
   flakeUpdate = lib.getExe config.mitac.scripts.flakeUpdate;
   startupSoundBin = lib.getExe config.mitac.scripts.startupSound;
-  # Family string from nerd-fonts.jetbrains-mono (same as Ghostty).
-  # CSS does not name a CJK face. Missing glyphs go through fontconfig's
-  # defaultFonts (Hiragino, then Noto Sans CJK JP).
-  waybarFont = "JetBrainsMono Nerd Font";
+
+  waybarFont = theme.font.mono;
   ghosttyBin = "${pkgs.ghostty}/bin/ghostty";
+  rofiBin = lib.getExe config.programs.rofi.package;
+  yaziBin = "${pkgs.yazi}/bin/yazi";
+  hyprlockBin = "${pkgs.hyprlock}/bin/hyprlock";
+  hyprpickerBin = "${pkgs.hyprpicker}/bin/hyprpicker";
+  hyprctlBin = "${pkgs.hyprland}/bin/hyprctl";
+  pactl = "${pkgs.pulseaudio}/bin/pactl";
+  brightnessctl = "${pkgs.brightnessctl}/bin/brightnessctl";
+  btopBin = "${pkgs.btop}/bin/btop";
+  nmtuiBin = "${pkgs.networkmanager}/bin/nmtui";
+
+  # Safe wrapper for Hyprland 0.57+ Lua `hl.dsp.exec_cmd(...)` via hyprctl dispatch.
+  # Accepts either a single shell command string or argv tokens.
+  hyprExec = pkgs.writeShellApplication {
+    name = "hypr-exec";
+    runtimeInputs = [
+      pkgs.hyprland
+      pkgs.jq
+    ];
+    text = ''
+      if [ "$#" -eq 0 ]; then
+        exit 0
+      fi
+      if [ "$#" -eq 1 ]; then
+        cmd="$1"
+      else
+        cmd=""
+        for arg in "$@"; do
+          cmd+="''${cmd:+ }$(printf '%q' "$arg")"
+        done
+      fi
+      lua_expr="$(jq -Rn --arg c "$cmd" '"hl.dsp.exec_cmd(" + ($c | tojson) + ")"')"
+      exec ${hyprctlBin} dispatch "$lua_expr" >/dev/null
+    '';
+  };
+  hyprExecBin = lib.getExe hyprExec;
+
   flakeUpdateRunner = pkgs.writeShellScript "open-flake-update" ''
     rc=0
     ${flakeUpdate} || rc=$?
@@ -30,16 +68,8 @@ let
     IFS= read -r _ || true
   '';
   openFlakeUpdate = "${ghosttyBin} -e ${flakeUpdateRunner}";
-  rofiBin = lib.getExe config.programs.rofi.package;
-  yaziBin = "${pkgs.yazi}/bin/yazi";
-  hyprlockBin = "${pkgs.hyprlock}/bin/hyprlock";
-  hypridleBin = "${pkgs.hypridle}/bin/hypridle";
-  hyprshotBin = "${pkgs.hyprshot}/bin/hyprshot";
-  hyprpickerBin = "${pkgs.hyprpicker}/bin/hyprpicker";
-  hyprctlBin = "${pkgs.hyprland}/bin/hyprctl";
-  polkitAgent = lib.getExe pkgs.hyprpolkitagent;
-  pactl = "${pkgs.pulseaudio}/bin/pactl";
-  # pactl +N% has no ceiling; PulseAudio happily goes past 100% (soft boost).
+
+  # pactl +N% has no ceiling; cap volume at 100% to avoid soft-boost distortion.
   volumeUp = pkgs.writeShellScript "volume-up" ''
     out="$(${pactl} get-sink-volume @DEFAULT_SINK@)" || exit 1
     if [[ "$out" =~ ([0-9]+)% ]]; then
@@ -53,13 +83,6 @@ let
     fi
     exec ${pactl} set-sink-volume @DEFAULT_SINK@ "''${new}%"
   '';
-  brightnessctl = "${pkgs.brightnessctl}/bin/brightnessctl";
-  btopBin = "${pkgs.btop}/bin/btop";
-  nmtuiBin = "${pkgs.networkmanager}/bin/nmtui";
-  grim = "${pkgs.grim}/bin/grim";
-  slurp = "${pkgs.slurp}/bin/slurp";
-  wlCopy = "${pkgs.wl-clipboard}/bin/wl-copy";
-
 
   screenshotBin = pkgs.writeShellApplication {
     name = "screenshot";
@@ -112,7 +135,7 @@ let
           --actions-on-enter save-to-clipboard \
           --actions-on-enter exit \
           --actions-on-escape exit \
-          --corner-roundness 8
+          --corner-roundness ${toString theme.radius.window}
       }
 
       tmp="$(mktemp --suffix=.png)"
@@ -154,23 +177,38 @@ let
     '';
   };
 
-  # Presentation marker toggled with waybar scr / scr ON. XDG_RUNTIME_DIR is
-  # session-scoped, so it clears on logout. Idle auto-lock / DPMS no-op while set.
-  lockCmd = "${pkgs.hyprlock}/bin/hyprlock";
+  # Presentation marker toggled with waybar keep-screen-on button.
+  # XDG_RUNTIME_DIR is session-scoped so it clears automatically on logout.
+  lockOnceCmd = pkgs.writeShellScript "hypr-lock-once" ''
+    if ${pkgs.procps}/bin/pgrep -x hyprlock >/dev/null 2>&1; then
+      exit 0
+    fi
+    exec ${hyprlockBin}
+  '';
+  idleDimCmd = pkgs.writeShellScript "hypr-idle-dim" ''
+    if [ -e "''${XDG_RUNTIME_DIR}/hypr-keep-screen-on" ]; then
+      exit 0
+    fi
+    ${brightnessctl} -s set 20% >/dev/null 2>&1 || true
+  '';
+  idleUndimCmd = pkgs.writeShellScript "hypr-idle-undim" ''
+    ${brightnessctl} -r >/dev/null 2>&1 || true
+  '';
   idleLockCmd = pkgs.writeShellScript "hypr-idle-lock" ''
     if [ -e "''${XDG_RUNTIME_DIR}/hypr-keep-screen-on" ]; then
       exit 0
     fi
-    exec ${pkgs.hyprlock}/bin/hyprlock
+    exec ${lockOnceCmd}
   '';
   idleDpmsOffCmd = pkgs.writeShellScript "hypr-idle-dpms-off" ''
     if [ -e "''${XDG_RUNTIME_DIR}/hypr-keep-screen-on" ]; then
       exit 0
     fi
-    exec ${pkgs.hyprland}/bin/hyprctl dispatch dpms off
+    exec ${hyprctlBin} dispatch 'hl.dsp.dpms("off")'
   '';
   idleDpmsOnCmd = pkgs.writeShellScript "hypr-idle-dpms-on" ''
-    exec ${pkgs.hyprland}/bin/hyprctl dispatch dpms on
+    ${hyprctlBin} dispatch 'hl.dsp.dpms("on")' >/dev/null 2>&1 || true
+    ${brightnessctl} -r >/dev/null 2>&1 || true
   '';
   toggleKeepScreenOn = pkgs.writeShellScript "hypr-toggle-keep-screen-on" ''
     marker="''${XDG_RUNTIME_DIR}/hypr-keep-screen-on"
@@ -179,19 +217,19 @@ let
     else
       touch "$marker"
     fi
+    ${pkgs.procps}/bin/pkill -SIGRTMIN+14 -x waybar >/dev/null 2>&1 || true
   '';
   waybarKeepScreenOn = pkgs.writeShellScript "waybar-keep-screen-on" ''
     marker="''${XDG_RUNTIME_DIR}/hypr-keep-screen-on"
     if [ -e "$marker" ]; then
-      printf '%s\n' '{"text":"scr ON","class":"activated","tooltip":"画面常時オン（ロック・消灯なし／クリックで解除）"}'
+      printf '%s\n' '{"text":"󰅶 ON","class":"activated","tooltip":"画面常時オン（減光・ロック・消灯なし／クリックで解除）"}'
     else
-      printf '%s\n' '{"text":"scr","class":"deactivated","tooltip":"画面を常時オンにする（ロック・消灯を抑制）"}'
+      printf '%s\n' '{"text":"󰾪","class":"deactivated","tooltip":"画面を常時オンにする（減光・ロック・消灯を抑制）"}'
     fi
   '';
-  # Route launches through hyprctl dispatch exec so new windows land on the
-  # active workspace at selection time.
-  rofiLauncher = "${rofiBin} -show drun -run-command \"${pkgs.hyprland}/bin/hyprctl dispatch exec -- {cmd}\" -run-shell-command \"${pkgs.hyprland}/bin/hyprctl dispatch exec -- {terminal} -e {cmd}\"";
-  # waybar cpu / mem → Ghostty + btop; network → Ghostty + nmtui; clock → NTP sync
+
+  # Route Rofi launches through hypr-exec so new windows spawn on the active workspace.
+  rofiLauncher = "${rofiBin} -show drun -run-command \"${hyprExecBin} {cmd}\" -run-shell-command \"${hyprExecBin} ${ghosttyBin} -e {cmd}\"";
   openBtop = "${ghosttyBin} -e ${btopBin}";
   openNmtui = "${ghosttyBin} -e ${nmtuiBin}";
   openYazi = "${ghosttyBin} -e ${yaziBin}";
@@ -200,7 +238,7 @@ let
     export LC_ALL=C
     export TZDIR="${pkgs.tzdata}/share/zoneinfo"
     printf -v now '%(%s)T' -1
-    TZ="Asia/Tokyo" printf -v bar '%(%a %m-%d %H:%M:%S)T' "$now"
+    TZ="Asia/Tokyo" printf -v bar '%(%a %m-%d  %H:%M:%S)T' "$now"
     lines=""
     sep='\n'
     for tz in Asia/Tokyo UTC America/Los_Angeles Asia/Shanghai; do
@@ -287,12 +325,11 @@ let
     '';
   };
 
-  # Dedicated left-bar JQuake slot: status indicator + click-to-open + right-click menu.
+  # Dedicated left-dock JQuake slot: status indicator + click-to-open + right-click menu.
   waybarJquake = pkgs.writeShellApplication {
     name = "waybar-jquake";
     runtimeInputs = [
       pkgs.coreutils
-      pkgs.jq
       pkgs.hyprland
       pkgs.jq
       pkgs.systemd
@@ -309,7 +346,7 @@ let
       al_s="''${ust[2]:-unknown}"
 
       is_open=0
-      if ${pkgs.hyprland}/bin/hyprctl clients -j 2>/dev/null | ${pkgs.jq}/bin/jq -e '[.[] | select(.class == "net-jquake-app-Main")] | length > 0' >/dev/null; then
+      if ${hyprctlBin} clients -j 2>/dev/null | jq -e '[.[] | select(.class == "net-jquake-app-Main")] | length > 0' >/dev/null; then
         is_open=1
       fi
 
@@ -340,11 +377,10 @@ let
     name = "waybar-jquake-open";
     runtimeInputs = [
       pkgs.coreutils
+      pkgs.hyprland
       pkgs.jq
       pkgs.libnotify
       pkgs.stalonetray
-      pkgs.hyprland
-      pkgs.jq
       pkgs.systemd
     ];
     text = ''
@@ -364,8 +400,8 @@ let
         refresh_jquake_bar
       fi
 
-      if ${pkgs.hyprland}/bin/hyprctl clients -j 2>/dev/null | ${pkgs.jq}/bin/jq -e '[.[] | select(.class == "net-jquake-app-Main")] | length > 0' >/dev/null; then
-        ${pkgs.hyprland}/bin/hyprctl dispatch focuswindow class:^net-jquake-app-Main$ >/dev/null 2>&1 || true
+      if ${hyprctlBin} clients -j 2>/dev/null | jq -e '[.[] | select(.class == "net-jquake-app-Main")] | length > 0' >/dev/null; then
+        ${hyprctlBin} dispatch 'hl.dsp.focus({ window = "class:^net-jquake-app-Main$" })' >/dev/null 2>&1 || true
         refresh_jquake_bar
         exit 0
       fi
@@ -373,9 +409,7 @@ let
       disp="''${DISPLAY:-:0}"
       clicked=0
       for _ in $(seq 1 40); do
-        # Target AWT's child canvas directly: stalonetray's x11_find_subwindow_at
-        # exits immediately (`old = None` checked as `old != None`), so clicking
-        # JavaEmbeddedFrame stops at the wrapper frame and misses XTrayIconPeer.
+        # Target AWT's child canvas directly so stalonetray hits XTrayIconPeer.
         if stalonetray -display "$disp" \
           --remote-click-icon sun-awt-X11-XCanvasPeer \
           --remote-click-button 1 \
@@ -393,10 +427,8 @@ let
       fi
 
       for _ in $(seq 1 20); do
-        if ${pkgs.hyprland}/bin/hyprctl clients -j 2>/dev/null | ${pkgs.jq}/bin/jq -e '
-          [.[] | select(.class == "net-jquake-app-Main")] | length > 0
-        ' >/dev/null; then
-          ${pkgs.hyprland}/bin/hyprctl dispatch focuswindow class:^net-jquake-app-Main$ >/dev/null 2>&1 || true
+        if ${hyprctlBin} clients -j 2>/dev/null | jq -e '[.[] | select(.class == "net-jquake-app-Main")] | length > 0' >/dev/null; then
+          ${hyprctlBin} dispatch 'hl.dsp.focus({ window = "class:^net-jquake-app-Main$" })' >/dev/null 2>&1 || true
           break
         fi
         sleep 0.1
@@ -515,18 +547,18 @@ let
         local state="$1" glyph="$2"
         case "$state" in
           active)
-            lines+=("<span color='#9fe7e7'>''${glyph}</span>")
+            lines+=("<span color='${p.fgSecondary}'>''${glyph}</span>")
             ;;
           running)
-            lines+=("<span color='#33c5c5'>''${glyph}</span>")
+            lines+=("<span color='${p.accent}'>''${glyph}</span>")
             ;;
           failed)
             mark_level failed
-            lines+=("<span color='#e06c75'>''${glyph}</span>")
+            lines+=("<span color='${p.danger}'>''${glyph}</span>")
             ;;
           *)
             mark_level warn
-            lines+=("<span color='#e5c07b'>''${glyph}</span>")
+            lines+=("<span color='${p.warning}'>''${glyph}</span>")
             ;;
         esac
       }
@@ -596,10 +628,9 @@ let
       pkgs.coreutils
       pkgs.ghostty
       pkgs.rofi
-      pkgs.hyprland
-      pkgs.jq
       pkgs.systemd
       pkgs.yazi
+      hyprExec
     ];
     text = ''
             u_state() { systemctl --user is-active "$1" 2>/dev/null || true; }
@@ -660,7 +691,7 @@ let
                 refresh_bar
                 ;;
               *"UniClipboard"*"GUI を開く")
-                exec ${pkgs.hyprland}/bin/hyprctl dispatch exec -- uniclipboard
+                exec ${hyprExecBin} uniclipboard
                 ;;
               *"LAN Mouse"*"再起動")
                 systemctl --user restart lan-mouse.service
@@ -675,7 +706,7 @@ let
                 refresh_bar
                 ;;
               *"LAN Mouse"*"GUI を開く")
-                exec ${pkgs.hyprland}/bin/hyprctl dispatch exec -- lan-mouse
+                exec ${hyprExecBin} lan-mouse
                 ;;
               *"Taildrop Receive"*"再起動")
                 systemctl --user restart taildrop-receive.service
@@ -690,17 +721,17 @@ let
                 refresh_bar
                 ;;
               *"Taildrop"*"yazi"*)
-                exec ${pkgs.hyprland}/bin/hyprctl dispatch exec -- "${ghosttyBin} -e ${yaziBin} \"$HOME/Downloads\""
+                exec ${hyprExecBin} "${ghosttyBin}" -e "${yaziBin}" "$HOME/Downloads"
                 ;;
               *"Cliphist"*"再起動")
                 systemctl --user restart cliphist-text.service cliphist-image.service
                 refresh_bar
                 ;;
               *"Cliphist"*"履歴メニューを開く")
-                exec ${pkgs.hyprland}/bin/hyprctl dispatch exec -- clipboard-history
+                exec ${hyprExecBin} clipboard-history
                 ;;
               *"Tailscale"*"Trayscale"*)
-                exec ${pkgs.hyprland}/bin/hyprctl dispatch exec -- trayscale
+                exec ${hyprExecBin} trayscale
                 ;;
               *"Tailscale"*"tailscale status"*)
                 run_term "tailscale status"
@@ -726,7 +757,7 @@ let
   # Searchable / clickable cheatsheet (rofi -dmenu).
   # - keys only → notify-send (no key injection)
   # - run + mode=term → Ghostty interactive shell
-  # - run + mode=exec → hyprctl dispatch exec (one-shot)
+  # - run + mode=exec → hypr-exec (Hyprland hl.dsp.exec_cmd)
   # - run + mode=show → Ghostty shows command; does not run (dangerous)
   cheatsheetEntries = lib.flatten [
     # 起動・終了
@@ -737,7 +768,7 @@ let
     }
     {
       section = "起動・終了";
-      label = "rofi（選択中 WS に起動）";
+      label = "rofi（アクティブ WS に起動）";
       keys = "Super+D / Alt+Space";
     }
     {
@@ -749,7 +780,7 @@ let
     {
       section = "起動・終了";
       label = "ウィンドウを閉じる";
-      keys = "Super+q";
+      keys = "Super+Q / Super+Shift+Q";
     }
     {
       section = "起動・終了";
@@ -758,8 +789,15 @@ let
     }
     {
       section = "起動・終了";
-      label = "設定反映 / Hyprland 終了";
-      keys = "hyprctl reload / Super+M なし (UWSM/再ログイン運用)";
+      label = "Hyprland 設定リロード";
+      run = "${hyprctlBin} reload config-only";
+      mode = "exec";
+    }
+    {
+      section = "起動・終了";
+      label = "ログアウト (Hyprland 終了)";
+      run = "uwsm stop";
+      mode = "show";
     }
     {
       section = "起動・終了";
@@ -780,57 +818,73 @@ let
     }
     {
       section = "起動・終了";
-      label = "注: ELECOM は Win+Shift 同時押しが欠けること有 → Super+q 等";
+      label = "注: ELECOM は Win+Shift 同時押しが欠けること有 → Super+Q 等";
     }
     # ウィンドウ・WS
     {
       section = "ウィンドウ・WS";
-      label = "フォーカス（右は Right）";
-      keys = "Super+hjkl / 矢印";
+      label = "フォーカス移動（右は Right、Super+L はロック）";
+      keys = "Super+矢印 / Super+H/J/K";
     }
     {
       section = "ウィンドウ・WS";
       label = "ウィンドウ移動";
-      keys = "Super+Shift+hjkl";
+      keys = "Super+Shift+矢印 / H/J/K/L";
     }
     {
       section = "ウィンドウ・WS";
-      label = "フルスクリーン / リサイズ";
-      keys = "Super+f / r";
+      label = "フルスクリーン / 最大化（バー維持）";
+      keys = "Super+F / Super+Shift+F";
     }
     {
       section = "ウィンドウ・WS";
-      label = "フローティング切替";
-      keys = "Super+Shift+Space";
+      label = "リサイズモード（矢印/hjkl, Esc/Enter終了）";
+      keys = "Super+R";
     }
     {
       section = "ウィンドウ・WS";
-      label = "水平 / 垂直分割";
-      keys = "Super+b / v";
+      label = "フローティング切替 / 中央寄せ";
+      keys = "Super+Shift+Space / Super+C";
     }
     {
       section = "ウィンドウ・WS";
-      label = "スタック / タブ";
-      keys = "Super+s / w";
+      label = "分割方向トグル / 疑似タイル (dwindle)";
+      keys = "Super+B / Super+P";
     }
     {
       section = "ウィンドウ・WS";
-      label = "WS 切替 / ウィンドウを移動";
-      keys = "Super+1…9 / Shift+1…9";
+      label = "グループ（タブ）切替 / タブ移動 / ロック";
+      keys = "Super+G / Super+(Shift+)Tab / Super+Alt+G";
     }
     {
       section = "ウィンドウ・WS";
-      label = "外部リンク → Vivaldi へフォーカス（必要に応じ windowrule で調整）";
+      label = "スクラッチパッド表示 / 退避 (special:magic)";
+      keys = "Super+S / Super+Alt+S";
     }
     {
       section = "ウィンドウ・WS";
-      label = "注: Super+e は Yazi、Super+b で分割方向トグル (Hyprland)";
+      label = "WS 切替 / ウィンドウ移動（1〜9, 0=10）";
+      keys = "Super+1…0 / Super+Shift+1…0";
+    }
+    {
+      section = "ウィンドウ・WS";
+      label = "マウス移動・リサイズ / WS スクロール";
+      keys = "Super+左・右ドラッグ / Super+ホイール";
+    }
+    {
+      section = "ウィンドウ・WS";
+      label = "タッチパッド WS 切替";
+      keys = "3本指 水平スワイプ";
+    }
+    {
+      section = "ウィンドウ・WS";
+      label = "注: Super+E は Yazi、外部リンクは Vivaldi へ自動フォーカス";
     }
     # スクショ・音量・輝度・履歴
     {
       section = "スクショ・音量・輝度";
       label = "範囲選択 → Satty 編集・コピー (hyprshot)";
-      keys = "Super+Shift+s / Shift+Print";
+      keys = "Super+Shift+S / Shift+Print";
       run = "${lib.getExe screenshotBin} region";
       mode = "exec";
     }
@@ -852,6 +906,13 @@ let
       section = "スクショ・音量・輝度";
       label = "スクショメニュー（即コピー含む）";
       run = "${lib.getExe screenshotBin} menu";
+      mode = "exec";
+    }
+    {
+      section = "スクショ・音量・輝度";
+      label = "カラーピッカー（コピー）";
+      keys = "Super+Shift+P";
+      run = "${hyprpickerBin} -a";
       mode = "exec";
     }
     {
@@ -999,7 +1060,7 @@ let
     {
       section = "Yazi / Neovim";
       label = "Yazi（Ghostty 内）";
-      keys = "Super+e";
+      keys = "Super+E";
       run = yaziBin;
       mode = "term";
     }
@@ -1052,37 +1113,37 @@ let
     {
       section = "Waybar・日常";
       label = "チートシート / 常時オン切替";
-      keys = "? / scr";
+      keys = "? / 󰾪 (上バー)";
     }
     {
       section = "Waybar・日常";
       label = "btop";
-      keys = "cpu·mem クリック";
+      keys = "CPU/MEM クリック";
       run = btopBin;
       mode = "term";
     }
     {
       section = "Waybar・日常";
       label = "nmtui";
-      keys = "net クリック";
+      keys = "ネットクリック";
       run = nmtuiBin;
       mode = "term";
     }
     {
       section = "Waybar・日常";
       label = "NTP 時刻同期";
-      keys = "時計クリック";
+      keys = "中央時計クリック";
       run = lib.getExe ntpSync;
       mode = "exec";
     }
     {
       section = "Waybar・日常";
       label = "バックアップ進捗";
-      keys = "[restic]（WS の右）";
+      keys = "[restic]（上バー WS の右）";
     }
     {
       section = "Waybar・日常";
-      label = "10分ロック / 15分画面オフ (hypridle)";
+      label = "5分暗転 / 10分ロック / 15分消灯 (hypridle)";
       keys = "無操作";
     }
     {
@@ -1157,7 +1218,7 @@ let
     # NixOS
     {
       section = "NixOS";
-      label = "更新チェック（waybar upd）";
+      label = "更新チェック（左バー ）";
       run = "flake-update-check";
       mode = "term";
     }
@@ -1917,7 +1978,7 @@ let
     }
     {
       section = "周辺";
-      label = "JQuake 表示（左 waybar クリックでも可）";
+      label = "JQuake 表示（左バー クリックでも可）";
       run = "${lib.getExe waybarJquakeOpen}";
       mode = "exec";
     }
@@ -1973,15 +2034,15 @@ let
         pkgs.jq
         pkgs.libnotify
         pkgs.rofi
-        pkgs.hyprland
         pkgs.ghostty
         pkgs.bash
+        hyprExec
       ]
     }:$PATH"
     data="${cheatsheetJson}"
     choice=$(
       jq -r '.[].display' "$data" \
-        | ${rofiBin} -dmenu -i -p '?' -no-custom
+        | ${rofiBin} -dmenu -i -p 'チートシート' -no-custom
     ) || exit 0
     [ -n "$choice" ] || exit 0
 
@@ -2004,7 +2065,7 @@ let
 
     case "$mode" in
       exec)
-        exec ${pkgs.hyprland}/bin/hyprctl dispatch exec -- ${pkgs.bash}/bin/bash -c "$run"
+        exec ${hyprExecBin} "${pkgs.bash}/bin/bash" -c "$run"
         ;;
       show)
         export CHEAT_RUN="$run"
@@ -2018,8 +2079,6 @@ let
   '';
 in
 {
-  # On PATH once. Linked for convenience in the Hyprland session.
-  # Binds still call the store paths above, which are the same packages.
   home.packages = [
     pkgs.hyprpaper
     pkgs.hypridle
@@ -2027,70 +2086,199 @@ in
     pkgs.hyprpicker
     pkgs.hyprshot
     pkgs.satty
-    screenshotBin
     pkgs.brightnessctl
     pkgs.jq
+    hyprExec
+    screenshotBin
   ];
+
+  # Unified Rofi Polkit authentication agent managed under UWSM graphical-session.target.
+  systemd.user.services.rofi-polkit-agent = {
+    Unit = {
+      Description = "Rofi Polkit Authentication Agent (cmd-polkit)";
+      PartOf = [ "graphical-session.target" ];
+      After = [ "graphical-session.target" ];
+      StartLimitIntervalSec = 30;
+      StartLimitBurst = 3;
+    };
+    Service = {
+      ExecStart = "${lib.getExe pkgs.cmd-polkit} -s -c ${lib.getExe' pkgs.rofi-prompt "rofi-polkit"}";
+      Restart = "on-failure";
+      RestartSec = 2;
+    };
+    Install = {
+      WantedBy = [ "graphical-session.target" ];
+    };
+  };
 
   wayland.windowManager.hyprland = {
     enable = true;
-    package = null; # system programs.hyprland
-    portalPackage = null;
-    systemd.enable = false; # UWSM manages the session
+    package = null; # Provided by NixOS programs.hyprland
+    portalPackage = null; # Provided by NixOS xdg.portal
+    systemd.enable = false; # UWSM manages graphical-session.target
     xwayland.enable = true;
+
     settings = {
       monitor = {
         output = "";
         mode = "preferred";
         position = "auto";
-        scale = 1;
+        scale = "auto";
       };
+
       config = {
+        general = {
+          gaps_in = 5;
+          gaps_out = 10;
+          border_size = 2;
+          resize_on_border = true;
+          allow_tearing = false;
+          layout = "dwindle";
+          col = {
+            active_border = {
+              colors = [
+                "rgba(${p.accentHex}ee)"
+                "rgba(${p.accentAltHex}ee)"
+              ];
+              angle = 45;
+            };
+            inactive_border = "rgba(${p.borderHex}aa)";
+            nogroup_border = "rgba(${p.borderHex}aa)";
+            nogroup_border_active = "rgba(${p.warningHex}ee)";
+          };
+        };
+
+        decoration = {
+          rounding = theme.radius.window;
+          rounding_power = 2;
+          active_opacity = 1.0;
+          inactive_opacity = 0.96;
+          shadow = {
+            enabled = true;
+            range = 18;
+            render_power = 3;
+            offset = [
+              0
+              4
+            ];
+            color = "rgba(05080d66)";
+          };
+          blur = {
+            enabled = true;
+            size = 6;
+            passes = 2;
+            new_optimizations = true;
+            vibrancy = 0.16;
+          };
+        };
+
+        animations = {
+          enabled = true;
+        };
+
+        dwindle = {
+          preserve_split = true;
+          smart_resizing = true;
+        };
+
+        group = {
+          col = {
+            border_active = "rgba(${p.accentHex}ee)";
+            border_inactive = "rgba(${p.borderHex}aa)";
+            border_locked_active = "rgba(${p.warningHex}ee)";
+            border_locked_inactive = "rgba(${p.borderHex}aa)";
+          };
+          groupbar = {
+            enabled = true;
+            font_family = theme.font.mono;
+            font_size = 11;
+            height = 22;
+            indicator_height = 2;
+            rounding = 6;
+            gaps_in = 4;
+            gaps_out = 4;
+            col = {
+              active = "rgba(${p.accentSoftHex}ee)";
+              inactive = "rgba(${p.surfaceHex}dd)";
+              locked_active = "rgba(${p.warningHex}44)";
+              locked_inactive = "rgba(${p.surfaceHex}dd)";
+            };
+            text_color = "rgb(${p.fgHex})";
+            text_color_inactive = "rgb(${p.fgMutedHex})";
+          };
+        };
+
         input = {
           kb_layout = "jp";
           numlock_by_default = true;
           follow_mouse = 1;
+          sensitivity = 0;
           touchpad = {
             natural_scroll = false;
             tap_to_click = true;
             clickfinger_behavior = true;
             disable_while_typing = false;
+          }
+          // lib.optionalAttrs (!isChromebook) {
+            scroll_factor = 0.6;
           };
         };
-        general = {
-          gaps_in = 4;
-          gaps_out = 4;
-          border_size = 2;
-          col = {
-            active_border = "rgb(33c5c5)";
-            inactive_border = "rgb(1c2430)";
-          };
-          layout = "dwindle";
-        };
-        decoration = {
-          rounding = 0;
-          shadow = {
-            enabled = false;
-          };
-          blur = {
-            enabled = false;
-          };
-        };
-        animations = {
-          enabled = true;
-        };
+
         misc = {
           disable_hyprland_logo = true;
           disable_splash_rendering = true;
           force_default_wallpaper = 0;
-          background_color = "rgb(0b0f14)";
+          background_color = "rgb(${p.bgHex})";
           focus_on_activate = true;
+          mouse_move_enables_dpms = true;
+          key_press_enables_dpms = true;
+          animate_manual_resizes = true;
+          animate_mouse_windowdragging = true;
         };
-        dwindle = {
-          preserve_split = true;
+
+        binds = {
+          movefocus_cycles_fullscreen = true;
+          movefocus_cycles_groupfirst = true;
+        };
+
+        layers = {
+          allow_new_top_layers_over_existing_fullscreen = true;
+        };
+
+        xwayland = {
+          force_zero_scaling = true;
         };
       };
+
+      gesture = [
+        {
+          fingers = 3;
+          direction = "horizontal";
+          action = "workspace";
+        }
+      ];
+
       window_rule = [
+        # Standard Hyprland rules: ignore unsolicited maximize events and XWayland ghost drags.
+        {
+          name = "suppress-maximize-events";
+          match = {
+            class = ".*";
+          };
+          suppress_event = "maximize";
+        }
+        {
+          name = "fix-xwayland-drags";
+          match = {
+            class = "^$";
+            title = "^$";
+            xwayland = true;
+            float = true;
+            fullscreen = false;
+            pin = false;
+          };
+          no_focus = true;
+        }
         {
           name = "showmethekey-gtk";
           match = {
@@ -2115,89 +2303,209 @@ in
           };
           float = true;
         }
+        {
+          name = "portal-dialogs";
+          match = {
+            class = "^(xdg-desktop-portal-gtk)$";
+          };
+          float = true;
+        }
+      ];
+
+      layer_rule = [
+        {
+          name = "waybar-frosted";
+          match = {
+            namespace = "^waybar$";
+          };
+          blur = true;
+          ignore_alpha = 0.25;
+        }
+        {
+          name = "rofi-frosted";
+          match = {
+            namespace = "^rofi$";
+          };
+          blur = true;
+          ignore_alpha = 0.2;
+          animation = "popin 92%";
+        }
+        {
+          name = "mako-notifications";
+          match = {
+            namespace = "^notifications$";
+          };
+          blur = true;
+          ignore_alpha = 0.2;
+          animation = "slide right";
+        }
       ];
     };
-    extraConfig = ''
-      local mod = "SUPER"
 
+    extraConfig = ''
+      -- Cursor size
+      hl.env("XCURSOR_SIZE", "24")
+      hl.env("HYPRCURSOR_SIZE", "24")
+
+      -- Curves & fluid motion (Hyprland 0.57+ Lua animation spec)
+      hl.curve("easeOutQuint", { type = "bezier", points = { { 0.23, 1 }, { 0.32, 1 } } })
+      hl.curve("smoothOut",    { type = "bezier", points = { { 0.16, 1 }, { 0.30, 1 } } })
+      hl.curve("almostLinear", { type = "bezier", points = { { 0.5, 0.5 }, { 0.75, 1 } } })
+      hl.curve("quick",        { type = "bezier", points = { { 0.15, 0 }, { 0.1, 1 } } })
+      hl.curve("snappy",       { type = "spring", mass = 1, stiffness = 260, damping = 26 })
+
+      hl.animation({ leaf = "global",           enabled = true, speed = 8,    bezier = "easeOutQuint" })
+      hl.animation({ leaf = "border",           enabled = true, speed = 4.5,  bezier = "easeOutQuint" })
+      hl.animation({ leaf = "windows",          enabled = true, speed = 4.5,  spring = "snappy" })
+      hl.animation({ leaf = "windowsIn",        enabled = true, speed = 4.0,  spring = "snappy", style = "popin 88%" })
+      hl.animation({ leaf = "windowsOut",       enabled = true, speed = 1.6,  bezier = "quick",  style = "popin 88%" })
+      hl.animation({ leaf = "fadeIn",           enabled = true, speed = 1.8,  bezier = "almostLinear" })
+      hl.animation({ leaf = "fadeOut",          enabled = true, speed = 1.5,  bezier = "almostLinear" })
+      hl.animation({ leaf = "fade",             enabled = true, speed = 2.8,  bezier = "quick" })
+      hl.animation({ leaf = "layers",           enabled = true, speed = 3.6,  bezier = "smoothOut" })
+      hl.animation({ leaf = "layersIn",         enabled = true, speed = 3.6,  bezier = "smoothOut", style = "fade" })
+      hl.animation({ leaf = "layersOut",        enabled = true, speed = 1.6,  bezier = "quick",     style = "fade" })
+      hl.animation({ leaf = "fadeLayersIn",     enabled = true, speed = 1.8,  bezier = "almostLinear" })
+      hl.animation({ leaf = "fadeLayersOut",    enabled = true, speed = 1.4,  bezier = "almostLinear" })
+      hl.animation({ leaf = "workspaces",       enabled = true, speed = 3.2,  bezier = "smoothOut", style = "slide" })
+      hl.animation({ leaf = "specialWorkspace", enabled = true, speed = 3.4,  bezier = "smoothOut", style = "slidevert" })
+
+      -- Session startup hooks (Polkit, Waybar, Hyprpaper, Hypridle, Cliphist run via systemd user units)
       hl.on("hyprland.start", function()
-        hl.exec_cmd(${builtins.toJSON "${polkitAgent}"})
         hl.exec_cmd("fcitx5 -d --replace")
       end)
 
+      -- External http(s) opens mark existing Vivaldi urgent; jump straight to it.
+      hl.on("window.urgent", function(win)
+        if win and win.class == "vivaldi-stable" then
+          pcall(hl.dispatch, hl.dsp.focus({ window = "class:^vivaldi-stable$" }))
+        end
+      end)
+
+      local mod = "SUPER"
+
+      -- Core applications & launcher
       hl.bind(mod .. " + Return", hl.dsp.exec_cmd(${builtins.toJSON ghosttyBin}))
-      hl.bind("CTRL + ALT + T", hl.dsp.exec_cmd(${builtins.toJSON ghosttyBin}))
-      hl.bind(mod .. " + D", hl.dsp.exec_cmd(${builtins.toJSON rofiLauncher}))
-      hl.bind("ALT + Space", hl.dsp.exec_cmd(${builtins.toJSON rofiLauncher}))
-      hl.bind(mod .. " + Q", hl.dsp.window.close())
-      hl.bind(mod .. " + SHIFT + Q", hl.dsp.window.close())
-      hl.bind(mod .. " + L", hl.dsp.exec_cmd(${builtins.toJSON lockCmd}))
-      hl.bind(mod .. " + E", hl.dsp.exec_cmd(${builtins.toJSON openYazi}))
-      hl.bind(mod .. " + V", hl.dsp.exec_cmd("clipboard-history"))
-      hl.bind(mod .. " + F", hl.dsp.window.fullscreen({ mode = 0 }))
-      hl.bind(mod .. " + R", hl.dsp.submap("resize"))
+      hl.bind("CTRL + ALT + T",   hl.dsp.exec_cmd(${builtins.toJSON ghosttyBin}))
+      hl.bind(mod .. " + D",      hl.dsp.exec_cmd(${builtins.toJSON rofiLauncher}), { dont_inhibit = true })
+      hl.bind("ALT + Space",      hl.dsp.exec_cmd(${builtins.toJSON rofiLauncher}), { dont_inhibit = true })
+      hl.bind(mod .. " + E",      hl.dsp.exec_cmd(${builtins.toJSON openYazi}))
+      hl.bind(mod .. " + V",      hl.dsp.exec_cmd("clipboard-history"))
+      hl.bind(mod .. " + L",      hl.dsp.exec_cmd(${builtins.toJSON "${lockOnceCmd}"}))
+      hl.bind(mod .. " + slash",    hl.dsp.exec_cmd(${builtins.toJSON "${showCheatsheet}"}), { dont_inhibit = true })
+      hl.bind(mod .. " + question", hl.dsp.exec_cmd(${builtins.toJSON "${showCheatsheet}"}), { dont_inhibit = true })
+
+      -- Window management
+      hl.bind(mod .. " + Q",           hl.dsp.window.close(), { dont_inhibit = true })
+      hl.bind(mod .. " + SHIFT + Q",   hl.dsp.window.close(), { dont_inhibit = true })
+      hl.bind(mod .. " + F",           hl.dsp.window.fullscreen({ mode = 0 }))
+      hl.bind(mod .. " + SHIFT + F",   hl.dsp.window.fullscreen({ mode = 1 }))
       hl.bind(mod .. " + SHIFT + Space", hl.dsp.window.float({ action = "toggle" }))
-      hl.bind(mod .. " + B", hl.dsp.layout("togglesplit"))
-      hl.bind(mod .. " + slash", hl.dsp.exec_cmd(${builtins.toJSON "${showCheatsheet}"}))
-      hl.bind(mod .. " + SHIFT + S", hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} region"}))
-      hl.bind(mod .. " + Print", hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} window"}))
-      hl.bind("Print", hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} full"}))
-      hl.bind("SHIFT + Print", hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} region"}))
-      hl.bind(mod .. " + P", hl.dsp.exec_cmd(${builtins.toJSON "${hyprpickerBin} -a"}))
+      hl.bind(mod .. " + C",           hl.dsp.window.center())
+      hl.bind(mod .. " + B",           hl.dsp.layout("togglesplit"))
+      hl.bind(mod .. " + P",           hl.dsp.window.pseudo())
+      hl.bind(mod .. " + R",           hl.dsp.submap("resize"))
 
-      hl.bind(mod .. " + left", hl.dsp.focus({ direction = "left" }))
+      -- Window groups (tabbed containers)
+      hl.bind(mod .. " + G",         hl.dsp.group.toggle())
+      hl.bind(mod .. " + Tab",       hl.dsp.group.next())
+      hl.bind(mod .. " + SHIFT + Tab", hl.dsp.group.prev())
+      hl.bind(mod .. " + ALT + G",   hl.dsp.group.lock())
+
+      -- Special workspace (scratchpad)
+      hl.bind(mod .. " + S",       hl.dsp.workspace.toggle_special("magic"))
+      hl.bind(mod .. " + ALT + S", hl.dsp.window.move({ workspace = "special:magic" }))
+
+      -- Screenshots & color picker
+      hl.bind(mod .. " + SHIFT + S", hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} region"}), { dont_inhibit = true })
+      hl.bind(mod .. " + Print",     hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} window"}), { dont_inhibit = true })
+      hl.bind("Print",               hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} full"}),   { dont_inhibit = true })
+      hl.bind("SHIFT + Print",       hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} region"}), { dont_inhibit = true })
+      hl.bind(mod .. " + SHIFT + P", hl.dsp.exec_cmd(${builtins.toJSON "${hyprpickerBin} -a"}))
+
+      -- Focus navigation (Super+L is reserved exclusively for hyprlock; use Super+Right for right focus)
+      hl.bind(mod .. " + left",  hl.dsp.focus({ direction = "left" }))
       hl.bind(mod .. " + right", hl.dsp.focus({ direction = "right" }))
-      hl.bind(mod .. " + up", hl.dsp.focus({ direction = "up" }))
-      hl.bind(mod .. " + down", hl.dsp.focus({ direction = "down" }))
-      hl.bind(mod .. " + H", hl.dsp.focus({ direction = "left" }))
-      hl.bind(mod .. " + L", hl.dsp.focus({ direction = "right" }))
-      hl.bind(mod .. " + K", hl.dsp.focus({ direction = "up" }))
-      hl.bind(mod .. " + J", hl.dsp.focus({ direction = "down" }))
+      hl.bind(mod .. " + up",    hl.dsp.focus({ direction = "up" }))
+      hl.bind(mod .. " + down",  hl.dsp.focus({ direction = "down" }))
+      hl.bind(mod .. " + H",     hl.dsp.focus({ direction = "left" }))
+      hl.bind(mod .. " + J",     hl.dsp.focus({ direction = "down" }))
+      hl.bind(mod .. " + K",     hl.dsp.focus({ direction = "up" }))
 
-      hl.bind(mod .. " + SHIFT + left", hl.dsp.window.move({ direction = "left" }))
+      -- Move windows
+      hl.bind(mod .. " + SHIFT + left",  hl.dsp.window.move({ direction = "left" }))
       hl.bind(mod .. " + SHIFT + right", hl.dsp.window.move({ direction = "right" }))
-      hl.bind(mod .. " + SHIFT + up", hl.dsp.window.move({ direction = "up" }))
-      hl.bind(mod .. " + SHIFT + down", hl.dsp.window.move({ direction = "down" }))
-      hl.bind(mod .. " + SHIFT + H", hl.dsp.window.move({ direction = "left" }))
-      hl.bind(mod .. " + SHIFT + L", hl.dsp.window.move({ direction = "right" }))
-      hl.bind(mod .. " + SHIFT + K", hl.dsp.window.move({ direction = "up" }))
-      hl.bind(mod .. " + SHIFT + J", hl.dsp.window.move({ direction = "down" }))
+      hl.bind(mod .. " + SHIFT + up",    hl.dsp.window.move({ direction = "up" }))
+      hl.bind(mod .. " + SHIFT + down",  hl.dsp.window.move({ direction = "down" }))
+      hl.bind(mod .. " + SHIFT + H",     hl.dsp.window.move({ direction = "left" }))
+      hl.bind(mod .. " + SHIFT + J",     hl.dsp.window.move({ direction = "down" }))
+      hl.bind(mod .. " + SHIFT + K",     hl.dsp.window.move({ direction = "up" }))
+      hl.bind(mod .. " + SHIFT + L",     hl.dsp.window.move({ direction = "right" }))
 
-      for i = 1, 9 do
-        hl.bind(mod .. " + " .. i, hl.dsp.focus({ workspace = i }))
-        hl.bind(mod .. " + SHIFT + " .. i, hl.dsp.window.move({ workspace = i }))
+      -- Workspaces 1..10 (key 0 maps to workspace 10)
+      for i = 1, 10 do
+        local key = tostring(i % 10)
+        hl.bind(mod .. " + " .. key,           hl.dsp.focus({ workspace = i }))
+        hl.bind(mod .. " + SHIFT + " .. key,   hl.dsp.window.move({ workspace = i }))
       end
 
-      hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd(${builtins.toJSON "${volumeUp}"}), { locked = true })
-      hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd(${builtins.toJSON "${pactl} set-sink-volume @DEFAULT_SINK@ -5%"}), { locked = true })
-      hl.bind("XF86AudioMute", hl.dsp.exec_cmd(${builtins.toJSON "${pactl} set-sink-mute @DEFAULT_SINK@ toggle"}), { locked = true })
-      hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd(${builtins.toJSON "${pactl} set-source-mute @DEFAULT_SOURCE@ toggle"}), { locked = true })
-      hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd(${builtins.toJSON "${brightnessctl} set +5%"}), { locked = true })
-      hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd(${builtins.toJSON "${brightnessctl} set 5%-"}), { locked = true })
+      -- Mouse window drag/resize and workspace scroll (standard Hyprland UX)
+      hl.bind(mod .. " + mouse_down", hl.dsp.focus({ workspace = "e+1" }))
+      hl.bind(mod .. " + mouse_up",   hl.dsp.focus({ workspace = "e-1" }))
+      hl.bind(mod .. " + mouse:272",  hl.dsp.window.drag(),   { mouse = true })
+      hl.bind(mod .. " + mouse:273",  hl.dsp.window.resize(), { mouse = true })
 
+      -- Volume & display brightness (repeat while held, active even on lock screen)
+      hl.bind("XF86AudioRaiseVolume",  hl.dsp.exec_cmd(${builtins.toJSON "${volumeUp}"}), { locked = true, repeating = true })
+      hl.bind("XF86AudioLowerVolume",  hl.dsp.exec_cmd(${builtins.toJSON "${pactl} set-sink-volume @DEFAULT_SINK@ -5%"}), { locked = true, repeating = true })
+      hl.bind("XF86AudioMute",         hl.dsp.exec_cmd(${builtins.toJSON "${pactl} set-sink-mute @DEFAULT_SINK@ toggle"}), { locked = true })
+      hl.bind("XF86AudioMicMute",      hl.dsp.exec_cmd(${builtins.toJSON "${pactl} set-source-mute @DEFAULT_SOURCE@ toggle"}), { locked = true })
+      hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd(${builtins.toJSON "${brightnessctl} set +5%"}), { locked = true, repeating = true })
+      hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd(${builtins.toJSON "${brightnessctl} set 5%-"}), { locked = true, repeating = true })
+
+      -- Interactive resize submap
       hl.define_submap("resize", "escape", function()
-        hl.bind("right", hl.dsp.window.resize({ x = 20, y = 0 }), { repeating = true })
-        hl.bind("left", hl.dsp.window.resize({ x = -20, y = 0 }), { repeating = true })
-        hl.bind("up", hl.dsp.window.resize({ x = 0, y = -20 }), { repeating = true })
-        hl.bind("down", hl.dsp.window.resize({ x = 0, y = 20 }), { repeating = true })
-        hl.bind("l", hl.dsp.window.resize({ x = 20, y = 0 }), { repeating = true })
-        hl.bind("h", hl.dsp.window.resize({ x = -20, y = 0 }), { repeating = true })
-        hl.bind("k", hl.dsp.window.resize({ x = 0, y = -20 }), { repeating = true })
-        hl.bind("j", hl.dsp.window.resize({ x = 0, y = 20 }), { repeating = true })
+        hl.bind("right",  hl.dsp.window.resize({ x = 24,  y = 0 }),   { repeating = true })
+        hl.bind("left",   hl.dsp.window.resize({ x = -24, y = 0 }),   { repeating = true })
+        hl.bind("up",     hl.dsp.window.resize({ x = 0,   y = -24 }), { repeating = true })
+        hl.bind("down",   hl.dsp.window.resize({ x = 0,   y = 24 }),  { repeating = true })
+        hl.bind("l",      hl.dsp.window.resize({ x = 24,  y = 0 }),   { repeating = true })
+        hl.bind("h",      hl.dsp.window.resize({ x = -24, y = 0 }),   { repeating = true })
+        hl.bind("k",      hl.dsp.window.resize({ x = 0,   y = -24 }), { repeating = true })
+        hl.bind("j",      hl.dsp.window.resize({ x = 0,   y = 24 }),  { repeating = true })
         hl.bind("Return", hl.dsp.submap("reset"))
       end)
     '';
   };
 
+  # Because wayland.windowManager.hyprland.package = null, provide our own
+  # onChange hook so live Hyprland sessions reload immediately on HM switch.
+  xdg.configFile."hypr/hyprland.lua".onChange = ''
+    runtimeDir="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    if [ -d "$runtimeDir/hypr" ]; then
+      for inst in $(${hyprctlBin} instances -j 2>/dev/null | ${pkgs.jq}/bin/jq -r '.[].instance' 2>/dev/null || true); do
+        ${hyprctlBin} -i "$inst" reload config-only >/dev/null 2>&1 || true
+      done
+    fi
+  '';
+
+  # Hyprpaper 0.8+ block syntax with procedural Nocturne Slate wallpaper.
   services.hyprpaper = {
     enable = true;
     settings = {
       splash = false;
-      ipc = "on";
-      wallpaper = [ ", color:0xff0b0f14" ];
+      ipc = true;
+      wallpaper = [
+        {
+          monitor = "";
+          path = "${wallpaperPng}";
+          fit_mode = "cover";
+        }
+      ];
     };
   };
 
+  # Hyprlock: live desktop screenshot blur + clean typography + status feedback.
   programs.hyprlock = {
     enable = true;
     settings = {
@@ -2205,26 +2513,52 @@ in
         disable_loading_bar = true;
         hide_cursor = true;
         grace = 0;
+        no_fade_in = false;
       };
-      background = [ { monitor = ""; color = "rgb(0b0f14)"; } ];
+      background = [
+        {
+          monitor = "";
+          path = "screenshot";
+          color = "rgb(${p.bgRgb})";
+          blur_passes = 3;
+          blur_size = 7;
+          noise = 0.015;
+          contrast = 0.92;
+          brightness = 0.62;
+          vibrancy = 0.18;
+        }
+      ];
       label = [
         {
           monitor = "";
           text = "$TIME";
-          color = "rgb(230, 237, 243)";
-          font_size = 64;
-          font_family = "JetBrainsMono Nerd Font";
-          position = "0, 120";
+          color = "rgb(${p.fgRgb})";
+          font_size = 76;
+          font_family = theme.font.monoBold;
+          position = "0, 140";
+          halign = "center";
+          valign = "center";
+          shadow_passes = 2;
+          shadow_size = 4;
+          shadow_color = "rgba(0, 0, 0, 0.55)";
+        }
+        {
+          monitor = "";
+          text = "cmd[update:60000] TZ=Asia/Tokyo date '+%Y年%m月%d日 (%a)'";
+          color = "rgb(${p.fgSecondaryRgb})";
+          font_size = 18;
+          font_family = theme.font.mono;
+          position = "0, 62";
           halign = "center";
           valign = "center";
         }
         {
           monitor = "";
-          text = "Enter でロック解除";
-          color = "rgb(159, 231, 231)";
-          font_size = 16;
-          font_family = "JetBrainsMono Nerd Font";
-          position = "0, 40";
+          text = "󰌾  $USER @ $HOSTNAME";
+          color = "rgb(${p.accentRgb})";
+          font_size = 13;
+          font_family = theme.font.mono;
+          position = "0, -110";
           halign = "center";
           valign = "center";
         }
@@ -2234,14 +2568,21 @@ in
           monitor = "";
           size = "320, 48";
           outline_thickness = 2;
-          dots_size = 0.2;
-          dots_spacing = 0.2;
-          outer_color = "rgb(51, 197, 197)";
-          inner_color = "rgb(11, 15, 20)";
-          font_color = "rgb(230, 237, 243)";
+          rounding = theme.radius.popup;
+          dots_size = 0.24;
+          dots_spacing = 0.28;
+          dots_center = true;
+          outer_color = "rgba(${p.accentRgb}, 0.85)";
+          inner_color = "rgba(${p.surfaceRgb}, 0.85)";
+          font_color = "rgb(${p.fgRgb})";
+          check_color = "rgba(${p.accentAltRgb}, 0.95)";
+          fail_color = "rgba(${p.dangerRgb}, 0.95)";
+          capslock_color = "rgb(242, 184, 102)";
           fade_on_empty = false;
-          placeholder_text = "<span foreground=\"#6b7785\">Password</span>";
-          position = "0, -40";
+          # Avoid raw '#' in hyprlang values (treated as comment); use Pango tags only.
+          placeholder_text = "<i>パスワードを入力…</i>";
+          fail_text = "<i>認証失敗 ($ATTEMPTS)</i>";
+          position = "0, -32";
           halign = "center";
           valign = "center";
         }
@@ -2249,24 +2590,46 @@ in
     };
   };
 
+  # Hypridle: 5m dim -> 10m lock -> 15m DPMS off (all respect keep-screen-on).
   services.hypridle = {
     enable = true;
     settings = {
       general = {
-        lock_cmd = "${idleLockCmd}";
-        before_sleep_cmd = "${lockCmd}";
+        lock_cmd = "${lockOnceCmd}";
+        before_sleep_cmd = "${lockOnceCmd}";
         after_sleep_cmd = "${idleDpmsOnCmd}";
+        ignore_dbus_inhibit = false;
       };
       listener = [
-        { timeout = 600; on-timeout = "${idleLockCmd}"; }
-        { timeout = 900; on-timeout = "${idleDpmsOffCmd}"; on-resume = "${idleDpmsOnCmd}"; }
+        {
+          timeout = 300;
+          on-timeout = "${idleDimCmd}";
+          on-resume = "${idleUndimCmd}";
+        }
+        {
+          timeout = 600;
+          on-timeout = "${idleLockCmd}";
+        }
+        {
+          timeout = 900;
+          on-timeout = "${idleDpmsOffCmd}";
+          on-resume = "${idleDpmsOnCmd}";
+        }
       ];
     };
   };
 
   systemd.user.services.waybar = {
-    Unit = { StartLimitIntervalSec = 30; StartLimitBurst = 3; };
-    Service = { MemoryMax = "256M"; MemoryHigh = "192M"; Restart = "on-failure"; RestartSec = "2"; };
+    Unit = {
+      StartLimitIntervalSec = 30;
+      StartLimitBurst = 3;
+    };
+    Service = {
+      MemoryMax = "256M";
+      MemoryHigh = "192M";
+      Restart = "on-failure";
+      RestartSec = "2";
+    };
   };
 
   systemd.user.services.flake-update-check = {
@@ -2274,109 +2637,507 @@ in
       Description = "Check MySettings flake / pinned .deb updates for waybar";
       ConditionPathExists = "${repoPath}/flake.nix";
     };
-    Service = { Type = "oneshot"; ExecStart = flakeUpdateCheck; };
+    Service = {
+      Type = "oneshot";
+      ExecStart = flakeUpdateCheck;
+    };
   };
   systemd.user.timers.flake-update-check = {
     Unit = {
       Description = "Periodic flake update check for waybar";
       ConditionPathExists = "${repoPath}/flake.nix";
     };
-    Timer = { OnBootSec = "5min"; OnUnitActiveSec = "6h"; Persistent = true; };
-    Install = { WantedBy = [ "timers.target" ]; };
+    Timer = {
+      OnBootSec = "5min";
+      OnUnitActiveSec = "6h";
+      Persistent = true;
+    };
+    Install = {
+      WantedBy = [ "timers.target" ];
+    };
   };
 
+  # Waybar: floating frosted top bar + floating slim left dock.
   programs.waybar = {
     enable = true;
     systemd.enable = true;
     settings = {
       mainBar = {
-        name = "main"; layer = "top"; position = "bottom"; height = 30;
-        modules-left = [ "custom/cheatsheet" "hyprland/workspaces" "custom/restic" "hyprland/submap" ];
-        modules-center = [ "hyprland/window" ];
-        modules-right = [ "cpu" "memory" "custom/keep-screen-on" "battery" "network" "backlight" "pulseaudio" "custom/clock" ];
-        "custom/cheatsheet" = { format = "?"; tooltip = "チートシート"; on-click = "${showCheatsheet}"; };
-        "hyprland/workspaces" = { all-outputs = true; };
-        "hyprland/window" = { max-length = 48; };
-        "hyprland/submap" = { format = "{}"; tooltip = false; };
+        name = "main";
+        layer = "top";
+        position = "top";
+        height = 34;
+        margin-top = 8;
+        margin-left = 10;
+        margin-right = 10;
+        spacing = 4;
+
+        modules-left = [
+          "custom/cheatsheet"
+          "hyprland/workspaces"
+          "hyprland/submap"
+          "custom/restic"
+          "hyprland/window"
+        ];
+        modules-center = [ "custom/clock" ];
+        modules-right = [
+          "cpu"
+          "memory"
+          "custom/keep-screen-on"
+          "network"
+          "backlight"
+          "pulseaudio"
+          "battery"
+        ];
+
+        "custom/cheatsheet" = {
+          format = "󰋖";
+          tooltip = true;
+          tooltip-format = "チートシート (Super+/)";
+          on-click = "${showCheatsheet}";
+        };
+        "hyprland/workspaces" = {
+          all-outputs = true;
+          active-only = false;
+          format = "{id}";
+          on-click = "activate";
+          on-scroll-up = "${hyprctlBin} dispatch 'hl.dsp.focus({ workspace = \"e+1\" })'";
+          on-scroll-down = "${hyprctlBin} dispatch 'hl.dsp.focus({ workspace = \"e-1\" })'";
+        };
+        "hyprland/submap" = {
+          format = "󰩨 {}";
+          tooltip = false;
+        };
+        "hyprland/window" = {
+          max-length = 38;
+          separate-outputs = true;
+        };
         "custom/restic" = {
           exec = pkgs.writeShellScript "waybar-restic" ''
             f="''${XDG_RUNTIME_DIR}/restic-home-status"
             if [ -s "$f" ]; then cat "$f"; else printf '%s\n' '{"text":"","class":"idle"}'; fi
           '';
-          return-type = "json"; interval = 2; signal = 8; hide-empty-text = true; tooltip = true;
+          return-type = "json";
+          interval = 2;
+          signal = 8;
+          hide-empty-text = true;
+          tooltip = true;
         };
-        "custom/keep-screen-on" = { exec = "${waybarKeepScreenOn}"; return-type = "json"; interval = 1; on-click = "${toggleKeepScreenOn}"; };
-        cpu = { format = "cpu {usage}%"; interval = 5; on-click = openBtop; };
-        memory = { format = "mem {percentage}%"; interval = 5; on-click = openBtop; };
-        battery = { format = "{capacity}% {icon}"; format-icons = [ "batt" "batt" "batt" "batt" "batt" ]; format-charging = "{capacity}% chg"; states = { warning = 30; critical = 15; }; };
-        network = { interval = 2; format-wifi = "{essid}"; format-ethernet = "{ifname}"; format-disconnected = "offline"; tooltip-format = "↓{bandwidthDownBytes} ↑{bandwidthUpBytes}\n{ifname} {ipaddr}"; on-click = openNmtui; };
-        backlight = { format = "bri {percent}%"; };
-        pulseaudio = { format = "vol {volume}%"; format-muted = "mute"; max-volume = 100; on-click = "${pactl} set-sink-mute @DEFAULT_SINK@ toggle"; };
-        "custom/clock" = { exec = "${waybarClock}"; return-type = "json"; interval = 1; signal = 11; tooltip = true; on-click = lib.getExe ntpSync; };
+        "custom/clock" = {
+          exec = "${waybarClock}";
+          return-type = "json";
+          interval = 1;
+          signal = 11;
+          tooltip = true;
+          on-click = lib.getExe ntpSync;
+        };
+        "custom/keep-screen-on" = {
+          exec = "${waybarKeepScreenOn}";
+          return-type = "json";
+          interval = 5;
+          signal = 14;
+          on-click = "${toggleKeepScreenOn}";
+        };
+        cpu = {
+          format = " {usage}%";
+          interval = 5;
+          on-click = openBtop;
+        };
+        memory = {
+          format = " {percentage}%";
+          interval = 5;
+          on-click = openBtop;
+        };
+        network = {
+          interval = 2;
+          format-wifi = " {essid}";
+          format-ethernet = "󰈀 {ifname}";
+          format-disconnected = "󰤮 offline";
+          max-length = 18;
+          tooltip-format = "↓{bandwidthDownBytes} ↑{bandwidthUpBytes}\n{ifname} {ipaddr}";
+          on-click = openNmtui;
+        };
+        backlight = {
+          format = "{icon} {percent}%";
+          format-icons = [
+            "󰃞"
+            "󰃟"
+            "󰃠"
+          ];
+        };
+        pulseaudio = {
+          format = "{icon} {volume}%";
+          format-muted = "󰖁 mute";
+          format-icons = {
+            default = [
+              "󰕿"
+              "󰖀"
+              "󰕾"
+            ];
+          };
+          max-volume = 100;
+          on-click = "${pactl} set-sink-mute @DEFAULT_SINK@ toggle";
+        };
+        battery = {
+          format = "{icon} {capacity}%";
+          format-charging = "󰂄 {capacity}%";
+          format-plugged = "󰚥 {capacity}%";
+          format-icons = [
+            "󰂎"
+            "󰁼"
+            "󰁾"
+            "󰂀"
+            "󰁹"
+          ];
+          states = {
+            warning = 30;
+            critical = 15;
+          };
+        };
       };
+
       sideBar = {
-        name = "side"; layer = "top"; position = "left"; width = 34; margin-top = 8; margin-bottom = 8;
+        name = "side";
+        layer = "top";
+        position = "left";
+        width = 40;
+        margin-top = 6;
+        margin-bottom = 10;
+        margin-left = 10;
+
         modules-left = [ "custom/updates" ];
-        modules-right = [ "custom/startup-sound" "custom/jquake" "custom/services" "tray" ];
-        "custom/startup-sound" = { exec = "${startupSoundBin} --waybar"; return-type = "json"; interval = 10; signal = 13; tooltip = true; on-click = "${startupSoundBin} --menu"; on-click-right = "${startupSoundBin} --toggle-and-notify"; on-click-middle = "${startupSoundBin} --play-bg"; };
+        modules-right = [
+          "custom/startup-sound"
+          "custom/jquake"
+          "custom/services"
+          "tray"
+        ];
+
         "custom/updates" = {
           exec = pkgs.writeShellScript "waybar-flake-updates" ''
             f="''${XDG_RUNTIME_DIR}/flake-update-status"
             if [ -s "$f" ]; then cat "$f"; else printf '%s\n' '{"text":"","class":"idle","tooltip":"更新チェック待ち\nクリックで flake-update"}'; fi
           '';
-          return-type = "json"; interval = 30; signal = 9; tooltip = true; on-click = openFlakeUpdate;
+          return-type = "json";
+          interval = 30;
+          signal = 9;
+          tooltip = true;
+          on-click = openFlakeUpdate;
         };
-        "custom/jquake" = { exec = lib.getExe waybarJquake; return-type = "json"; interval = 5; signal = 12; tooltip = true; on-click = lib.getExe waybarJquakeOpen; on-click-right = lib.getExe waybarJquakeMenu; };
-        "custom/services" = { exec = lib.getExe waybarServices; return-type = "json"; interval = 15; signal = 10; tooltip = true; on-click = lib.getExe waybarServicesMenu; };
-        tray = { icon-size = 16; spacing = 4; };
+        "custom/startup-sound" = {
+          exec = "${startupSoundBin} --waybar";
+          return-type = "json";
+          interval = 10;
+          signal = 13;
+          tooltip = true;
+          on-click = "${startupSoundBin} --menu";
+          on-click-right = "${startupSoundBin} --toggle-and-notify";
+          on-click-middle = "${startupSoundBin} --play-bg";
+        };
+        "custom/jquake" = {
+          exec = lib.getExe waybarJquake;
+          return-type = "json";
+          interval = 5;
+          signal = 12;
+          tooltip = true;
+          on-click = lib.getExe waybarJquakeOpen;
+          on-click-right = lib.getExe waybarJquakeMenu;
+        };
+        "custom/services" = {
+          exec = lib.getExe waybarServices;
+          return-type = "json";
+          interval = 15;
+          signal = 10;
+          tooltip = true;
+          on-click = lib.getExe waybarServicesMenu;
+        };
+        tray = {
+          icon-size = 16;
+          spacing = 6;
+        };
       };
     };
+
     style = ''
-      * { border: none; border-radius: 0; font-family: "${waybarFont}", sans-serif; font-size: 11px; min-height: 0; }
-      window#waybar { background: #0b0f14; color: #9fe7e7; }
-      window.side#waybar { background: #0b0f14; color: #9fe7e7; }
-      tooltip { background: #0b0f14; color: #9fe7e7; border: 1px solid #33c5c5; }
-      tooltip label { color: #9fe7e7; }
-      #workspaces button { padding: 0 6px; color: #6b7785; background: transparent; }
-      #workspaces button.active { color: #e6edf3; background: #15383a; border-bottom: 2px solid #33c5c5; }
-      #workspaces button.urgent { color: #e6edf3; background: #3a1a1e; }
-      #submap { color: #e06c75; padding: 0 8px; }
-      #window { color: #9aa7b5; padding: 0 8px; }
-      #custom-cheatsheet, #cpu, #memory, #custom-keep-screen-on, #battery, #network, #backlight, #pulseaudio, #custom-clock { padding: 0 8px; color: #9fe7e7; background: transparent; }
-      #custom-cheatsheet { color: #33c5c5; }
-      #custom-keep-screen-on.activated { color: #e6edf3; background: #15383a; border-left: 2px solid #33c5c5; }
-      #custom-keep-screen-on.deactivated { color: #6b7785; }
-      #custom-restic { padding: 0 8px; color: #e6edf3; background: #15383a; }
-      #custom-restic.running { color: #9fe7e7; border-left: 2px solid #33c5c5; }
-      #custom-restic.done { color: #98c379; }
-      #custom-restic.failed { color: #e06c75; background: #3a1a1e; }
-      window.side #custom-updates, window.side #custom-startup-sound, window.side #custom-jquake, window.side #custom-services, window.side #tray { padding: 4px 0; color: #9fe7e7; background: transparent; }
-      window.side #custom-updates, window.side #custom-startup-sound, window.side #custom-jquake, window.side #custom-services { font-family: "${waybarFont}", sans-serif; font-size: 13px; min-width: 34px; padding: 8px 0; }
-      window.side #custom-updates.idle { color: #6b7785; }
-      window.side #custom-updates.available { color: #9fe7e7; background: #15383a; border-top: 2px solid #33c5c5; }
-      window.side #custom-startup-sound { padding: 6px 0; border-top: 1px solid #15383a; }
-      window.side #custom-startup-sound.disabled { color: #6b7785; }
-      window.side #custom-startup-sound.empty { color: #e5c07b; border-left: 2px solid #e5c07b; }
-      window.side #custom-jquake { padding: 7px 0; border-top: 1px solid #15383a; }
-      window.side #custom-jquake.open { color: #e6edf3; background: #15383a; border-left: 2px solid #33c5c5; }
-      window.side #custom-jquake.degraded { color: #e5c07b; border-left: 2px solid #e5c07b; }
-      window.side #custom-jquake.failed { color: #e06c75; background: #3a1a1e; border-left: 2px solid #e06c75; }
-      window.side #custom-services { padding: 6px 0 3px 0; border-top: 1px solid #15383a; }
-      window.side #custom-services.degraded { border-left: 2px solid #e5c07b; }
-      window.side #custom-services.failed { background: #3a1a1e; border-left: 2px solid #e06c75; }
-      window.side #tray { padding: 3px 0 6px 0; }
-      #battery.charging, #battery.plugged, #battery.full, #battery.discharging, #battery.warning, #battery.critical { background: transparent; animation: none; }
-      #battery.warning { color: #e5c07b; }
-      #battery.critical { color: #e06c75; }
-      #network.disconnected { color: #6b7785; }
-      #pulseaudio.muted { color: #6b7785; }
+      * {
+        border: none;
+        border-radius: 0;
+        font-family: "${waybarFont}", sans-serif;
+        font-size: 11.5px;
+        min-height: 0;
+        min-width: 0;
+      }
+
+      window#waybar {
+        background: rgba(${p.surfaceRgb}, 0.82);
+        color: ${p.fg};
+        border: 1px solid rgba(148, 174, 204, 0.16);
+        border-radius: ${toString theme.radius.bar}px;
+      }
+
+      window.side#waybar {
+        background: rgba(${p.surfaceRgb}, 0.82);
+        color: ${p.fg};
+        border: 1px solid rgba(148, 174, 204, 0.16);
+        border-radius: ${toString theme.radius.bar}px;
+      }
+
+      tooltip {
+        background: rgba(${p.surfaceRgb}, 0.96);
+        color: ${p.fg};
+        border: 1px solid ${p.border};
+        border-radius: ${toString theme.radius.control}px;
+      }
+
+      tooltip label {
+        color: ${p.fg};
+        padding: 4px 6px;
+      }
+
+      /* Top bar modules */
+      #custom-cheatsheet {
+        color: ${p.accent};
+        font-size: 14px;
+        padding: 0 10px 0 12px;
+        margin: 3px 2px 3px 4px;
+        border-radius: ${toString theme.radius.pill}px;
+        background: transparent;
+        transition: background-color 140ms ease;
+      }
+      #custom-cheatsheet:hover {
+        background: rgba(${p.accentRgb}, 0.16);
+      }
+
+      #workspaces {
+        margin: 4px 4px;
+        padding: 0 4px;
+        background: rgba(${p.surfaceAltRgb}, 0.72);
+        border-radius: ${toString theme.radius.pill}px;
+      }
+      #workspaces button {
+        padding: 0 7px;
+        margin: 2px 1px;
+        color: ${p.fgMuted};
+        background: transparent;
+        border-radius: 5px;
+        transition: all 140ms ease;
+      }
+      #workspaces button:hover {
+        color: ${p.fg};
+        background: rgba(255, 255, 255, 0.06);
+      }
+      #workspaces button.active {
+        color: ${p.bg};
+        background: linear-gradient(135deg, ${p.accent}, ${p.accentAlt});
+        font-weight: 700;
+        padding: 0 11px;
+      }
+      #workspaces button.urgent {
+        color: ${p.fg};
+        background: ${p.danger};
+      }
+
+      #submap {
+        color: ${p.bg};
+        background: ${p.danger};
+        font-weight: 700;
+        padding: 0 10px;
+        margin: 4px 2px;
+        border-radius: ${toString theme.radius.pill}px;
+      }
+
+      #custom-restic {
+        padding: 0 10px;
+        margin: 4px 2px;
+        color: ${p.fg};
+        background: ${p.accentSoft};
+        border: 1px solid rgba(${p.accentRgb}, 0.45);
+        border-radius: ${toString theme.radius.pill}px;
+      }
+      #custom-restic.running {
+        color: ${p.accent};
+      }
+      #custom-restic.done {
+        color: ${p.success};
+        border-color: rgba(110, 231, 183, 0.45);
+      }
+      #custom-restic.failed {
+        color: ${p.danger};
+        background: ${p.dangerSoft};
+        border-color: ${p.danger};
+      }
+
+      #window {
+        color: ${p.fgSecondary};
+        padding: 0 10px;
+      }
+
+      #custom-clock {
+        color: ${p.fg};
+        font-weight: 600;
+        padding: 0 14px;
+        margin: 4px 0;
+        border-radius: ${toString theme.radius.pill}px;
+        background: rgba(${p.surfaceAltRgb}, 0.65);
+        transition: background-color 140ms ease;
+      }
+      #custom-clock:hover {
+        background: rgba(${p.accentRgb}, 0.16);
+        color: ${p.accent};
+      }
+
+      #cpu,
+      #memory,
+      #custom-keep-screen-on,
+      #network,
+      #backlight,
+      #pulseaudio,
+      #battery {
+        padding: 0 9px;
+        margin: 4px 1px;
+        color: ${p.fgSecondary};
+        background: transparent;
+        border-radius: ${toString theme.radius.pill}px;
+        transition: background-color 140ms ease, color 140ms ease;
+      }
+
+      #cpu:hover,
+      #memory:hover,
+      #network:hover,
+      #pulseaudio:hover,
+      #custom-keep-screen-on:hover {
+        background: rgba(${p.surfaceAltRgb}, 0.90);
+        color: ${p.fg};
+      }
+
+      #battery {
+        margin-right: 6px;
+        color: ${p.fg};
+      }
+      #battery.charging,
+      #battery.plugged,
+      #battery.full,
+      #battery.discharging,
+      #battery.warning,
+      #battery.critical {
+        background: transparent;
+        animation: none;
+      }
+      #battery.charging,
+      #battery.plugged {
+        color: ${p.success};
+      }
+      #battery.warning {
+        color: ${p.warning};
+      }
+      #battery.critical {
+        color: ${p.danger};
+        background: ${p.dangerSoft};
+      }
+
+      #custom-keep-screen-on.activated {
+        color: ${p.accent};
+        background: ${p.accentSoft};
+        border: 1px solid rgba(${p.accentRgb}, 0.50);
+        font-weight: 600;
+      }
+      #custom-keep-screen-on.deactivated {
+        color: ${p.fgMuted};
+      }
+
+      #network.disconnected {
+        color: ${p.fgMuted};
+      }
+      #pulseaudio {
+        color: ${p.fg};
+      }
+      #pulseaudio.muted {
+        color: ${p.fgMuted};
+      }
+
+      /* Left dock modules */
+      window.side #custom-updates,
+      window.side #custom-startup-sound,
+      window.side #custom-jquake,
+      window.side #custom-services,
+      window.side #tray {
+        color: ${p.fgSecondary};
+        background: transparent;
+        margin: 2px 4px;
+        border-radius: ${toString theme.radius.pill}px;
+      }
+
+      window.side #custom-updates,
+      window.side #custom-startup-sound,
+      window.side #custom-jquake,
+      window.side #custom-services {
+        font-size: 13px;
+        padding: 7px 0;
+      }
+
+      window.side #custom-updates {
+        margin-top: 6px;
+      }
+      window.side #custom-updates.idle {
+        color: ${p.fgMuted};
+      }
+      window.side #custom-updates.available {
+        color: ${p.accent};
+        background: ${p.accentSoft};
+        border: 1px solid rgba(${p.accentRgb}, 0.55);
+      }
+
+      window.side #custom-startup-sound {
+        border-top: 1px solid rgba(148, 174, 204, 0.12);
+        border-radius: ${toString theme.radius.pill}px;
+      }
+      window.side #custom-startup-sound.enabled {
+        color: ${p.accent};
+      }
+      window.side #custom-startup-sound.disabled {
+        color: ${p.fgMuted};
+      }
+      window.side #custom-startup-sound.empty {
+        color: ${p.warning};
+      }
+
+      window.side #custom-jquake.active {
+        color: ${p.fgSecondary};
+      }
+      window.side #custom-jquake.open {
+        color: ${p.accent};
+        background: ${p.accentSoft};
+        border: 1px solid rgba(${p.accentRgb}, 0.55);
+      }
+      window.side #custom-jquake.degraded {
+        color: ${p.warning};
+      }
+      window.side #custom-jquake.failed {
+        color: ${p.danger};
+        background: ${p.dangerSoft};
+      }
+
+      window.side #custom-services {
+        padding: 6px 0;
+      }
+      window.side #custom-services.degraded {
+        background: rgba(242, 184, 102, 0.14);
+      }
+      window.side #custom-services.failed {
+        background: ${p.dangerSoft};
+      }
+
+      window.side #tray {
+        padding: 6px 0 8px 0;
+        margin-bottom: 4px;
+      }
     '';
   };
 
   xdg.configFile."satty/config.toml".text = ''
     [general]
     early-exit = ["copy", "save"]
-    corner-roundness = 8
+    corner-roundness = ${toString theme.radius.window}
     initial-tool = "arrow"
     copy-command = "wl-copy"
     output-filename = "~/Pictures/Screenshots/screenshot-%Y%m%d-%H%M%S.png"
@@ -2389,29 +3150,45 @@ in
 
     [color-palette]
     palette = [
-      "#33c5c5",
-      "#e06c75",
-      "#e5c07b",
-      "#98c379",
-      "#61afef",
+      "${p.accent}",
+      "${p.danger}",
+      "${p.warning}",
+      "${p.success}",
+      "${p.accentAlt}",
       "#ffffff",
     ]
   '';
 
+  # Mako notifications: Nocturne Slate frosted card + progress indicator.
   services.mako = {
     enable = true;
     settings = {
-      font = "JetBrainsMono Nerd Font 11";
-      background-color = "#0b0f14dd";
-      text-color = "#e6edf3";
-      border-color = "#33c5c5";
-      border-size = 2;
-      border-radius = 0;
-      padding = 10;
-      margin = 8;
-      default-timeout = 8000;
+      font = "${theme.font.mono} 11";
+      background-color = "${p.surface}e6";
+      text-color = p.fg;
+      border-color = p.border;
+      progress-color = "over ${p.accentSoft}";
+      border-size = 1;
+      border-radius = theme.radius.window;
+      padding = "12,14";
+      margin = "12,12,0,0";
+      width = 360;
+      default-timeout = 7000;
       max-visible = 4;
       layer = "overlay";
+      anchor = "top-right";
+      "urgency=low" = {
+        border-color = p.border;
+        default-timeout = 4000;
+      };
+      "urgency=normal" = {
+        border-color = p.accent;
+      };
+      "urgency=high" = {
+        border-color = p.danger;
+        background-color = "${p.dangerSoft}f0";
+        default-timeout = 0;
+      };
     };
   };
 }

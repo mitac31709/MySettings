@@ -125,7 +125,7 @@
                       src = inputs.grok-bot-deb;
                       version = grokBotVersion;
                     };
-                    # 1.8.4 + Sway AWT / sounds / no-update-prompt wrapper.
+                    # 1.8.4 + Hyprland/XWayland AWT / sounds / no-update-prompt wrapper.
                     jquake = final.callPackage ./pkgs/jquake { jquake = prev.jquake; };
                     # OpenCode 2 CLI (nixpkgs still ships 1.x; pin npm linux-x64 binary).
                     opencode = final.callPackage ./pkgs/opencode { };

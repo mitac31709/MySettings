@@ -138,7 +138,7 @@ in
       Type = "simple";
       ExecStartPre = "${antigravityEnsureRcToken}";
       ExecStart = "${pkgs.antigravity}/bin/antigravity remote-control serve";
-      # user@.service overrides PATH before Sway updates activation env; supply system/profile bins for boot-time linger
+      # user@.service overrides PATH before Hyprland/UWSM updates activation env; supply system/profile bins for boot-time linger
       Environment = [
         "PATH=/run/wrappers/bin:%h/.nix-profile/bin:/nix/profile/bin:%h/.local/state/nix/profile/bin:/etc/profiles/per-user/%u/bin:/nix/var/nix/profiles/default/bin:/run/current-system/sw/bin"
       ];

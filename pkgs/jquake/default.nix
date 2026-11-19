@@ -1,4 +1,4 @@
-# Sway/XWayland-friendly JQuake launcher over a pinned 1.8.4 zip.
+# Hyprland/XWayland-friendly JQuake launcher over a pinned 1.8.4 zip.
 #
 # Upstream/nixpkgs issues we fix here:
 # - AWT on tiling WMs paints a black main window without
@@ -87,7 +87,7 @@ symlinkJoin {
     ln -s JQuake "$out/bin/jquake"
   '';
   meta = unwrapped.meta // {
-    description = "${unwrapped.meta.description or "JQuake"} (1.8.4, Sway fixes, no update prompt)";
+    description = "${unwrapped.meta.description or "JQuake"} (1.8.4, Hyprland/XWayland fixes, no update prompt)";
     mainProgram = "JQuake";
   };
 }

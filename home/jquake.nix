@@ -1,10 +1,11 @@
-# JQuake: login autostart, offscreen tray background, alert raise over hyprlock.
+# JQuake: login autostart, offscreen XEmbed tray host, alert raise over hyprlock.
 #
 # - Patches a few Settings.properties keys on each start without rewriting the whole file.
-# - Hyprland: AWT SystemTray needs an XEmbed tray host. Offscreen stalonetray hosts
-#   JQuake's icon and waybar's `custom/jquake` module opens it via stalonetray
+# - Hyprland/XWayland: AWT SystemTray needs an XEmbed tray host. Offscreen stalonetray
+#   hosts JQuake's icon and waybar's `custom/jquake` module opens it via stalonetray
 #   remote click.
-# - On alert we dismiss hyprlock and focus/fullscreen the map window.
+# - On alert we wake DPMS, dismiss hyprlock, and focus/fullscreen/pin the map window
+#   using Hyprland 0.57+ Lua dispatchers.
 {
   pkgs,
   lib,
@@ -13,6 +14,9 @@
 }:
 
 let
+  theme = import ../lib/theme.nix;
+  p = theme.palette;
+
   confDir = "${config.home.homeDirectory}/Library/Application Support/JQuake";
   propsFile = "${confDir}/Settings.properties";
 
@@ -22,8 +26,8 @@ let
 
   stalonetrayBin = "${pkgs.stalonetray}/bin/stalonetray";
 
-  # Sway clamps floating windows onto the output; clear X11 ShapeInput so the
-  # invisible stalonetray window can never intercept pointer clicks.
+  # Clear X11 ShapeInput so the invisible offscreen stalonetray window can never
+  # intercept pointer clicks under XWayland.
   clearStalonetrayInput =
     pkgs.writers.writePython3 "stalonetray-clear-input"
       {
@@ -60,7 +64,6 @@ let
     set -euo pipefail
     for _ in $(seq 1 40); do
       if ${hyprctl} clients -j 2>/dev/null | ${jq} -e '[.[] | select(.class == "stalonetray")] | length > 0' >/dev/null; then
-        ${hyprctl} dispatch focuswindow class:^stalonetray$ >/dev/null 2>&1 || true
         ${clearStalonetrayInput} >/dev/null 2>&1 || true
         exit 0
       fi
@@ -231,23 +234,23 @@ let
       }
 
       raise_alert() {
-        ${hyprctl} dispatch dpms on >/dev/null 2>&1 || true
+        ${hyprctl} dispatch 'hl.dsp.dpms("on")' >/dev/null 2>&1 || true
         if pgrep -x hyprlock >/dev/null 2>&1; then
           pkill -x hyprlock || true
         fi
-        ${hyprctl} dispatch focuswindow class:^${jquakeClass}$ >/dev/null 2>&1 || true
-        ${hyprctl} dispatch fullscreenstate 2 2 >/dev/null 2>&1 || true
-        ${hyprctl} dispatch pin active >/dev/null 2>&1 || true
+        ${hyprctl} dispatch 'hl.dsp.focus({ window = "class:^${jquakeClass}$" })' >/dev/null 2>&1 || true
+        ${hyprctl} dispatch 'hl.dsp.window.fullscreen_state({ internal = 2, client = 2 })' >/dev/null 2>&1 || true
+        ${hyprctl} dispatch 'hl.dsp.window.pin()' >/dev/null 2>&1 || true
       }
 
-      sock="$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock"
+      sock="''${XDG_RUNTIME_DIR}/hypr/''${HYPRLAND_INSTANCE_SIGNATURE}/.socket2.sock"
       if [ ! -S "$sock" ]; then
         exit 0
       fi
 
       socat -u UNIX-CONNECT:"$sock" - | while IFS= read -r line; do
         case "$line" in
-          openwindow*${jquakeClass}*|activewindow*${jquakeClass}*|urgent*${jquakeClass}*)
+          openwindow*${jquakeClass}*|urgent*${jquakeClass}*)
             raise_alert
             refresh_jquake_bar
             ;;
@@ -304,7 +307,7 @@ in
     };
     Service = {
       Type = "simple";
-      ExecStart = "${stalonetrayBin} --background '#0b0f14' --geometry 1x1+-2000+-2000 --max-geometry 1x1 --slot-size 16 --icon-size 16 --scrollbars none --sticky --window-type utility --window-strut none --kludges force_icons_size,fix_window_pos";
+      ExecStart = "${stalonetrayBin} --background '${p.bg}' --geometry 1x1+-2000+-2000 --max-geometry 1x1 --slot-size 16 --icon-size 16 --scrollbars none --sticky --window-type utility --window-strut none --kludges force_icons_size,fix_window_pos";
       ExecStartPost = "${hideStalonetray}";
       Restart = "on-failure";
       RestartSec = 3;
@@ -339,7 +342,7 @@ in
   };
 
   wayland.windowManager.hyprland.extraConfig = lib.mkAfter ''
-    -- JQuake / tray host window rules (XWayland)
+    -- JQuake / XEmbed tray host window rules (XWayland)
     hl.window_rule({
       name = "jquake-stalonetray",
       match = { class = "^(stalonetray)$" },

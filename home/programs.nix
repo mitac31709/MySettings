@@ -9,6 +9,8 @@
 
 let
   email = "mitac31709@gmail.com";
+  theme = import ../lib/theme.nix;
+  p = theme.palette;
   # Rasi unquoted value (same shape as config.lib.formats.rasi.mkLiteral).
   mkLiteral = value: {
     _type = "literal";
@@ -43,14 +45,14 @@ in
     };
   };
 
-  # App launcher / dmenu: TUI look matching Sway (dark + cyan, monospace).
+  # App launcher / dmenu: Nocturne Slate frosted-glass theme matching Hyprland.
   programs.rofi = {
     enable = true;
     package = pkgs.rofi;
     settings = {
       terminal = "${pkgs.ghostty}/bin/ghostty";
       modes = "drun,run";
-      font = "JetBrainsMono Nerd Font 12";
+      font = "${theme.font.mono} 12";
       show-icons = true;
       disable-history = false;
       sort = true;
@@ -59,11 +61,11 @@ in
       cycle = true;
       # comment must be listed here to appear in drun-display-format.
       drun-match-fields = "name,generic,exec,categories,keywords,comment";
-      drun-display-format = "{name} <span weight='light' size='small' foreground='#6b7785'><i>{generic}</i>  {comment}</span>";
+      drun-display-format = "{name} <span weight='light' size='small' foreground='${p.fgMuted}'><i>{generic}</i>  {comment}</span>";
       drun-show-actions = true;
-      display-drun = ">";
-      display-run = "$";
-      display-dmenu = ">";
+      display-drun = "󰀻";
+      display-run = "󰆍";
+      display-dmenu = "󰍉";
       location = 0;
       # overlay sits above Fcitx5 ClassicUI, so Meltype candidates never appear.
       # top keeps the launcher above windows but below the IME panel.
@@ -73,23 +75,25 @@ in
     };
     theme = {
       "*" = {
-        bg = mkLiteral "#0b0f14";
-        bg-alt = mkLiteral "#15383a";
-        fg = mkLiteral "#e6edf3";
-        fg-dim = mkLiteral "#6b7785";
-        accent = mkLiteral "#33c5c5";
-        urgent = mkLiteral "#e06c75";
+        bg = mkLiteral "${p.surface}e8";
+        bg-card = mkLiteral "${p.surfaceAlt}f0";
+        bg-sel = mkLiteral "${p.accentSoft}f5";
+        border-col = mkLiteral p.border;
+        fg = mkLiteral p.fg;
+        fg-dim = mkLiteral p.fgMuted;
+        accent = mkLiteral p.accent;
+        urgent = mkLiteral p.danger;
         background-color = mkLiteral "transparent";
         text-color = mkLiteral "@fg";
       };
 
       "window" = {
         background-color = mkLiteral "@bg";
-        border = mkLiteral "1px";
+        border = mkLiteral "1.5px";
         border-color = mkLiteral "@accent";
-        border-radius = mkLiteral "0";
-        width = mkLiteral "56em";
-        padding = mkLiteral "0.6em";
+        border-radius = mkLiteral "${toString theme.radius.popup}px";
+        width = mkLiteral "54em";
+        padding = mkLiteral "16px";
       };
 
       "mainbox" = {
@@ -98,7 +102,7 @@ in
           "message"
           "listview"
         ];
-        spacing = mkLiteral "0.5em";
+        spacing = mkLiteral "12px";
       };
 
       "inputbar" = {
@@ -106,46 +110,53 @@ in
           "prompt"
           "entry"
         ];
-        spacing = mkLiteral "0.5em";
-        background-color = mkLiteral "@bg";
+        spacing = mkLiteral "10px";
+        padding = mkLiteral "10px 14px";
+        border = mkLiteral "1px";
+        border-color = mkLiteral "@border-col";
+        border-radius = mkLiteral "${toString theme.radius.control}px";
+        background-color = mkLiteral "@bg-card";
         text-color = mkLiteral "@accent";
       };
 
       "prompt" = {
         text-color = mkLiteral "@accent";
-        background-color = mkLiteral "@bg";
+        background-color = mkLiteral "transparent";
       };
 
       "entry" = {
-        placeholder = "run…";
+        placeholder = "検索・起動…";
         placeholder-color = mkLiteral "@fg-dim";
         text-color = mkLiteral "@fg";
-        background-color = mkLiteral "@bg";
+        background-color = mkLiteral "transparent";
         cursor = mkLiteral "text";
       };
 
       "listview" = {
-        lines = 12;
+        lines = 11;
         columns = 1;
         fixed-height = true;
         dynamic = true;
         scrollbar = true;
-        spacing = mkLiteral "0.1em";
-        background-color = mkLiteral "@bg";
+        spacing = mkLiteral "4px";
+        background-color = mkLiteral "transparent";
       };
 
       "scrollbar" = {
-        width = mkLiteral "0.3em";
+        width = mkLiteral "4px";
         handle-color = mkLiteral "@accent";
-        handle-width = mkLiteral "0.3em";
-        background-color = mkLiteral "@bg";
+        handle-width = mkLiteral "4px";
+        border-radius = mkLiteral "4px";
+        background-color = mkLiteral "transparent";
       };
 
       "element" = {
-        padding = mkLiteral "0.3em 0.4em";
-        spacing = mkLiteral "0.6em";
-        border-radius = mkLiteral "0";
-        background-color = mkLiteral "@bg";
+        padding = mkLiteral "7px 12px";
+        spacing = mkLiteral "12px";
+        border = mkLiteral "1px";
+        border-color = mkLiteral "transparent";
+        border-radius = mkLiteral "${toString theme.radius.control}px";
+        background-color = mkLiteral "transparent";
         text-color = mkLiteral "@fg";
         children = map mkLiteral [
           "element-icon"
@@ -154,7 +165,7 @@ in
       };
 
       "element-icon" = {
-        size = mkLiteral "1.5em";
+        size = mkLiteral "1.45em";
         background-color = mkLiteral "inherit";
         text-color = mkLiteral "inherit";
       };
@@ -167,12 +178,13 @@ in
       };
 
       "element selected" = {
-        background-color = mkLiteral "@bg-alt";
+        background-color = mkLiteral "@bg-sel";
+        border-color = mkLiteral "@accent";
         text-color = mkLiteral "@accent";
       };
 
       "element alternate" = {
-        background-color = mkLiteral "@bg";
+        background-color = mkLiteral "transparent";
         text-color = mkLiteral "@fg";
       };
 
@@ -181,13 +193,15 @@ in
       };
 
       "message" = {
-        background-color = mkLiteral "@bg";
-        border = mkLiteral "0";
-        padding = mkLiteral "0";
+        background-color = mkLiteral "@bg-card";
+        border = mkLiteral "1px";
+        border-color = mkLiteral "@border-col";
+        border-radius = mkLiteral "${toString theme.radius.control}px";
+        padding = mkLiteral "8px 12px";
       };
 
       "textbox" = {
-        background-color = mkLiteral "@bg";
+        background-color = mkLiteral "transparent";
         text-color = mkLiteral "@fg-dim";
       };
     };
@@ -284,19 +298,46 @@ in
     ];
   };
 
-  # Default terminal (Ctrl+Alt+T / Super+Return).
+  # Default terminal (Ctrl+Alt+T / Super+Return) — Nocturne Slate translucent theme.
   programs.ghostty = {
     enable = true;
     settings = {
-      font-family = "JetBrainsMono Nerd Font";
+      font-family = theme.font.mono;
       font-size = 12;
       gtk-single-instance = true;
+      window-padding-x = 12;
+      window-padding-y = 10;
+      window-decoration = false;
+      background = p.bg;
+      foreground = p.fg;
+      cursor-color = p.accent;
+      selection-background = p.accentSoft;
+      selection-foreground = p.fg;
+      background-opacity = 0.90;
+      palette = [
+        "0=#131922"
+        "1=#f07178"
+        "2=#6ee7b7"
+        "3=#f2b866"
+        "4=#4ea8de"
+        "5=#b794f4"
+        "6=#56d4c8"
+        "7=#c7d3e0"
+        "8=#4b596b"
+        "9=#ff8a92"
+        "10=#8cf2ca"
+        "11=#ffd08a"
+        "12=#73c0f0"
+        "13=#cdb4fa"
+        "14=#7ae6dc"
+        "15=#f0f5fa"
+      ];
     };
   };
 
   home.sessionVariables = {
     TERMINAL = "ghostty";
-    # Java AWT on Sway/i3: without this, frames often paint solid black.
+    # Java AWT on tiling Wayland/XWayland compositors: prevents solid black frames.
     _JAVA_AWT_WM_NONREPARENTING = "1";
   };
 
@@ -377,7 +418,7 @@ in
   xdg.dataFile."nvim/nix/plugins".source = lazyPlugins.plugins;
   xdg.dataFile."nvim/nix/treesitter".source = lazyPlugins.treesitter;
 
-  # Terminal file manager (Sway: Super+e → Ghostty -e yazi).
+  # Terminal file manager (Hyprland: Super+e → Ghostty -e yazi).
   # Bash wrapper `y` cds into the last dir on quit.
   programs.yazi = {
     enable = true;
@@ -452,7 +493,7 @@ in
     chatgpt
     # Grok Bot desktop agent. App menu: Grok Bot (`grok-bot`).
     grok-bot
-    # Earthquake map (pkgs/jquake: Sway AWT fix + sounds cwd + http.agent).
+    # Earthquake map (pkgs/jquake: Hyprland/XWayland AWT fix + sounds cwd + http.agent).
     jquake
     onlyoffice-desktopeditors
     # 3D printer slicer (Bambu/Prusa fork). App menu: OrcaSlicer (`orca-slicer`).

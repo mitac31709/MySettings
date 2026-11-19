@@ -1,4 +1,4 @@
-# Hyprland: primary Wayland session (UWSM, hyprlock, greetd + ReGreet).
+# Hyprland: primary Wayland desktop session (UWSM, hyprlock, Wayland toolkit defaults).
 { lib, pkgs, ... }:
 
 {
@@ -7,15 +7,22 @@
   programs.hyprland = {
     enable = true;
     withUWSM = true;
-    xwayland.enable = true; # JQuake / stalonetray / X11 apps
+    xwayland.enable = true; # JQuake / stalonetray / legacy X11 apps
   };
 
-  # PAM stack for hyprlock (also used by hypridle before-sleep).
+  # PAM stack for hyprlock (invoked manually via Super+L and by hypridle).
   programs.hyprlock.enable = true;
 
-  # Wayland / Electron defaults for the Hyprland session.
+  # Standard Wayland / Hyprland session environment defaults.
   environment.sessionVariables = {
     NIXOS_OZONE_WL = "1";
+    ELECTRON_OZONE_PLATFORM_HINT = "auto";
+    GDK_BACKEND = "wayland,x11,*";
+    QT_QPA_PLATFORM = "wayland;xcb";
+    QT_WAYLAND_DISABLE_WINDOWDECORATION = "1";
+    SDL_VIDEODRIVER = "wayland";
+    CLUTTER_BACKEND = "wayland";
+    XDG_SESSION_TYPE = "wayland";
     SUDO_ASKPASS = lib.getExe' pkgs.rofi-prompt "rofi-askpass";
   };
 

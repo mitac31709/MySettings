@@ -478,13 +478,14 @@ let
       }
 
       launch_in_session() {
-        if [ -n "''${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && /bin/hyprctl version >/dev/null 2>&1; then
+        if [ -n "''${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && ${pkgs.hyprland}/bin/hyprctl version >/dev/null 2>&1; then
           local cmd=""
-          local arg
+          local arg lua_expr
           for arg in "$@"; do
             cmd+="''${cmd:+ }$(printf '%q' "$arg")"
           done
-          /bin/hyprctl dispatch exec -- "$cmd" >/dev/null
+          lua_expr="$(jq -Rn --arg c "$cmd" '"hl.dsp.exec_cmd(" + ($c | tojson) + ")"')"
+          ${pkgs.hyprland}/bin/hyprctl dispatch "$lua_expr" >/dev/null
         else
           "$@" </dev/null >/dev/null 2>&1 &
         fi

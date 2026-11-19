@@ -1,11 +1,11 @@
 ---
-description: 再利用しそうな操作は Sway チートシートにも追記する
+description: 再利用しそうな操作は Hyprland チートシートにも追記する
 alwaysApply: true
 ---
 
 # チートシート拡張
 
-ユーザーの質問に答えるとき、**今後も使いそうなコマンド／操作**なら、回答とあわせて Sway チートシートも更新する。
+ユーザーの質問に答えるとき、**今後も使いそうなコマンド／操作**なら、回答とあわせて Hyprland チートシートも更新する。
 
 ## 対象
 
@@ -24,7 +24,7 @@ alwaysApply: true
 ```
 
 - `term`: Ghostty + 対話シェル（エイリアス／関数利用可）
-- `exec`: 即時バックグラウンド（`swaymsg exec`）
+- `exec`: 即時バックグラウンド（`hypr-exec` / `hl.dsp.exec_cmd`）
 - `show`: 危険コマンド用。端末に表示するだけで自動実行しない（例: `backup restore`、`nix-collect-garbage -d`）
 - 注記は `label` のみ（`keys` / `run` なし）でよい
 
