@@ -8,5 +8,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "local-llm-qwen35-4b" ];
+  system.nixos.tags = [ "local-llm-t3code-acp" ];
 }
