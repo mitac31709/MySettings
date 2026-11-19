@@ -32,14 +32,13 @@ WATCH: dict[str, list[tuple[str, str, str, tuple[str, ...]]]] = {
         ("_7zz", "7z", "\uf1c6", ()),
         ("bottles", "botl", "\uf0c3", ()),
         ("discord", "disc", "\uf086", ()),
-        ("waybar", "wbar", "\uf2d1", ()),
         ("hyprland", "hypr", "\ue615", ()),
         ("hyprlock", "lock", "\uf023", ()),
         ("hypridle", "idle", "\uf06e", ()),
         ("hyprpaper", "wall", "\uf03e", ()),
+        ("hyprsunset", "suns", "\uf186", ()),
         ("cage", "cage", "\uf2d1", ()),
         ("rofi", "rofi", "\uf0c9", ()),
-        ("mako", "mako", "\uf0f3", ()),
         ("tor-browser", "tor", "\uf06e", ()),
         ("trayscale", "tsui", "\uf0e8", ()),
         ("tailscale", "ts", "\uf0e8", ()),
@@ -89,6 +88,7 @@ FLAKE_META = {
     "alsa-ucm-conf-cros": ("\uf028", "alsa", "alsa-ucm-conf-cros"),
     "bootvine": ("\uf1bb", "vine", "bootvine"),
     "agenix": ("\uf084", "age", "agenix"),
+    "colorshell": ("\uf53f", "csh", "colorshell"),
 }
 
 

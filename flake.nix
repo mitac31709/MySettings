@@ -28,6 +28,12 @@
     nixpkgs-cursor.url = "github:NixOS/nixpkgs/nixos-unstable";
     # Hermes Agent (CLI + ACP). Do not follow nixpkgs — uv2nix lock pins upstream.
     hermes-agent.url = "github:NousResearch/hermes-agent";
+    # Colorshell (GTK4 + Astal Hyprland desktop shell). Do not follow nixpkgs —
+    # our 26.11 nixpkgs removed pkgs.astal, while colorshell pins a compatible nixpkgs + pywal16.
+    colorshell = {
+      url = "github:retrozinndev/colorshell";
+      inputs.home-manager.follows = "home-manager";
+    };
     # Vendor .debs (flake update re-fetches; see scripts/flake-update.sh).
     # Keep URL version in sync with uniclipboardVersion below (flake-update.sh).
     uniclipboard-deb = {
@@ -137,6 +143,8 @@
                     wol-pc = final.callPackage ./pkgs/wol-pc { };
                     # Cursor Gothic sans-serif typeface (OpenType extracted from WOFF2).
                     cursor-gothic = final.callPackage ./pkgs/cursor-gothic { };
+                    # Tilion Fortress: local stealth Chromium engine + tilion / tilion-mcp CLI.
+                    tilion-fortress = final.callPackage ./pkgs/tilion-fortress { };
                   }
                 )
               ];

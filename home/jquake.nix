@@ -2,10 +2,10 @@
 #
 # - Patches a few Settings.properties keys on each start without rewriting the whole file.
 # - Hyprland/XWayland: AWT SystemTray needs an XEmbed tray host. Offscreen stalonetray
-#   hosts JQuake's icon and waybar's `custom/jquake` module opens it via stalonetray
+#   hosts JQuake's icon and `jquake-open` / `jquake-menu` open it via stalonetray
 #   remote click.
 # - On alert we wake DPMS, dismiss hyprlock, and maximize/pin the map window while
-#   keeping Waybar visible using Hyprland 0.57+ Lua dispatchers.
+#   keeping the top bar visible using Hyprland 0.57+ Lua dispatchers.
 {
   pkgs,
   lib,
@@ -316,7 +316,7 @@ in
     };
   };
 
-  # Hyprland: maximize (keeping Waybar visible) + unlock on alert window events.
+  # Hyprland: maximize (keeping top bar visible) + unlock on alert window events.
   systemd.user.services.jquake-hypr-alert = {
     Unit = {
       Description = "Raise JQuake maximized over hyprlock on alert";

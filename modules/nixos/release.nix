@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "hyprland-nocturne" ];
+  system.nixos.tags = [ "colorshell-tilion-qalculate" ];
 }

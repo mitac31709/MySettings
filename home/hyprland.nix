@@ -1,8 +1,9 @@
-# Hyprland Home Manager: standard Hyprland 0.57+ Lua desktop (UWSM).
-# Visual system: Nocturne Slate (lib/theme.nix) — translucent dark slate, glacial teal
-# & arctic sky accents, rounded geometry, blur/shadow depth, fluid spring/bezier motion.
-# Ecosystem: hyprpaper, hyprlock, hypridle, hyprshot, hyprpicker, satty, waybar, rofi, mako.
+# Hyprland Home Manager: standard Hyprland 0.57+ Lua desktop (UWSM) + Colorshell.
+# Visual system: Colorshell (GTK4 + Astal) with pywal16 dynamic color engine from wallpaper
+# (border color sync enabled), seeded with Nocturne Slate wallpaper (lib/theme.nix).
+# Ecosystem: colorshell, hyprpaper, hyprsunset, hyprlock, hypridle, hyprshot, hyprpicker, satty, rofi.
 {
+  inputs,
   config,
   pkgs,
   lib,
@@ -18,12 +19,8 @@ let
   isChromebook = flakeTarget == "chromebook";
   inputSection = if isChromebook then "入力・Chromebook" else "入力・VAIO";
   powerSection = if isChromebook then "電源・Type-C" else "電源・省電力";
-  repoPath = config.mitac.repoPath;
-  flakeUpdateCheck = lib.getExe config.mitac.scripts.flakeUpdateCheck;
-  flakeUpdate = lib.getExe config.mitac.scripts.flakeUpdate;
-  startupSoundBin = lib.getExe config.mitac.scripts.startupSound;
 
-  waybarFont = theme.font.mono;
+  colorshellBin = lib.getExe config.programs.colorshell.package;
   ghosttyBin = "${pkgs.ghostty}/bin/ghostty";
   rofiBin = lib.getExe config.programs.rofi.package;
   yaziBin = "${pkgs.yazi}/bin/yazi";
@@ -34,6 +31,19 @@ let
   brightnessctl = "${pkgs.brightnessctl}/bin/brightnessctl";
   btopBin = "${pkgs.btop}/bin/btop";
   nmtuiBin = "${pkgs.networkmanager}/bin/nmtui";
+
+  # Initial writable hyprpaper.conf seeded for Colorshell (hyprpaper 0.8+ block syntax).
+  initialHyprpaperConf = pkgs.writeText "hyprpaper-initial.conf" ''
+    # Initial hyprpaper config seeded for Colorshell (writable so wallpaper changes persist).
+    splash = false
+    ipc = true
+
+    wallpaper {
+        monitor =
+        path = ${config.home.homeDirectory}/wallpapers/nocturne-slate.png
+        fit_mode = cover
+    }
+  '';
 
   # Safe wrapper for Hyprland 0.57+ Lua `hl.dsp.exec_cmd(...)` via hyprctl dispatch.
   # Accepts either a single shell command string or argv tokens.
@@ -60,14 +70,6 @@ let
     '';
   };
   hyprExecBin = lib.getExe hyprExec;
-
-  flakeUpdateRunner = pkgs.writeShellScript "open-flake-update" ''
-    rc=0
-    ${flakeUpdate} || rc=$?
-    printf '\n終了コード: %d [Enter で閉じる] ' "$rc"
-    IFS= read -r _ || true
-  '';
-  openFlakeUpdate = "${ghosttyBin} -e ${flakeUpdateRunner}";
 
   # pactl +N% has no ceiling; cap volume at 100% to avoid soft-boost distortion.
   volumeUp = pkgs.writeShellScript "volume-up" ''
@@ -178,7 +180,7 @@ let
   };
   capsomniaPkg = pkgs.callPackage ../pkgs/capsomnia { };
 
-  # Presentation marker toggled with waybar keep-screen-on button or Capsomnia Keep Display Awake.
+  # Presentation marker toggled with `toggle-keep-screen-on` or Capsomnia Keep Display Awake.
   # XDG_RUNTIME_DIR is session-scoped so it clears automatically on logout.
   lockOnceCmd = pkgs.writeShellScript "hypr-lock-once" ''
     if ${pkgs.procps}/bin/pgrep -x hyprlock >/dev/null 2>&1; then
@@ -211,26 +213,24 @@ let
     ${hyprctlBin} dispatch 'hl.dsp.dpms("on")' >/dev/null 2>&1 || true
     ${brightnessctl} -r >/dev/null 2>&1 || true
   '';
-  toggleKeepScreenOn = pkgs.writeShellScript "hypr-toggle-keep-screen-on" ''
-    marker="''${XDG_RUNTIME_DIR}/hypr-keep-screen-on"
-    if [ -e "$marker" ]; then
-      rm -f "$marker"
-    else
-      touch "$marker"
-    fi
-    ${pkgs.procps}/bin/pkill -SIGRTMIN+14 -x waybar >/dev/null 2>&1 || true
-  '';
-  waybarKeepScreenOn = pkgs.writeShellScript "waybar-keep-screen-on" ''
-    marker="''${XDG_RUNTIME_DIR}/hypr-keep-screen-on"
-    if [ -e "$marker" ]; then
-      printf '%s\n' '{"text":"󰅶 ON","class":"activated","tooltip":"画面常時オン（減光・ロック・消灯なし／クリックで解除）"}'
-    else
-      printf '%s\n' '{"text":"󰾪","class":"deactivated","tooltip":"画面を常時オンにする（減光・ロック・消灯を抑制）"}'
-    fi
-  '';
+  toggleKeepScreenOn = pkgs.writeShellApplication {
+    name = "toggle-keep-screen-on";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.libnotify
+    ];
+    text = ''
+      marker="''${XDG_RUNTIME_DIR}/hypr-keep-screen-on"
+      if [ -e "$marker" ]; then
+        rm -f "$marker"
+        notify-send "画面常時オン: OFF" "通常の自動減光・ロック・消灯に戻しました" >/dev/null 2>&1 || true
+      else
+        touch "$marker"
+        notify-send "画面常時オン: ON" "自動減光・ロック・消灯を抑止しています" >/dev/null 2>&1 || true
+      fi
+    '';
+  };
 
-  # Route Rofi launches through hypr-exec so new windows spawn on the active workspace.
-  rofiLauncher = "${rofiBin} -show drun -run-command \"${hyprExecBin} {cmd}\" -run-shell-command \"${hyprExecBin} ${ghosttyBin} -e {cmd}\"";
   # Super+P: one-off command runner (`rofi -show run`).
   # Enter runs via hypr-exec; Shift+Enter (or Ctrl+Shift+Enter for custom
   # text) runs in an interactive Ghostty shell that waits before closing.
@@ -288,326 +288,13 @@ let
       exec ${hyprctlBin} dispatch "hl.dsp.focus({ workspace = $next_num })"
     '';
   };
-  # waybar cpu / mem → Ghostty + btop; network → Ghostty + nmtui; clock → NTP sync
-  openBtop = "${ghosttyBin} -e ${btopBin}";
-  openNmtui = "${ghosttyBin} -e ${nmtuiBin}";
   openYazi = "${ghosttyBin} -e ${yaziBin}";
 
-  waybarClock = pkgs.writeShellScript "waybar-clock" ''
-    export LC_ALL=C
-    export TZDIR="${pkgs.tzdata}/share/zoneinfo"
-    printf -v now '%(%s)T' -1
-    TZ="Asia/Tokyo" printf -v bar '%(%a %m-%d  %H:%M:%S)T' "$now"
-    lines=""
-    sep='\n'
-    for tz in Asia/Tokyo UTC America/Los_Angeles Asia/Shanghai; do
-      TZ="$tz" printf -v abbr '%(%Z)T' "$now"
-      TZ="$tz" printf -v ts '%(%Y-%m-%d (%a) %H:%M:%S)T' "$now"
-      TZ="$tz" printf -v off '%(%z)T' "$now"
-      printf -v row '%-4s %s (%s:%s)' "$abbr" "$ts" "''${off:0:3}" "''${off:3:2}"
-      lines+="''${lines:+$sep}$row"
-    done
-
-    # Derive TAI-UTC from tzdata leap-seconds.list; GPST = TAI - 19s (epoch 1980-01-06).
-    ntp_now=$((now + 2208988800))
-    dtai=19
-    while read -r ntp val _; do
-      case "$ntp" in
-        ""|\#*) continue ;;
-      esac
-      if [ "$ntp" -le "$ntp_now" ]; then
-        dtai="$val"
-      fi
-    done < "$TZDIR/leap-seconds.list"
-    gps_off=$((dtai - 19))
-    gps_unix=$((now + gps_off))
-    gps_sec=$((now - 315964800 + gps_off))
-    gps_week=$((gps_sec / 604800))
-    gps_tow=$((gps_sec % 604800))
-    TZ="UTC" printf -v gps_ts '%(%Y-%m-%d (%a) %H:%M:%S)T' "$gps_unix"
-    printf -v gps_row '%-4s %s (UTC%+ds / W%d %ds)' "GPST" "$gps_ts" "$gps_off" "$gps_week" "$gps_tow"
-    printf -v unix_row '%-4s %s' "UNIX" "$now"
-    lines+="$sep$gps_row$sep$unix_row"
-
-    if [ -e /run/systemd/timesync/synchronized ]; then
-      ntp_line="NTP: 同期済み（クリックで時刻同期）"
-    else
-      ntp_line="NTP: 同期待ち（クリックで時刻同期）"
-    fi
-    tooltip="$lines\n\n$ntp_line"
-    printf '{"text":"%s","tooltip":"%s"}\n' "$bar" "$tooltip"
-  '';
-
-  waybarBattery = pkgs.writeShellApplication {
-    name = "waybar-battery";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.gawk
-      pkgs.jq
-    ];
-    text = ''
-      pref_bat=""
-      pref_adapter=""
-      while [ "$#" -gt 0 ]; do
-        case "$1" in
-          --bat)
-            pref_bat="''${2:-}"
-            shift 2
-            ;;
-          --adapter)
-            pref_adapter="''${2:-}"
-            shift 2
-            ;;
-          *)
-            shift
-            ;;
-        esac
-      done
-
-      ps_root="''${WAYBAR_POWER_SUPPLY_DIR:-/sys/class/power_supply}"
-
-      bat_dir=""
-      if [ -n "$pref_bat" ] && [ -d "$ps_root/$pref_bat" ]; then
-        bat_dir="$ps_root/$pref_bat"
-      else
-        for d in "$ps_root"/BAT* "$ps_root"/*; do
-          [ -d "$d" ] || continue
-          [ -r "$d/type" ] || continue
-          IFS= read -r tp < "$d/type" || continue
-          [ "$tp" = "Battery" ] || continue
-          if [ -r "$d/scope" ]; then
-            IFS= read -r sc < "$d/scope" || sc=""
-            if [ "''${sc,,}" = "device" ]; then
-              continue
-            fi
-          fi
-          bat_dir="$d"
-          break
-        done
-      fi
-
-      if [ -z "$bat_dir" ] || [ ! -d "$bat_dir" ]; then
-        printf '{"text":"","class":"empty"}\n'
-        exit 0
-      fi
-
-      read_val() {
-        local f="$1" def="''${2:-}" v
-        if [ -r "$f" ]; then
-          IFS= read -r v < "$f" || v="$def"
-          printf '%s' "$v"
-        else
-          printf '%s' "$def"
-        fi
-      }
-
-      bat_name="$(basename "$bat_dir")"
-      status="$(read_val "$bat_dir/status" "Unknown")"
-      raw_cap="$(read_val "$bat_dir/capacity" "")"
-      vn="$(read_val "$bat_dir/voltage_now" "0")"
-      vmin="$(read_val "$bat_dir/voltage_min_design" "0")"
-
-      adapter_online=""
-      if [ -n "$pref_adapter" ] && [ -r "$ps_root/$pref_adapter/online" ]; then
-        adapter_online="$(read_val "$ps_root/$pref_adapter/online" "")"
-      else
-        for d in "$ps_root"/*; do
-          [ -d "$d" ] || continue
-          [ -r "$d/type" ] || continue
-          IFS= read -r tp < "$d/type" || continue
-          if [ "$tp" = "Mains" ] && [ -r "$d/online" ]; then
-            adapter_online="$(read_val "$d/online" "")"
-            break
-          fi
-        done
-      fi
-
-      mode=""
-      now_val=0
-      full_val=0
-      design_val=0
-      power_val=0
-      pw_unit=""
-      has_power=0
-      if [ -r "$bat_dir/energy_now" ] && [ -r "$bat_dir/energy_full" ]; then
-        mode="energy"
-        now_val="$(read_val "$bat_dir/energy_now" "0")"
-        full_val="$(read_val "$bat_dir/energy_full" "0")"
-        design_val="$(read_val "$bat_dir/energy_full_design" "0")"
-      elif [ -r "$bat_dir/charge_now" ] && [ -r "$bat_dir/charge_full" ]; then
-        mode="charge"
-        now_val="$(read_val "$bat_dir/charge_now" "0")"
-        full_val="$(read_val "$bat_dir/charge_full" "0")"
-        design_val="$(read_val "$bat_dir/charge_full_design" "0")"
-      fi
-
-      if [ -r "$bat_dir/power_now" ]; then
-        power_val="$(read_val "$bat_dir/power_now" "0")"
-        pw_unit="W"
-        has_power=1
-      elif [ -r "$bat_dir/current_now" ]; then
-        power_val="$(read_val "$bat_dir/current_now" "0")"
-        pw_unit="A"
-        has_power=1
-      fi
-
-      disp_status="$status"
-      if [ "$status" = "Unknown" ]; then
-        if [ "$adapter_online" = "1" ]; then
-          disp_status="Plugged"
-        else
-          disp_status="Discharging"
-        fi
-      elif [ "$status" = "Not charging" ] && [ "$adapter_online" = "1" ]; then
-        disp_status="Plugged"
-      fi
-
-      {
-        IFS= read -r -d "" text
-        IFS= read -r -d "" classes
-        IFS= read -r -d "" tip
-      } < <(awk \
-        -v bat="$bat_name" \
-        -v st="$disp_status" \
-        -v ac="$adapter_online" \
-        -v raw_cap="$raw_cap" \
-        -v vn="$vn" \
-        -v vmin="$vmin" \
-        -v mode="$mode" \
-        -v now_v="$now_val" \
-        -v full_v="$full_val" \
-        -v design_v="$design_val" \
-        -v pw_v="$power_val" \
-        -v pw_unit="$pw_unit" \
-        -v has_pw="$has_power" \
-        'BEGIN {
-          if (pw_v < 0) pw_v = -pw_v
-          cap = 0
-          if ((mode == "energy" || mode == "charge") && full_v > 0) {
-            cap = int((100.0 * now_v / full_v) + 0.5)
-          } else if (raw_cap != "") {
-            cap = int(raw_cap + 0)
-          }
-          if (cap < 0) cap = 0
-          if (cap > 100) cap = 100
-
-          if (cap == 100 && st == "Charging") st = "Full"
-
-          if (st == "Charging") icon = "󰂄"
-          else if (st == "Plugged" || st == "Full") icon = "󰚥"
-          else if (cap <= 15) icon = "󰂎"
-          else if (cap <= 35) icon = "󰁼"
-          else if (cap <= 60) icon = "󰁾"
-          else if (cap <= 85) icon = "󰂀"
-          else icon = "󰁹"
-          text = sprintf("%s %d%%", icon, cap)
-
-          cls_st = tolower(st)
-          gsub(/ /, "-", cls_st)
-          classes = cls_st
-          if (cap <= 15) classes = classes " critical"
-          else if (cap <= 30) classes = classes " warning"
-
-          ac_note = (ac == "1") ? "（AC 接続中）" : ""
-          line1 = sprintf("%s: %s %d%%%s", bat, st, cap, ac_note)
-
-          line2 = ""
-          if (vn > 0) {
-            if (vmin > 0) {
-              line2 = sprintf("電圧: %.2f V（設計下限 %.2f V）", vn / 1e6, vmin / 1e6)
-            } else {
-              line2 = sprintf("電圧: %.2f V", vn / 1e6)
-            }
-          }
-
-          v_ref = (vn > 0) ? (vn / 1e6) : ((vmin > 0) ? (vmin / 1e6) : 0)
-          pw_w = 0
-          if (has_pw) {
-            if (pw_unit == "W") pw_w = pw_v / 1e6
-            else if (pw_unit == "A" && v_ref > 0) pw_w = (pw_v / 1e6) * v_ref
-          }
-
-          line3 = ""
-          rem_h = 0
-          if (mode == "energy") {
-            health = (design_v > 0) ? (100.0 * full_v / design_v) : 0
-            if (design_v > 0) {
-              line3 = sprintf("容量: %.2f / %.2f Wh（設計 %.2f Wh / 健康度 %.0f%%）", now_v / 1e6, full_v / 1e6, design_v / 1e6, health)
-            } else {
-              line3 = sprintf("容量: %.2f / %.2f Wh", now_v / 1e6, full_v / 1e6)
-            }
-            if (pw_w > 0.1) {
-              if (st == "Discharging" && now_v > 0) rem_h = (now_v / 1e6) / pw_w
-              else if (st == "Charging" && full_v > now_v) rem_h = ((full_v - now_v) / 1e6) / pw_w
-            }
-          } else if (mode == "charge") {
-            health = (design_v > 0) ? (100.0 * full_v / design_v) : 0
-            if (v_ref > 0) {
-              now_wh = (now_v / 1e6) * v_ref
-              full_wh = (full_v / 1e6) * v_ref
-              if (design_v > 0) {
-                line3 = sprintf("容量: %.2f / %.2f Wh（%.2f / %.2f Ah / 健康度 %.0f%%）", now_wh, full_wh, now_v / 1e6, full_v / 1e6, health)
-              } else {
-                line3 = sprintf("容量: %.2f / %.2f Wh（%.2f / %.2f Ah）", now_wh, full_wh, now_v / 1e6, full_v / 1e6)
-              }
-              if (pw_w > 0.1) {
-                if (st == "Discharging" && now_v > 0) rem_h = now_wh / pw_w
-                else if (st == "Charging" && full_v > now_v) rem_h = (full_wh - now_wh) / pw_w
-              }
-            } else if (design_v > 0) {
-              line3 = sprintf("容量: %.2f / %.2f Ah（健康度 %.0f%%）", now_v / 1e6, full_v / 1e6, health)
-            } else {
-              line3 = sprintf("容量: %.2f / %.2f Ah", now_v / 1e6, full_v / 1e6)
-            }
-          }
-
-          line4 = ""
-          if (has_pw && (pw_unit == "W" || v_ref > 0)) {
-            sign = (st == "Charging") ? "+" : ((st == "Discharging") ? "-" : "")
-            eta_str = ""
-            if (rem_h > 0) {
-              tot_m = int(rem_h * 60 + 0.5)
-              hh = int(tot_m / 60)
-              mm = tot_m % 60
-              dur = (hh > 0) ? sprintf("%d時間%d分", hh, mm) : sprintf("%d分", mm)
-              eta_ts = strftime("%H:%M", systime() + int(rem_h * 3600 + 0.5))
-              if (st == "Charging") {
-                eta_str = sprintf("  満充電まで %s (%s)", dur, eta_ts)
-              } else if (st == "Discharging") {
-                eta_str = sprintf("  残り %s (%s)", dur, eta_ts)
-              }
-            }
-            line4 = sprintf("電力: %s%.2f W%s", sign, pw_w, eta_str)
-          }
-
-          tip = line1
-          if (line2 != "") tip = tip "\n" line2
-          if (line3 != "") tip = tip "\n" line3
-          if (line4 != "") tip = tip "\n" line4
-
-          if (cap == 0 && st == "Discharging" && vn > 5500000) {
-            tip = tip "\n注: 残量 0% 表示でも電圧あり（満充電→空→満充電で較正）"
-          } else if (raw_cap != "" && int(raw_cap + 0) != cap) {
-            tip = tip sprintf("\n注: カーネル capacity=%s%%", raw_cap)
-          }
-
-          printf "%s\0%s\0%s\0", text, classes, tip
-        }')
-
-      jq -cn \
-        --arg text "$text" \
-        --arg tooltip "$tip" \
-        --arg classes "$classes" \
-        '{text: $text, tooltip: $tooltip, class: ($classes | split(" ") | map(select(length > 0)))}'
-    '';
-  };
-
   ntpSync = pkgs.writeShellApplication {
-    name = "waybar-ntp-sync";
+    name = "ntp-sync";
     runtimeInputs = [
       pkgs.coreutils
       pkgs.libnotify
-      pkgs.procps
       pkgs.systemd
     ];
     text = ''
@@ -634,8 +321,6 @@ let
         sleep 0.25
       done
 
-      pkill -SIGRTMIN+11 -x waybar >/dev/null 2>&1 || true
-
       now_jst="$(TZ="Asia/Tokyo" date '+%Y-%m-%d %H:%M:%S %Z')"
       now_utc="$(TZ="UTC" date '+%Y-%m-%d %H:%M:%S %Z')"
       if [ "$synced" -eq 1 ]; then
@@ -648,56 +333,8 @@ let
     '';
   };
 
-  # Dedicated left-dock JQuake slot: status indicator + click-to-open + right-click menu.
-  waybarJquake = pkgs.writeShellApplication {
-    name = "waybar-jquake";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.hyprland
-      pkgs.jq
-      pkgs.systemd
-    ];
-    text = ''
-      mapfile -t ust < <(
-        systemctl --user is-active \
-          jquake.service \
-          stalonetray-jquake.service \
-          jquake-hypr-alert.service 2>/dev/null || true
-      )
-      jq_s="''${ust[0]:-unknown}"
-      st_s="''${ust[1]:-unknown}"
-      al_s="''${ust[2]:-unknown}"
-
-      is_open=0
-      if ${hyprctlBin} clients -j 2>/dev/null | jq -e '[.[] | select(.class == "net-jquake-app-Main")] | length > 0' >/dev/null; then
-        is_open=1
-      fi
-
-      glyph=$'\uf469'
-      if [ "$jq_s" = "failed" ] || [ "$st_s" = "failed" ] || [ "$al_s" = "failed" ]; then
-        cls="failed"
-        glyph=$'\uf071'
-        tip=$'✗ JQuake: 異常停止\njquake='"$jq_s"$' tray='"$st_s"$' alert='"$al_s"$'\n\n左クリックで起動・表示\n右クリックで管理メニュー'
-      elif [ "$jq_s" = "active" ] && [ "$st_s" = "active" ] && [ "$al_s" = "active" ]; then
-        if [ "$is_open" -eq 1 ]; then
-          cls="open"
-          tip=$'JQuake: 表示中\n\n左クリックでフォーカス\n右クリックで管理メニュー'
-        else
-          cls="active"
-          tip=$'JQuake: 待機中（強震モニタ・EEW 監視）\n\n左クリックで表示\n右クリックで管理メニュー'
-        fi
-      else
-        cls="degraded"
-        tip=$'! JQuake: 停止中\njquake='"$jq_s"$' tray='"$st_s"$' alert='"$al_s"$'\n\n左クリックで起動・表示\n右クリックで管理メニュー'
-      fi
-
-      jq -cn --arg text "$glyph" --arg tooltip "$tip" --arg class "$cls" \
-        '{text: $text, tooltip: $tooltip, class: $class}'
-    '';
-  };
-
-  waybarJquakeOpen = pkgs.writeShellApplication {
-    name = "waybar-jquake-open";
+  jquakeOpen = pkgs.writeShellApplication {
+    name = "jquake-open";
     runtimeInputs = [
       pkgs.coreutils
       pkgs.hyprland
@@ -707,10 +344,6 @@ let
       pkgs.systemd
     ];
     text = ''
-      refresh_jquake_bar() {
-        systemctl --user kill --kill-who=main --signal=RTMIN+12 waybar.service >/dev/null 2>&1 || true
-      }
-
       mapfile -t ust < <(
         systemctl --user is-active \
           stalonetray-jquake.service \
@@ -720,12 +353,10 @@ let
       if [ "''${ust[0]:-}" != "active" ] || [ "''${ust[1]:-}" != "active" ] || [ "''${ust[2]:-}" != "active" ]; then
         systemctl --user reset-failed stalonetray-jquake.service jquake.service jquake-hypr-alert.service >/dev/null 2>&1 || true
         systemctl --user start stalonetray-jquake.service jquake.service jquake-hypr-alert.service
-        refresh_jquake_bar
       fi
 
       if ${hyprctlBin} clients -j 2>/dev/null | jq -e '[.[] | select(.class == "net-jquake-app-Main")] | length > 0' >/dev/null; then
         ${hyprctlBin} dispatch 'hl.dsp.focus({ window = "class:^net-jquake-app-Main$" })' >/dev/null 2>&1 || true
-        refresh_jquake_bar
         exit 0
       fi
 
@@ -745,7 +376,6 @@ let
 
       if [ "$clicked" -eq 0 ]; then
         notify-send -u normal "JQuake" "トレイアイコンが見つかりません。状態を確認してください。" >/dev/null 2>&1 || true
-        refresh_jquake_bar
         exit 1
       fi
 
@@ -756,12 +386,11 @@ let
         fi
         sleep 0.1
       done
-      refresh_jquake_bar
     '';
   };
 
-  waybarJquakeMenu = pkgs.writeShellApplication {
-    name = "waybar-jquake-menu";
+  jquakeMenu = pkgs.writeShellApplication {
+    name = "jquake-menu";
     runtimeInputs = [
       pkgs.coreutils
       pkgs.ghostty
@@ -787,27 +416,20 @@ let
             choice="$(printf '%s\n' "$menu" | ${rofiBin} -dmenu -i -p 'JQuake' || true)"
             [ -n "$choice" ] || exit 0
 
-            refresh_jquake_bar() {
-              systemctl --user kill --kill-who=main --signal=RTMIN+12 waybar.service >/dev/null 2>&1 || true
-            }
-
             case "$choice" in
               *"ウィンドウを開く")
-                exec ${lib.getExe waybarJquakeOpen}
+                exec ${lib.getExe jquakeOpen}
                 ;;
               *"再起動"*)
                 systemctl --user reset-failed stalonetray-jquake.service jquake.service jquake-hypr-alert.service >/dev/null 2>&1 || true
                 systemctl --user restart stalonetray-jquake.service jquake.service jquake-hypr-alert.service
-                refresh_jquake_bar
                 ;;
               *"停止")
                 systemctl --user stop jquake.service jquake-hypr-alert.service stalonetray-jquake.service
-                refresh_jquake_bar
                 ;;
               *"開始")
                 systemctl --user reset-failed stalonetray-jquake.service jquake.service jquake-hypr-alert.service >/dev/null 2>&1 || true
                 systemctl --user start stalonetray-jquake.service jquake.service jquake-hypr-alert.service
-                refresh_jquake_bar
                 ;;
               *"状態・ログ表示")
                 exec ${ghosttyBin} -e ${pkgs.bash}/bin/bash -lc "systemctl --user status jquake stalonetray-jquake jquake-hypr-alert --no-pager; echo; journalctl --user -u jquake -u stalonetray-jquake -u jquake-hypr-alert -n 30 --no-pager; printf '\n[Enter で閉じる] '; IFS= read -r _ || true"
@@ -816,137 +438,8 @@ let
     '';
   };
 
-  # Bottom of sideBar: background daemon & system status + interactive menu.
-  waybarServices = pkgs.writeShellApplication {
-    name = "waybar-services";
-    runtimeInputs = [
-      pkgs.coreutils
-      pkgs.jq
-      pkgs.systemd
-    ];
-    text = ''
-      mapfile -t ust < <(
-        systemctl --user is-active \
-          uniclipd.service \
-          lan-mouse.service \
-          taildrop-receive.service \
-          cliphist-text.service \
-          cliphist-image.service 2>/dev/null || true
-      )
-      mapfile -t sst < <(
-        systemctl is-active \
-          tailscaled.service \
-          restic-backups-home.service \
-          restic-backups-home.timer 2>/dev/null || true
-      )
-
-      uc_s="''${ust[0]:-unknown}"
-      lm_s="''${ust[1]:-unknown}"
-      td_s="''${ust[2]:-unknown}"
-      ct_s="''${ust[3]:-unknown}"
-      ci_s="''${ust[4]:-unknown}"
-
-      ts_s="''${sst[0]:-unknown}"
-      rb_s="''${sst[1]:-unknown}"
-      rt_s="''${sst[2]:-unknown}"
-      rb_res="$(systemctl show -p Result --value restic-backups-home.service 2>/dev/null || echo "")"
-
-      overall="ok"
-      mark_level() {
-        case "$1" in
-          failed) overall="failed" ;;
-          warn)
-            if [ "$overall" = "ok" ]; then
-              overall="degraded"
-            fi
-            ;;
-        esac
-      }
-
-      lines=()
-      tips=("裏方デーモン・システム状態")
-
-      add_icon() {
-        local state="$1" glyph="$2"
-        case "$state" in
-          active)
-            lines+=("<span color='${p.fgSecondary}'>''${glyph}</span>")
-            ;;
-          running)
-            lines+=("<span color='${p.accent}'>''${glyph}</span>")
-            ;;
-          failed)
-            mark_level failed
-            lines+=("<span color='${p.danger}'>''${glyph}</span>")
-            ;;
-          *)
-            mark_level warn
-            lines+=("<span color='${p.warning}'>''${glyph}</span>")
-            ;;
-        esac
-      }
-
-      add_icon "$uc_s" $'\uf0ea'
-      tips+=("• UniClipboard (uniclipd): $uc_s")
-
-      add_icon "$lm_s" $'\uf245'
-      tips+=("• LAN Mouse: $lm_s")
-
-      add_icon "$td_s" $'\uf019'
-      tips+=("• Taildrop Receive: $td_s")
-
-      if [ "$ct_s" = "active" ] && [ "$ci_s" = "active" ]; then
-        add_icon active $'\uf0c5'
-        tips+=("• Cliphist (text/image): active / active")
-      elif [ "$ct_s" = "failed" ] || [ "$ci_s" = "failed" ]; then
-        add_icon failed $'\uf0c5'
-        tips+=("✗ Cliphist: text=$ct_s image=$ci_s")
-      else
-        add_icon warn $'\uf0c5'
-        tips+=("! Cliphist: text=$ct_s image=$ci_s")
-      fi
-
-      if [ "$ts_s" = "active" ]; then
-        if [ -e /sys/class/net/tailscale0 ]; then
-          add_icon active $'\uf0e8'
-          tips+=("• Tailscale: active (tailscale0 UP)")
-        else
-          add_icon warn $'\uf0e8'
-          tips+=("! Tailscale: active (tailscale0 未接続)")
-        fi
-      else
-        add_icon "$ts_s" $'\uf0e8'
-        tips+=("• Tailscale: $ts_s")
-      fi
-
-      if [ "$rb_s" = "active" ] || [ "$rb_s" = "activating" ]; then
-        add_icon running $'\uf1c0'
-        tips+=("↻ Restic Backup: 実行中 (timer=$rt_s)")
-      elif [ "$rb_s" = "failed" ] || { [ -n "$rb_res" ] && [ "$rb_res" != "success" ]; }; then
-        add_icon failed $'\uf1c0'
-        tips+=("✗ Restic Backup: service=$rb_s result=$rb_res (timer=$rt_s)")
-      elif [ "$rt_s" = "active" ]; then
-        add_icon active $'\uf1c0'
-        tips+=("• Restic Backup: 待機 (timer active / 正常)")
-      else
-        add_icon "$rt_s" $'\uf1c0'
-        tips+=("! Restic Backup: timer=$rt_s service=$rb_s")
-      fi
-
-      tips+=("")
-      tips+=("クリックでサービス管理メニュー")
-
-      IFS=$'\n'
-      text="''${lines[*]}"
-      tooltip="''${tips[*]}"
-      unset IFS
-      jq -cn --arg text "$text" --arg tooltip "$tooltip" --arg class "$overall" \
-        '{text: $text, tooltip: $tooltip, class: $class}'
-    '';
-  };
-
-  waybarServicesMenu = pkgs.writeShellApplication {
-    name = "waybar-services-menu";
+  servicesMenu = pkgs.writeShellApplication {
+    name = "services-menu";
     runtimeInputs = [
       pkgs.coreutils
       pkgs.ghostty
@@ -962,9 +455,6 @@ let
             run_term() {
               local cmd="$1"
               ${ghosttyBin} -e ${pkgs.bash}/bin/bash -lc "$cmd; printf '\n[Enter で閉じる] '; IFS= read -r _ || true"
-            }
-            refresh_bar() {
-              systemctl --user kill --kill-who=main --signal=RTMIN+10 waybar.service >/dev/null 2>&1 || true
             }
 
             uc_s="$(u_state uniclipd.service)"
@@ -1003,52 +493,42 @@ let
             case "$choice" in
               *"UniClipboard"*"再起動")
                 systemctl --user restart uniclipd.service
-                refresh_bar
                 ;;
               *"UniClipboard"*"開始")
                 systemctl --user start uniclipd.service
-                refresh_bar
                 ;;
               *"UniClipboard"*"停止")
                 systemctl --user stop uniclipd.service
-                refresh_bar
                 ;;
               *"UniClipboard"*"GUI を開く")
                 exec ${hyprExecBin} uniclipboard
                 ;;
               *"LAN Mouse"*"再起動")
                 systemctl --user restart lan-mouse.service
-                refresh_bar
                 ;;
               *"LAN Mouse"*"開始")
                 systemctl --user start lan-mouse.service
-                refresh_bar
                 ;;
               *"LAN Mouse"*"停止")
                 systemctl --user stop lan-mouse.service
-                refresh_bar
                 ;;
               *"LAN Mouse"*"GUI を開く")
                 exec ${hyprExecBin} lan-mouse
                 ;;
               *"Taildrop Receive"*"再起動")
                 systemctl --user restart taildrop-receive.service
-                refresh_bar
                 ;;
               *"Taildrop Receive"*"開始")
                 systemctl --user start taildrop-receive.service
-                refresh_bar
                 ;;
               *"Taildrop Receive"*"停止")
                 systemctl --user stop taildrop-receive.service
-                refresh_bar
                 ;;
               *"Taildrop"*"yazi"*)
                 exec ${hyprExecBin} "${ghosttyBin}" -e "${yaziBin}" "$HOME/Downloads"
                 ;;
               *"Cliphist"*"再起動")
                 systemctl --user restart cliphist-text.service cliphist-image.service
-                refresh_bar
                 ;;
               *"Cliphist"*"履歴メニューを開く")
                 exec ${hyprExecBin} clipboard-history
@@ -1061,7 +541,6 @@ let
                 ;;
               *"Tailscale"*"sudo"*)
                 run_term "sudo systemctl restart tailscaled.service && tailscale status"
-                refresh_bar
                 ;;
               *"Restic"*"backup status"*)
                 run_term "backup status"
@@ -1071,7 +550,6 @@ let
                 ;;
               *"Restic"*"sudo backup run"*)
                 run_term "sudo backup run"
-                refresh_bar
                 ;;
             esac
     '';
@@ -1091,8 +569,51 @@ let
     }
     {
       section = "起動・終了";
-      label = "rofi（アクティブ WS に起動）";
+      label = "Colorshell ランナー（アプリ / >履歴 / #壁紙 / 計算 / コマンド）";
       keys = "Super+D / Alt+Space";
+      run = "${colorshellBin} runner";
+      mode = "exec";
+    }
+    {
+      section = "起動・終了";
+      label = "Colorshell アプリ一覧（Apps Drawer）";
+      keys = "Super+Shift+D";
+      run = "${colorshellBin} toggle -w apps-drawer";
+      mode = "exec";
+    }
+    {
+      section = "起動・終了";
+      label = "Colorshell 壁紙切替・動的配色（pywal16）";
+      keys = "Super+W";
+      run = "${colorshellBin} runner -t '#'";
+      mode = "exec";
+    }
+    {
+      section = "起動・終了";
+      label = "Colorshell コントロールセンター（Wi-Fi / BT / 音量 / ナイトライト）";
+      keys = "Super+I";
+      run = "${colorshellBin} toggle -w control-center";
+      mode = "exec";
+    }
+    {
+      section = "起動・終了";
+      label = "Colorshell 通知センター・カレンダー・メディア";
+      keys = "Super+M";
+      run = "${colorshellBin} toggle -w center-window";
+      mode = "exec";
+    }
+    {
+      section = "起動・終了";
+      label = "Colorshell 電源・ログアウトメニュー";
+      keys = "Super+X";
+      run = "${colorshellBin} toggle -w logout-menu";
+      mode = "exec";
+    }
+    {
+      section = "起動・終了";
+      label = "Colorshell リロード";
+      run = "${colorshellBin} reload";
+      mode = "exec";
     }
     {
       section = "起動・終了";
@@ -1141,7 +662,7 @@ let
     }
     {
       section = "起動・終了";
-      label = "このシート（waybar ?）";
+      label = "このシート";
       keys = "Super+/";
     }
     {
@@ -1250,7 +771,7 @@ let
     }
     {
       section = "スクショ・音量・輝度";
-      label = "クリップボード履歴（rofi）";
+      label = "クリップボード履歴（rofi / ランナー `>` でも可）";
       keys = "Super+V";
     }
     {
@@ -1261,7 +782,6 @@ let
     {
       section = "スクショ・音量・輝度";
       label = "起動音メニュー（一覧・編集・ON/OFF・再生）";
-      keys = "左バー ♪";
       run = "startup-sound --menu";
       mode = "exec";
     }
@@ -1442,95 +962,94 @@ let
       label = "定義 / 参照 / ホバー";
       keys = "gd / gr / K";
     }
-    # Waybar・日常
+    # Colorshell・日常
     {
-      section = "Waybar・日常";
-      label = "チートシート / 常時オン切替";
-      keys = "? / 󰾪 (上バー)";
+      section = "Colorshell・日常";
+      label = "サービス管理メニュー（UniClipboard / LAN Mouse / Taildrop / Cliphist / Tailscale / Restic）";
+      run = lib.getExe servicesMenu;
+      mode = "exec";
     }
     {
-      section = "Waybar・日常";
+      section = "Colorshell・日常";
+      label = "画面常時オン切替（減光・ロック・消灯を抑止）";
+      run = lib.getExe toggleKeepScreenOn;
+      mode = "exec";
+    }
+    {
+      section = "Colorshell・日常";
       label = "btop";
-      keys = "CPU/MEM クリック";
       run = btopBin;
       mode = "term";
     }
     {
-      section = "Waybar・日常";
+      section = "Colorshell・日常";
       label = "nmtui";
-      keys = "ネットクリック";
       run = nmtuiBin;
       mode = "term";
     }
     {
-      section = "Waybar・日常";
-      label = "NTP 時刻同期";
-      keys = "中央時計クリック";
+      section = "Colorshell・日常";
+      label = "NTP 時刻同期 (ntp-sync)";
       run = lib.getExe ntpSync;
       mode = "exec";
     }
     {
-      section = "Waybar・日常";
-      label = "バックアップ進捗";
-      keys = "[restic]（上バー WS の右）";
-    }
-    {
-      section = "Waybar・日常";
+      section = "Colorshell・日常";
       label = "5分暗転 / 10分ロック / 15分消灯 (hypridle)";
       keys = "無操作";
     }
     {
-      section = "Waybar・日常";
-      label = "LAN 送受信 / キー表示（rofi）";
+      section = "Colorshell・日常";
+      label = "LAN 送受信 / キー表示";
       keys = "LocalSend / showmethekey";
     }
     {
-      section = "Waybar・日常";
-      label = "AI（rofi から）";
+      section = "Colorshell・日常";
+      label = "AI（ランナーから起動）";
       keys = "ChatGPT / Grok";
     }
     {
-      section = "Waybar・日常";
+      section = "Colorshell・日常";
       label = "Teams 等 PWA が開かない";
       keys = "古い /nix/store の Exec → vivaldi-pwa-desktop-fix";
     }
     {
-      section = "Waybar・日常";
+      section = "Colorshell・日常";
       label = "Vivaldi PWA ショートカット修復";
       run = "vivaldi-pwa-desktop-fix";
       mode = "term";
     }
     {
-      section = "Waybar・日常";
+      section = "Colorshell・日常";
       label = "Vivaldi 拡張が全部壊れている";
       keys = "Extensions 欠落 → Vivaldi終了後に vivaldi-extensions-repair";
     }
     {
-      section = "Waybar・日常";
+      section = "Colorshell・日常";
       label = "Vivaldi 拡張を CRX キャッシュから復旧";
       run = "vivaldi-extensions-repair";
       mode = "term";
     }
     {
-      section = "Waybar・日常";
+      section = "Colorshell・日常";
       label = "Vivaldi ChatGPT 拡張が真っ白";
       keys = "setOptions 非対応 → パッチ版を Load unpacked";
     }
     {
-      section = "Waybar・日常";
+      section = "Colorshell・日常";
       label = "ChatGPT 拡張パッチ再生成";
       run = "vivaldi-chatgpt-extension-patch";
       mode = "term";
     }
     {
-      section = "Waybar・日常";
+      section = "Colorshell・日常";
       label = "パッチ版パス (~/.local/share/…)";
       keys = "vivaldi-chatgpt-extension";
     }
     # Cursor 進捗（他アプリ使用中）
     {
       section = "Cursor 進捗";
-      label = "完了・入力待ち → mako";
+      label = "完了・入力待ち → Colorshell 通知";
       keys = "Settings の通知";
     }
     {
@@ -1551,7 +1070,7 @@ let
     # NixOS
     {
       section = "NixOS";
-      label = "更新チェック（左バー ）";
+      label = "更新チェック";
       run = "flake-update-check";
       mode = "term";
     }
@@ -2250,7 +1769,7 @@ let
     {
       section = powerSection;
       label = "Capsomnia（Caps Lock で蓋閉じスリープ抑止・メニュー）";
-      keys = "CapsLock / Super+Alt+c / Waybar ●";
+      keys = "CapsLock / Super+Alt+C";
       run = "${capsomniaPkg}/bin/capsomnia-menu";
       mode = "exec";
     }
@@ -2354,8 +1873,14 @@ let
     }
     {
       section = "周辺";
-      label = "JQuake 表示（左バー クリックでも可）";
-      run = "${lib.getExe waybarJquakeOpen}";
+      label = "JQuake 表示 (jquake-open)";
+      run = "${lib.getExe jquakeOpen}";
+      mode = "exec";
+    }
+    {
+      section = "周辺";
+      label = "JQuake 管理メニュー (jquake-menu)";
+      run = "${lib.getExe jquakeMenu}";
       mode = "exec";
     }
     {
@@ -2455,17 +1980,25 @@ let
   '';
 in
 {
+  imports = [
+    inputs.colorshell.homeManagerModules.default
+  ];
+
   home.packages = [
-    pkgs.hyprpaper
     pkgs.hypridle
-    pkgs.hyprlock
     pkgs.hyprpicker
     pkgs.hyprshot
     pkgs.satty
     pkgs.brightnessctl
+    pkgs.playerctl
     pkgs.jq
     hyprExec
     screenshotBin
+    jquakeOpen
+    jquakeMenu
+    servicesMenu
+    ntpSync
+    toggleKeepScreenOn
   ];
 
   # Unified Rofi Polkit authentication agent managed under UWSM graphical-session.target.
@@ -2690,14 +2223,6 @@ in
 
       layer_rule = [
         {
-          name = "waybar-frosted";
-          match = {
-            namespace = "^waybar$";
-          };
-          blur = true;
-          ignore_alpha = 0.25;
-        }
-        {
           name = "rofi-frosted";
           match = {
             namespace = "^rofi$";
@@ -2706,22 +2231,14 @@ in
           ignore_alpha = 0.2;
           animation = "popin 92%";
         }
-        {
-          name = "mako-notifications";
-          match = {
-            namespace = "^notifications$";
-          };
-          blur = true;
-          ignore_alpha = 0.2;
-          animation = "slide right";
-        }
       ];
     };
 
     extraConfig = ''
-      -- Cursor size
+      -- Cursor size & Colorshell wallpaper directory
       hl.env("XCURSOR_SIZE", "24")
       hl.env("HYPRCURSOR_SIZE", "24")
+      hl.env("WALLPAPERS", os.getenv("HOME") .. "/wallpapers")
 
       -- Curves & fluid motion (Hyprland 0.57+ Lua animation spec)
       hl.curve("easeOutQuint", { type = "bezier", points = { { 0.23, 1 }, { 0.32, 1 } } })
@@ -2746,7 +2263,7 @@ in
       hl.animation({ leaf = "workspaces",       enabled = true, speed = 3.2,  bezier = "smoothOut", style = "slide" })
       hl.animation({ leaf = "specialWorkspace", enabled = true, speed = 3.4,  bezier = "smoothOut", style = "slidevert" })
 
-      -- Session startup hooks (Polkit, Waybar, Hyprpaper, Hypridle, Cliphist run via systemd user units)
+      -- Session startup hooks (Colorshell, Polkit, Hyprpaper, Hyprsunset, Hypridle, Cliphist run via systemd user units)
       hl.on("hyprland.start", function()
         hl.exec_cmd("fcitx5 -d --replace")
       end)
@@ -2760,18 +2277,23 @@ in
 
       local mod = "SUPER"
 
-      -- Core applications & launcher
-      hl.bind(mod .. " + Return", hl.dsp.exec_cmd(${builtins.toJSON ghosttyBin}))
-      hl.bind("CTRL + ALT + T",   hl.dsp.exec_cmd(${builtins.toJSON ghosttyBin}))
-      hl.bind(mod .. " + D",      hl.dsp.exec_cmd(${builtins.toJSON rofiLauncher}), { dont_inhibit = true })
-      hl.bind("ALT + Space",      hl.dsp.exec_cmd(${builtins.toJSON rofiLauncher}), { dont_inhibit = true })
-      hl.bind(mod .. " + P",      hl.dsp.exec_cmd(${builtins.toJSON "${rofiRunner}"}), { dont_inhibit = true })
-      hl.bind(mod .. " + N",      hl.dsp.exec_cmd(${builtins.toJSON (lib.getExe newWorkspace)}), { dont_inhibit = true })
-      hl.bind(mod .. " + E",      hl.dsp.exec_cmd(${builtins.toJSON openYazi}))
-      hl.bind(mod .. " + V",      hl.dsp.exec_cmd("clipboard-history"))
-      hl.bind(mod .. " + L",      hl.dsp.exec_cmd(${builtins.toJSON "${lockOnceCmd}"}))
-      hl.bind(mod .. " + slash",    hl.dsp.exec_cmd(${builtins.toJSON "${showCheatsheet}"}), { dont_inhibit = true })
-      hl.bind(mod .. " + question", hl.dsp.exec_cmd(${builtins.toJSON "${showCheatsheet}"}), { dont_inhibit = true })
+      -- Core applications, Colorshell launcher & panels
+      hl.bind(mod .. " + Return",    hl.dsp.exec_cmd(${builtins.toJSON ghosttyBin}))
+      hl.bind("CTRL + ALT + T",      hl.dsp.exec_cmd(${builtins.toJSON ghosttyBin}))
+      hl.bind(mod .. " + D",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} runner"}), { dont_inhibit = true })
+      hl.bind("ALT + Space",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} runner"}), { dont_inhibit = true })
+      hl.bind(mod .. " + SHIFT + D", hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w apps-drawer"}), { dont_inhibit = true })
+      hl.bind(mod .. " + W",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} runner -t \"#\""}), { dont_inhibit = true })
+      hl.bind(mod .. " + I",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w control-center"}), { dont_inhibit = true })
+      hl.bind(mod .. " + M",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w center-window"}), { dont_inhibit = true })
+      hl.bind(mod .. " + X",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w logout-menu"}), { dont_inhibit = true })
+      hl.bind(mod .. " + P",         hl.dsp.exec_cmd(${builtins.toJSON "${rofiRunner}"}), { dont_inhibit = true })
+      hl.bind(mod .. " + N",         hl.dsp.exec_cmd(${builtins.toJSON (lib.getExe newWorkspace)}), { dont_inhibit = true })
+      hl.bind(mod .. " + E",         hl.dsp.exec_cmd(${builtins.toJSON openYazi}))
+      hl.bind(mod .. " + V",         hl.dsp.exec_cmd("clipboard-history"))
+      hl.bind(mod .. " + L",         hl.dsp.exec_cmd(${builtins.toJSON "${lockOnceCmd}"}))
+      hl.bind(mod .. " + slash",     hl.dsp.exec_cmd(${builtins.toJSON "${showCheatsheet}"}), { dont_inhibit = true })
+      hl.bind(mod .. " + question",  hl.dsp.exec_cmd(${builtins.toJSON "${showCheatsheet}"}), { dont_inhibit = true })
 
       -- Window management
       hl.bind(mod .. " + Q",           hl.dsp.window.close(), { dont_inhibit = true })
@@ -2867,106 +2389,72 @@ in
     fi
   '';
 
-  # Hyprpaper 0.8+ block syntax with procedural Nocturne Slate wallpaper.
-  services.hyprpaper = {
+  # Colorshell (GTK4 + Astal): top bar, notifications, control center, runner,
+  # logout menu, OSD, wallpaper switcher + pywal16 dynamic color engine.
+  # Also enables services.hyprpaper, services.hyprsunset, and Colorshell's Hyprlock config.
+  programs.colorshell = {
     enable = true;
+    hyprpaper.enable = true;
+    hyprsunset.enable = true;
+    hyprlock.enable = true;
     settings = {
-      splash = false;
-      ipc = true;
-      wallpaper = [
-        {
-          monitor = "";
-          path = "${wallpaperPng}";
-          fit_mode = "cover";
-        }
-      ];
+      color = {
+        engine = "pywal16";
+        backend = "default";
+      };
+      wallpaper = {
+        dirs = [ "~/wallpapers" ];
+        positioning = "cover";
+        splash = false;
+      };
+      aliases = {
+        terminal = "ghostty";
+        file_manager = "ghostty -e yazi";
+        media = "mpv";
+      };
+      clock = {
+        date_format = "%a %m-%d, %H:%M";
+      };
+      notifications = {
+        position_h = "right";
+        position_v = "top";
+        timeout_low = 4000;
+        timeout_normal = 7000;
+        timeout_critical = 0;
+        hold_on_hover = true;
+      };
+      misc = {
+        match_window_border_color = true;
+      };
     };
   };
 
-  # Hyprlock: live desktop screenshot blur + clean typography + status feedback.
-  programs.hyprlock = {
-    enable = true;
-    settings = {
-      general = {
-        disable_loading_bar = true;
-        hide_cursor = true;
-        grace = 0;
-        no_fade_in = false;
-      };
-      background = [
-        {
-          monitor = "";
-          path = "screenshot";
-          color = "rgb(${p.bgRgb})";
-          blur_passes = 3;
-          blur_size = 7;
-          noise = 0.015;
-          contrast = 0.92;
-          brightness = 0.62;
-          vibrancy = 0.18;
-        }
-      ];
-      label = [
-        {
-          monitor = "";
-          text = "$TIME";
-          color = "rgb(${p.fgRgb})";
-          font_size = 76;
-          font_family = theme.font.monoBold;
-          position = "0, 140";
-          halign = "center";
-          valign = "center";
-          shadow_passes = 2;
-          shadow_size = 4;
-          shadow_color = "rgba(0, 0, 0, 0.55)";
-        }
-        {
-          monitor = "";
-          text = "cmd[update:60000] TZ=Asia/Tokyo date '+%Y年%m月%d日 (%a)'";
-          color = "rgb(${p.fgSecondaryRgb})";
-          font_size = 18;
-          font_family = theme.font.mono;
-          position = "0, 62";
-          halign = "center";
-          valign = "center";
-        }
-        {
-          monitor = "";
-          text = "󰌾  $USER @ $HOSTNAME";
-          color = "rgb(${p.accentRgb})";
-          font_size = 13;
-          font_family = theme.font.mono;
-          position = "0, -110";
-          halign = "center";
-          valign = "center";
-        }
-      ];
-      input-field = [
-        {
-          monitor = "";
-          size = "320, 48";
-          outline_thickness = 2;
-          rounding = theme.radius.popup;
-          dots_size = 0.24;
-          dots_spacing = 0.28;
-          dots_center = true;
-          outer_color = "rgba(${p.accentRgb}, 0.85)";
-          inner_color = "rgba(${p.surfaceRgb}, 0.85)";
-          font_color = "rgb(${p.fgRgb})";
-          check_color = "rgba(${p.accentAltRgb}, 0.95)";
-          fail_color = "rgba(${p.dangerRgb}, 0.95)";
-          capslock_color = "rgb(242, 184, 102)";
-          fade_on_empty = false;
-          # Avoid raw '#' in hyprlang values (treated as comment); use Pango tags only.
-          placeholder_text = "<i>パスワードを入力…</i>";
-          fail_text = "<i>認証失敗 ($ATTEMPTS)</i>";
-          position = "0, -32";
-          halign = "center";
-          valign = "center";
-        }
-      ];
+  systemd.user.services.colorshell = {
+    Unit = {
+      After = [ "hyprpaper.service" ];
+      StartLimitIntervalSec = 30;
+      StartLimitBurst = 5;
+    };
+    Service = {
+      RestartSec = 2;
     };
   };
+
+  # Seed default wallpaper into ~/wallpapers so Colorshell (and its # picker)
+  # always has a valid image on NixOS.
+  home.file."wallpapers/nocturne-slate.png".source = wallpaperPng;
+
+  # Colorshell persists wallpaper switches by writing ~/.config/hypr/hyprpaper.conf.
+  # Keep the file writable (do not set services.hyprpaper.settings, which creates a
+  # read-only store symlink) and seed it when absent or replacing an old store symlink.
+  home.activation.initHyprpaperConf = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    conf="${config.xdg.configHome}/hypr/hyprpaper.conf"
+    if [ ! -e "$conf" ] || { [ -L "$conf" ] && [[ "$(readlink -f "$conf" 2>/dev/null || true)" == /nix/store/* ]]; }; then
+      run rm -f "$conf"
+      run mkdir -p "$(dirname "$conf")"
+      run install -m 0644 "${initialHyprpaperConf}" "$conf"
+    fi
+  '';
 
   # Hypridle: 5m dim -> 10m lock -> 15m DPMS off (all respect keep-screen-on).
   services.hypridle = {
@@ -2997,545 +2485,6 @@ in
     };
   };
 
-  systemd.user.services.waybar = {
-    Unit = {
-      StartLimitIntervalSec = 30;
-      StartLimitBurst = 3;
-    };
-    Service = {
-      MemoryMax = "256M";
-      MemoryHigh = "192M";
-      Restart = "on-failure";
-      RestartSec = "2";
-    };
-  };
-
-  systemd.user.services.flake-update-check = {
-    Unit = {
-      Description = "Check MySettings flake / pinned .deb updates for waybar";
-      ConditionPathExists = "${repoPath}/flake.nix";
-    };
-    Service = {
-      Type = "oneshot";
-      ExecStart = flakeUpdateCheck;
-    };
-  };
-  systemd.user.timers.flake-update-check = {
-    Unit = {
-      Description = "Periodic flake update check for waybar";
-      ConditionPathExists = "${repoPath}/flake.nix";
-    };
-    Timer = {
-      OnBootSec = "5min";
-      OnUnitActiveSec = "6h";
-      Persistent = true;
-    };
-    Install = {
-      WantedBy = [ "timers.target" ];
-    };
-  };
-
-  # Waybar: floating frosted top bar + floating slim left dock.
-  programs.waybar = {
-    enable = true;
-    systemd.enable = true;
-    settings = {
-      mainBar = {
-        name = "main";
-        layer = "top";
-        position = "top";
-        height = 34;
-        margin-top = 8;
-        margin-left = 10;
-        margin-right = 10;
-        spacing = 4;
-
-        modules-left = [
-          "custom/cheatsheet"
-          "hyprland/workspaces"
-          "hyprland/submap"
-          "custom/restic"
-          "hyprland/window"
-        ];
-        modules-center = [ "custom/clock" ];
-        modules-right = [
-          "cpu"
-          "memory"
-          "custom/capsomnia"
-          "custom/keep-screen-on"
-          "network"
-          "backlight"
-          "pulseaudio"
-          "custom/battery"
-        ];
-
-        "custom/cheatsheet" = {
-          format = "󰋖";
-          tooltip = true;
-          tooltip-format = "チートシート (Super+/)";
-          on-click = "${showCheatsheet}";
-        };
-        "hyprland/workspaces" = {
-          all-outputs = true;
-          active-only = false;
-          format = "{id}";
-          on-click = "activate";
-          on-scroll-up = "${hyprctlBin} dispatch 'hl.dsp.focus({ workspace = \"e+1\" })'";
-          on-scroll-down = "${hyprctlBin} dispatch 'hl.dsp.focus({ workspace = \"e-1\" })'";
-        };
-        "hyprland/submap" = {
-          format = "󰩨 {}";
-          tooltip = false;
-        };
-        "hyprland/window" = {
-          max-length = 38;
-          separate-outputs = true;
-        };
-        "custom/restic" = {
-          exec = pkgs.writeShellScript "waybar-restic" ''
-            f="''${XDG_RUNTIME_DIR}/restic-home-status"
-            if [ -s "$f" ]; then cat "$f"; else printf '%s\n' '{"text":"","class":"idle"}'; fi
-          '';
-          return-type = "json";
-          interval = 2;
-          signal = 8;
-          hide-empty-text = true;
-          tooltip = true;
-        };
-        # Capsomnia status dot + optional countdown (signal 15 from capsomniad).
-        "custom/capsomnia" = {
-          exec = "${capsomniaPkg}/bin/cpsm waybar";
-          return-type = "json";
-          interval = 5;
-          signal = 15;
-          tooltip = true;
-          hide-empty-text = true;
-          on-click = "${capsomniaPkg}/bin/capsomnia-menu";
-          on-click-right = "${capsomniaPkg}/bin/cpsm toggle --no-sleep";
-          on-click-middle = "${capsomniaPkg}/bin/capsomnia-settings";
-        };
-        "custom/clock" = {
-          exec = "${waybarClock}";
-          return-type = "json";
-          interval = 1;
-          signal = 11;
-          tooltip = true;
-          on-click = lib.getExe ntpSync;
-        };
-        "custom/keep-screen-on" = {
-          exec = "${waybarKeepScreenOn}";
-          return-type = "json";
-          interval = 5;
-          signal = 14;
-          on-click = "${toggleKeepScreenOn}";
-        };
-        cpu = {
-          format = " {usage}%";
-          interval = 5;
-          on-click = openBtop;
-        };
-        memory = {
-          format = " {percentage}%";
-          interval = 5;
-          on-click = openBtop;
-        };
-        network = {
-          interval = 2;
-          format-wifi = " {essid}";
-          format-ethernet = "󰈀 {ifname}";
-          format-disconnected = "󰤮 offline";
-          max-length = 18;
-          tooltip-format = "↓{bandwidthDownBytes} ↑{bandwidthUpBytes}\n{ifname} {ipaddr}";
-          on-click = openNmtui;
-        };
-        backlight = {
-          format = "{icon} {percent}%";
-          format-icons = [
-            "󰃞"
-            "󰃟"
-            "󰃠"
-          ];
-        };
-        pulseaudio = {
-          format = "{icon} {volume}%";
-          format-muted = "󰖁 mute";
-          format-icons = {
-            default = [
-              "󰕿"
-              "󰖀"
-              "󰕾"
-            ];
-          };
-          max-volume = 100;
-          on-click = "${pactl} set-sink-mute @DEFAULT_SINK@ toggle";
-        };
-        "custom/battery" = {
-          exec =
-            "${lib.getExe waybarBattery} "
-            + (if isChromebook then "--adapter AC" else "--bat BAT1 --adapter ACAD");
-          return-type = "json";
-          interval = 5;
-          signal = 16;
-          tooltip = true;
-          escape = true;
-          hide-empty-text = true;
-        };
-      };
-
-      sideBar = {
-        name = "side";
-        layer = "top";
-        position = "left";
-        width = 40;
-        margin-top = 6;
-        margin-bottom = 10;
-        margin-left = 10;
-
-        modules-left = [ "custom/updates" ];
-        modules-right = [
-          "custom/startup-sound"
-          "custom/jquake"
-          "custom/services"
-          "tray"
-        ];
-
-        "custom/updates" = {
-          exec = pkgs.writeShellScript "waybar-flake-updates" ''
-            f="''${XDG_RUNTIME_DIR}/flake-update-status"
-            if [ -s "$f" ]; then cat "$f"; else printf '%s\n' '{"text":"","class":"idle","tooltip":"更新チェック待ち\nクリックで flake-update"}'; fi
-          '';
-          return-type = "json";
-          interval = 30;
-          signal = 9;
-          tooltip = true;
-          on-click = openFlakeUpdate;
-        };
-        "custom/startup-sound" = {
-          exec = "${startupSoundBin} --waybar";
-          return-type = "json";
-          interval = 10;
-          signal = 13;
-          tooltip = true;
-          on-click = "${startupSoundBin} --menu";
-          on-click-right = "${startupSoundBin} --toggle-and-notify";
-          on-click-middle = "${startupSoundBin} --play-bg";
-        };
-        "custom/jquake" = {
-          exec = lib.getExe waybarJquake;
-          return-type = "json";
-          interval = 5;
-          signal = 12;
-          tooltip = true;
-          on-click = lib.getExe waybarJquakeOpen;
-          on-click-right = lib.getExe waybarJquakeMenu;
-        };
-        "custom/services" = {
-          exec = lib.getExe waybarServices;
-          return-type = "json";
-          interval = 15;
-          signal = 10;
-          tooltip = true;
-          on-click = lib.getExe waybarServicesMenu;
-        };
-        tray = {
-          icon-size = 16;
-          spacing = 6;
-        };
-      };
-    };
-
-    style = ''
-      * {
-        border: none;
-        border-radius: 0;
-        font-family: "${waybarFont}", sans-serif;
-        font-size: 11.5px;
-        min-height: 0;
-        min-width: 0;
-      }
-
-      window#waybar {
-        background: rgba(${p.surfaceRgb}, 0.82);
-        color: ${p.fg};
-        border: 1px solid rgba(148, 174, 204, 0.16);
-        border-radius: ${toString theme.radius.bar}px;
-      }
-
-      window.side#waybar {
-        background: rgba(${p.surfaceRgb}, 0.82);
-        color: ${p.fg};
-        border: 1px solid rgba(148, 174, 204, 0.16);
-        border-radius: ${toString theme.radius.bar}px;
-      }
-
-      tooltip {
-        background: rgba(${p.surfaceRgb}, 0.96);
-        color: ${p.fg};
-        border: 1px solid ${p.border};
-        border-radius: ${toString theme.radius.control}px;
-      }
-
-      tooltip label {
-        color: ${p.fg};
-        padding: 4px 6px;
-      }
-
-      /* Top bar modules */
-      #custom-cheatsheet {
-        color: ${p.accent};
-        font-size: 14px;
-        padding: 0 10px 0 12px;
-        margin: 3px 2px 3px 4px;
-        border-radius: ${toString theme.radius.pill}px;
-        background: transparent;
-        transition: background-color 140ms ease;
-      }
-      #custom-cheatsheet:hover {
-        background: rgba(${p.accentRgb}, 0.16);
-      }
-
-      #workspaces {
-        margin: 4px 4px;
-        padding: 0 4px;
-        background: rgba(${p.surfaceAltRgb}, 0.72);
-        border-radius: ${toString theme.radius.pill}px;
-      }
-      #workspaces button {
-        padding: 0 7px;
-        margin: 2px 1px;
-        color: ${p.fgMuted};
-        background: transparent;
-        border-radius: 5px;
-        transition: all 140ms ease;
-      }
-      #workspaces button:hover {
-        color: ${p.fg};
-        background: rgba(255, 255, 255, 0.06);
-      }
-      #workspaces button.active {
-        color: ${p.bg};
-        background: linear-gradient(135deg, ${p.accent}, ${p.accentAlt});
-        font-weight: 700;
-        padding: 0 11px;
-      }
-      #workspaces button.urgent {
-        color: ${p.fg};
-        background: ${p.danger};
-      }
-      #submap {
-        color: ${p.bg};
-        background: ${p.danger};
-        font-weight: 700;
-        padding: 0 10px;
-        margin: 4px 2px;
-        border-radius: ${toString theme.radius.pill}px;
-      }
-
-      #custom-restic {
-        padding: 0 10px;
-        margin: 4px 2px;
-        color: ${p.fg};
-        background: ${p.accentSoft};
-        border: 1px solid rgba(${p.accentRgb}, 0.45);
-        border-radius: ${toString theme.radius.pill}px;
-      }
-      #custom-restic.running {
-        color: ${p.accent};
-      }
-      #custom-restic.done {
-        color: ${p.success};
-        border-color: rgba(110, 231, 183, 0.45);
-      }
-      #custom-restic.failed {
-        color: ${p.danger};
-        background: ${p.dangerSoft};
-        border-color: ${p.danger};
-      }
-
-      #window {
-        color: ${p.fgSecondary};
-        padding: 0 10px;
-      }
-
-      #custom-clock {
-        color: ${p.fg};
-        font-weight: 600;
-        padding: 0 14px;
-        margin: 4px 0;
-        border-radius: ${toString theme.radius.pill}px;
-        background: rgba(${p.surfaceAltRgb}, 0.65);
-        transition: background-color 140ms ease;
-      }
-      #custom-clock:hover {
-        background: rgba(${p.accentRgb}, 0.16);
-        color: ${p.accent};
-      }
-
-      #cpu,
-      #memory,
-      #custom-capsomnia,
-      #custom-keep-screen-on,
-      #network,
-      #backlight,
-      #pulseaudio,
-      #custom-battery {
-        padding: 0 9px;
-        margin: 4px 1px;
-        color: ${p.fgSecondary};
-        background: transparent;
-        border-radius: ${toString theme.radius.pill}px;
-        transition: background-color 140ms ease, color 140ms ease;
-      }
-
-      #cpu:hover,
-      #memory:hover,
-      #custom-capsomnia:hover,
-      #custom-keep-screen-on:hover,
-      #network:hover,
-      #pulseaudio:hover {
-        background: rgba(${p.surfaceAltRgb}, 0.90);
-        color: ${p.fg};
-      }
-
-      #custom-capsomnia.on {
-        color: ${p.fg};
-        background: rgba(110, 231, 183, 0.14);
-        border: 1px solid rgba(110, 231, 183, 0.45);
-        font-weight: 600;
-      }
-      #custom-capsomnia.off {
-        color: ${p.fgMuted};
-      }
-      #custom-capsomnia.error {
-        color: ${p.danger};
-        background: ${p.dangerSoft};
-        border: 1px solid ${p.danger};
-      }
-
-      #custom-battery {
-        margin-right: 6px;
-        color: ${p.fg};
-      }
-      #custom-battery.charging,
-      #custom-battery.plugged,
-      #custom-battery.full,
-      #custom-battery.discharging,
-      #custom-battery.warning,
-      #custom-battery.critical {
-        background: transparent;
-        animation: none;
-      }
-      #custom-battery.charging,
-      #custom-battery.plugged {
-        color: ${p.success};
-      }
-      #custom-battery.warning {
-        color: ${p.warning};
-      }
-      #custom-battery.critical {
-        color: ${p.danger};
-        background: ${p.dangerSoft};
-      }
-
-      #custom-keep-screen-on.activated {
-        color: ${p.accent};
-        background: ${p.accentSoft};
-        border: 1px solid rgba(${p.accentRgb}, 0.50);
-        font-weight: 600;
-      }
-      #custom-keep-screen-on.deactivated {
-        color: ${p.fgMuted};
-      }
-
-      #network.disconnected {
-        color: ${p.fgMuted};
-      }
-      #pulseaudio {
-        color: ${p.fg};
-      }
-      #pulseaudio.muted {
-        color: ${p.fgMuted};
-      }
-
-      /* Left dock modules */
-      window.side #custom-updates,
-      window.side #custom-startup-sound,
-      window.side #custom-jquake,
-      window.side #custom-services,
-      window.side #tray {
-        color: ${p.fgSecondary};
-        background: transparent;
-        margin: 2px 4px;
-        border-radius: ${toString theme.radius.pill}px;
-      }
-
-      window.side #custom-updates,
-      window.side #custom-startup-sound,
-      window.side #custom-jquake,
-      window.side #custom-services {
-        font-size: 13px;
-        padding: 7px 0;
-      }
-
-      window.side #custom-updates {
-        margin-top: 6px;
-      }
-      window.side #custom-updates.idle {
-        color: ${p.fgMuted};
-      }
-      window.side #custom-updates.available {
-        color: ${p.accent};
-        background: ${p.accentSoft};
-        border: 1px solid rgba(${p.accentRgb}, 0.55);
-      }
-
-      window.side #custom-startup-sound {
-        border-top: 1px solid rgba(148, 174, 204, 0.12);
-        border-radius: ${toString theme.radius.pill}px;
-      }
-      window.side #custom-startup-sound.enabled {
-        color: ${p.accent};
-      }
-      window.side #custom-startup-sound.disabled {
-        color: ${p.fgMuted};
-      }
-      window.side #custom-startup-sound.empty {
-        color: ${p.warning};
-      }
-
-      window.side #custom-jquake.active {
-        color: ${p.fgSecondary};
-      }
-      window.side #custom-jquake.open {
-        color: ${p.accent};
-        background: ${p.accentSoft};
-        border: 1px solid rgba(${p.accentRgb}, 0.55);
-      }
-      window.side #custom-jquake.degraded {
-        color: ${p.warning};
-      }
-      window.side #custom-jquake.failed {
-        color: ${p.danger};
-        background: ${p.dangerSoft};
-      }
-
-      window.side #custom-services {
-        padding: 6px 0;
-      }
-      window.side #custom-services.degraded {
-        background: rgba(242, 184, 102, 0.14);
-      }
-      window.side #custom-services.failed {
-        background: ${p.dangerSoft};
-      }
-
-      window.side #tray {
-        padding: 6px 0 8px 0;
-        margin-bottom: 4px;
-      }
-    '';
-  };
-
   xdg.configFile."satty/config.toml".text = ''
     [general]
     early-exit = ["copy", "save"]
@@ -3560,37 +2509,4 @@ in
       "#ffffff",
     ]
   '';
-
-  # Mako notifications: Nocturne Slate frosted card + progress indicator.
-  services.mako = {
-    enable = true;
-    settings = {
-      font = "${theme.font.mono} 11";
-      background-color = "${p.surface}e6";
-      text-color = p.fg;
-      border-color = p.border;
-      progress-color = "over ${p.accentSoft}";
-      border-size = 1;
-      border-radius = theme.radius.window;
-      padding = "12,14";
-      margin = "12,12,0,0";
-      width = 360;
-      default-timeout = 7000;
-      max-visible = 4;
-      layer = "overlay";
-      anchor = "top-right";
-      "urgency=low" = {
-        border-color = p.border;
-        default-timeout = 4000;
-      };
-      "urgency=normal" = {
-        border-color = p.accent;
-      };
-      "urgency=high" = {
-        border-color = p.danger;
-        background-color = "${p.dangerSoft}f0";
-        default-timeout = 0;
-      };
-    };
-  };
 }

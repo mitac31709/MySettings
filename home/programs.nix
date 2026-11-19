@@ -216,7 +216,7 @@ in
     settings.git_protocol = "https";
   };
 
-  # prefer-dark so waybar does not treat the session as light (white modules).
+  # prefer-dark so GTK / Colorshell and portals default to dark mode.
   dconf.settings = {
     "org/gnome/desktop/interface" = {
       color-scheme = "prefer-dark";
@@ -229,14 +229,14 @@ in
     };
   };
 
-  # Stub: leftover light colors.css @import breaks waybar module chrome.
+  # Stub: prevent stale light colors.css @import from overriding GTK / Colorshell theme.
   xdg.configFile = lib.mkMerge [
     {
       "gtk-3.0/gtk.css".text = ''
-        /* keep empty — light GTK sync breaks waybar module backgrounds */
+        /* keep empty — avoid stale light GTK CSS overrides */
       '';
       "gtk-4.0/gtk.css".text = ''
-        /* keep empty — light GTK sync breaks waybar module backgrounds */
+        /* keep empty — avoid stale light GTK CSS overrides */
       '';
       "nvim".source = ./nvim;
     }
@@ -545,5 +545,10 @@ in
     typst
     tinymist
     typstyle
+    # Qalculate! scientific calculator (Qt GUI `qalculate-qt` + CLI `qalc`).
+    qalculate-qt
+    libqalculate
+    # Tilion Fortress: local stealth Chromium engine + `tilion` / `tilion-mcp` CLI (pkgs/tilion-fortress).
+    tilion-fortress
   ];
 }

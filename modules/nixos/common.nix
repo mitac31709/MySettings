@@ -195,8 +195,8 @@ in
   # TLS then fails with "certificate is not yet valid". Keep timesyncd on.
   services.timesyncd.enable = true;
 
-  # Allow wheel users to trigger an immediate NTP resync from the Waybar
-  # clock click without granting broader unit control.
+  # Allow wheel users to trigger an immediate NTP resync (via `ntp-sync` /
+  # cheatsheet) without granting broader unit control.
   security.polkit.extraConfig = ''
     polkit.addRule(function(action, subject) {
       if (action.id == "org.freedesktop.systemd1.manage-units" &&
@@ -295,6 +295,8 @@ in
       noto-fonts-cjk-serif
       # Cursor's bespoke geometric sans-serif typeface ("Cursor Gothic").
       cursor-gothic
+      # Adwaita Sans / Mono (used by Colorshell & Colorshell's Hyprlock config).
+      adwaita-fonts
     ]
     ++ lib.optionals hiraginoEnabled [
       (pkgs.callPackage ../../pkgs/hiragino {
@@ -380,7 +382,7 @@ in
   # NixOS owns cloudflare-warp.service.
   systemd.packages = [ pkgs.cloudflare-warp ];
   systemd.services.warp-svc.enable = false;
-  # Tray needs a StatusNotifier host (waybar). Start in every graphical
+  # Tray needs a StatusNotifier host (colorshell). Start in every graphical
   # session (manual launch without /usr bind dies).
   systemd.user.services.warp-taskbar = {
     wantedBy = [ "graphical-session.target" ];

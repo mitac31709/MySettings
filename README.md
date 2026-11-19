@@ -17,7 +17,7 @@
 
 | セッション | 内容 |
 |------------|------|
-| **Hyprland (UWSM)** | キーボード中心のタイル WM（Lua 設定＋Nocturne Slate 統一デザイン）。waybar / mako / hyprpaper / hyprlock / hypridle。ランチャーは **rofi**（Super+D / Alt+Space）。キーボード配列は **jp** |
+| **Hyprland (UWSM)** | キーボード中心のタイル WM（Lua 設定＋**Colorshell** GTK4/Astal デスクトップシェル）。`pywal16` による壁紙連動の動的配色（枠色同期あり）、hyprpaper / hyprsunset / hyprlock / hypridle。ランチャーは **Colorshell Runner**（Super+D / Alt+Space）。キーボード配列は **jp** |
 
 ### 操作感
 
@@ -25,22 +25,28 @@
 
 | 操作 | キー | 動作 |
 |------|------|------|
-| 検索／ランチャー | **Super+D** / **Alt+Space** | **rofi** |
+| 検索／ランチャー | **Super+D** / **Alt+Space** | **Colorshell Runner**（アプリ検索 / `>` クリップボード / `#` 壁紙 / 計算 / コマンド） |
+| アプリ一覧 | **Super+Shift+D** | **Colorshell Apps Drawer** |
+| 壁紙切替・動的配色 | **Super+W** | **Colorshell Runner** 壁紙ピッカー（`#`、`~/wallpapers`、pywal16 動的配色） |
+| コントロールセンター | **Super+I** | **Colorshell Control Center**（Wi-Fi / Bluetooth / 音量 / ナイトライト） |
+| 通知・カレンダー・メディア | **Super+M** | **Colorshell Center Window** |
+| 電源・ログアウトメニュー | **Super+X** | **Colorshell Logout Menu** |
 | コマンド実行（一時） | **Super+P** | **rofi**（`-show run`：Enter で即実行／Shift+Enter で端末実行） |
 | 端末 | **Ctrl+Alt+T** / **Super+Return** | **Ghostty** |
 | 新規仮想デスクトップ | **Super+N** | 未使用最小番号の空きワークスペースへ移動 |
 | ファイルマネージャ | **Super+E** | **Yazi**（Ghostty 内） |
-| ロック | **Super+L** | **hyprlock** |
-| クリップボード履歴 | **Super+V** | **cliphist** + rofi |
+| ロック | **Super+L** | **hyprlock**（Colorshell 標準テーマ・pywal16 連動） |
+| クリップボード履歴 | **Super+V** | **cliphist** + rofi（Colorshell Runner の `>` からも検索可） |
 | タブグループ | **Super+G** / **Super+Tab** | ウィンドウのグループ化／タブ切替 |
 | スクラッチパッド | **Super+S** / **Super+Alt+S** | special ワークスペース（`magic`）表示切替／送り込み |
 | スクショ | **Super+Shift+S** / **Shift+Print** / **Print** / **Super+Print** | **hyprshot** + **satty**（画面停止して範囲選択／全画面／ウィンドウ → 注釈・切り抜き・クリップボード・`~/Pictures/Screenshots/` 保存。`screenshot` CLI） |
+| チートシート | **Super+/** | **rofi** 検索・実行メニュー（サービス管理・JQuake・起動音・Capsomnia・NTP 同期等） |
 | マウス／ジェスチャ | **Super+左/右ドラッグ** / **3本指左右スワイプ** | ウィンドウ移動・リサイズ / ワークスペース切替 |
 | タッチパッド | — | 自然スクロール off・タップクリック on・入力中もポインタ有効 |
 
 電源ボタン（`power-chords`）: 短押し=suspend / 長押し≈2.5s=poweroff / **電源+F1（Chromebook は 電源+Back）=強制ログアウト** / **電源+F2（Chromebook は 電源+Refresh）=再起動**。
 
-Polkit（`cmd-polkit` + `rofi-polkit`）/ Fcitx5 / cliphist / hyprpaper / hypridle（systemd user）を起動時に起動。音量は PulseAudio（Chromebook）または PipeWire / `pipewire-pulse`（VAIO）経由で `pactl` 操作、輝度は `brightnessctl` 経由。通知は mako、ステータスバーは waybar。配色・フォント・壁紙は `lib/theme.nix`（Nocturne Slate）で統一管理。
+Colorshell / Polkit（`cmd-polkit` + `rofi-polkit`）/ Fcitx5 / cliphist / hyprpaper / hyprsunset / hypridle（systemd user）を起動時に起動。音量は PulseAudio（Chromebook）または PipeWire / `pipewire-pulse`（VAIO）経由で `pactl` 操作、輝度は `brightnessctl` 経由。バー・通知・OSD・ランチャー・ロック画面は **Colorshell**（`pywal16` 動的配色＋初期壁紙は `lib/theme.nix` の Nocturne Slate を `~/wallpapers/nocturne-slate.png` へ配置）で統一管理。
 
 ## 世代とコミットの対応
 
@@ -310,13 +316,13 @@ passwd mitac
 
 ## flake の更新
 
-`flake-update`（左 waybar 上端アイコンのクリックでも起動）は端末内のほぼすべてのソフトウェアをまとめて更新します（**JQuake のみ 1.8.4 固定**）。実行すると順番に次を行います。
+`flake-update`（チートシート `Super+/` からも起動）は端末内のほぼすべてのソフトウェアをまとめて更新します（**JQuake のみ 1.8.4 固定**）。実行すると順番に次を行います。
 
 1. `flake.nix` の pinned `.deb` URL 更新（UniClipboard / ChatGPT / Grok Bot）
 2. `pkgs/` の独自パッケージ更新（**Meltype** / **OpenCode** / **Antigravity** / **wol-pc**。`nix store prefetch-file` でハッシュ再計算）
-3. `nix flake update` により `flake.lock` の全入力更新（`nixpkgs` / `nixpkgs-cursor` / `bootvine` / `home-manager` 等）
+3. `nix flake update` により `flake.lock` の全入力更新（`nixpkgs` / `nixpkgs-cursor` / `colorshell` / `bootvine` / `home-manager` 等）
 4. `~/.npm-global` に導入済みの場合、`@deepseek-ai/dsh` / `@deepseek-harness-tui/dsh-tui` の `npm` 更新
-5. waybar 状態表示の即時更新と、`rebuild`（`nixos-rebuild switch`）をそのまま実行するかの対話確認
+5. `rebuild`（`nixos-rebuild switch`）をそのまま実行するかの対話確認
 
 Cursor（`code-cursor` / `cursor-cli`）だけ先行更新したいときは `flake-update-cursor`（または `nix flake update nixpkgs-cursor`）も引き続き使えます。
 
@@ -346,7 +352,9 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **Vivaldi** — `vivaldi`
 - **Firefox** — `firefox`
 - **Tor Browser** — `tor-browser`
-- **JQuake** — `JQuake` / `jquake`（1.8.4 + `pkgs/jquake` ラッパー。Hyprland/XWayland AWT 修正・更新ダイアログ無効化）。ログイン時に `jquake.service` で常駐し、Hyprland では offscreen `stalonetray` にトレイを保持しつつ左 waybar の専用枠（`custom/jquake`）を表示（左クリックでウィンドウを開く／右クリックでメニュー）。表示時・警報時は Waybar を残したままワークスペース領域いっぱいに最大化＋警報時は `hyprlock` 解除（`home/jquake.nix` / `home/hyprland.nix`）
+- **Tilion Fortress** — ローカル版ステルス Chromium エンジン + CLI / MCP（`pkgs/tilion-fortress`：`tilion` / `tilion-mcp` / `tilion-fortress` / `fortress-browser`）。v3 機能を有効化する場合は `tilion activate` でライセンスを取得
+- **Qalculate!** — 高機能関数電卓（Qt GUI `qalculate-qt` + CLI `qalc` / `libqalculate`）
+- **JQuake** — `JQuake` / `jquake`（1.8.4 + `pkgs/jquake` ラッパー。Hyprland/XWayland AWT 修正・更新ダイアログ無効化）。ログイン時に `jquake.service` で常駐し、Hyprland では offscreen `stalonetray` にトレイを保持しつつ `jquake-open` / `jquake-menu`（チートシート `Super+/` やランナーから起動可）で表示・管理。表示時・警報時はトップバーを残したままワークスペース領域いっぱいに最大化＋警報時は `hyprlock` 解除（`home/jquake.nix` / `home/hyprland.nix`）
 - **ONLYOFFICE** — `onlyoffice-desktopeditors`（文書・表計算・プレゼン）
 - **Affinity** — 未導入（`affinity-v3` なし。flake 入力も overlay も外してある）。戻すときは次の 3 箇所です。
   1. `flake.nix` の `inputs` に `affinity-nix.url = "github:mrshmllow/affinity-nix";` を足し、`nixpkgs.overlays` の先頭に `inputs.affinity-nix.overlays.default` を戻す
@@ -359,14 +367,14 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **7-Zip** — `_7zip-zstd`（コマンド `7z` / `7zz`、Zstd ほか対応）+ GUI `peazip`（PeaZip）
 - **tmux** — `runbtop <cmd>` で上部に実行出力（約 10 行）、下部に `btop`
 - **Meltype** — Fcitx5 エンジン（日本語／英語の自動打ち分け。縦型候補・意味/翻訳ペイン付き。IME は Meltype のみ）
-- **フォント** — JetBrainsMono Nerd Font（ターミナル／等幅の既定）
+- **フォント** — JetBrainsMono Nerd Font（ターミナル／等幅の既定）、Adwaita Sans / Mono（Colorshell・Hyprlock 用）
 - **シークレット管理（agenix × Bitwarden）** — `secrets/*.age` を NixOS（`modules/nixos/secrets.nix`）で `/run/agenix/*` へ復号し、共通マスター鍵 `agenix-master-key` のみを Bitwarden（`rbw`）で保持。`secrets` コマンド（`scripts/secrets-tool.sh`）で管理
 - **暗号化バックアップ** — `restic` + `rclone` で `/home` を Google Drive へ。`agenix` 移行時は `/run/agenix/` 経由で自動無監視実行（未移行時・他端末リカバリ時は Bitwarden `rbw`）。詳細は下記。
-- **デスクトップ** — greetd + ReGreet（Hyprland (UWSM) のみ。ログイン画面も受信専用 Lan Mouse 待機）
+- **デスクトップ** — greetd + ReGreet（Hyprland (UWSM) + **Colorshell**。ログイン画面も受信専用 Lan Mouse 待機）
 - **bootvine** — 起動コンソールに systemd ジョブの依存ツリーを表示（[bootvine](https://codeberg.org/wvhulle/bootvine)、`services.bootvine.enable`）。反映には `rebuild` のあと再起動が必要
-- **起動音（`startup-sound`）** — ログイン時に `startup-sound.service` が歴代 Windows（3.1 / 95 / 98 / 2000 / XP / 7 / 11）・Mac・GameCube・Nintendo Wii・Wii Sports・ブルーアーカイブ・マリオカート8 と `~/.local/share/startup-sounds/`（または `home/startup-sounds/`）の音声からランダム再生（`home/startup-sound.nix`）。左 Waybar の `♪` アイコンから一覧・編集・ON/OFF・再生でき、CLI でも `startup-sound --list` / `--menu` / `--toggle` が利用可能
+- **起動音（`startup-sound`）** — ログイン時に `startup-sound.service` が歴代 Windows（3.1 / 95 / 98 / 2000 / XP / 7 / 11）・Mac・GameCube・Nintendo Wii・Wii Sports・ブルーアーカイブ・マリオカート8 と `~/.local/share/startup-sounds/`（または `home/startup-sounds/`）の音声からランダム再生（`home/startup-sound.nix`）。チートシート `Super+/` や CLI から `startup-sound --list` / `--menu` / `--toggle` が利用可能
 - **gui** — ディスプレイ無し時は `cage` で単一 GUI アプリを起動（`gui firefox` など）。引数なしは `apps` を起動
-- **apps** — `fzf` アプリ一覧（`gui` 経由起動）。TTY やシェルから利用可。Hyprland の Super+D は rofi
+- **apps** — `fzf` アプリ一覧（`gui` 経由起動）。TTY やシェルから利用可。Hyprland の Super+D は Colorshell Runner
 
 ## 日本語入力（Meltype / Fcitx5）
 
