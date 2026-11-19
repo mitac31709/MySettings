@@ -111,8 +111,9 @@ let
       '';
   antigravityEnsureRcToken = pkgs.writeShellScript "antigravity-ensure-rc-token" ''
     token="$HOME/.gemini/antigravity-cli/antigravity-oauth-token"
-    if [ ! -s "$token" ]; then
+    if [ ! -s "$token" ] && [ -n "''${WAYLAND_DISPLAY:-}''${DISPLAY:-}" ]; then
       # Export the OAuth token from the unlocked keyring for `remote-control serve`.
+      # Skip before graphical login so gnome-keyring does not spawn gcr-prompter without a display.
       # Ignore the read-only unit write error since the service file is Nix-managed.
       ${pkgs.antigravity}/bin/antigravity remote-control start >/dev/null 2>&1 || true
     fi
@@ -145,6 +146,7 @@ in
       Restart = "on-failure";
       RestartSec = "10s";
       RestartPreventExitStatus = 3;
+      SuccessExitStatus = 3;
       TimeoutStopSec = "30s";
       StandardOutput = "journal";
       StandardError = "journal";

@@ -387,6 +387,7 @@ in
     after = [ "graphical-session-pre.target" ];
     # Logout: tray dies then Restart (upstream unit) storms without a limit.
     unitConfig = {
+      ConditionUser = "!@system";
       PartOf = [ "graphical-session.target" ];
       BindsTo = [ "graphical-session.target" ];
       StartLimitIntervalSec = "30";

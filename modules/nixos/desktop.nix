@@ -1,8 +1,5 @@
 # Graphical desktop stack: Hyprland (UWSM) + greetd/ReGreet + console-gui + portals.
-{
-  pkgs,
-  ...
-}:
+{ ... }:
 
 {
   imports = [
@@ -20,12 +17,10 @@
   services.printing.enable = true;
 
   # Desktop portals: Hyprland native portal with GTK fallback for file dialogs & settings.
+  # programs.hyprland already adds xdg-desktop-portal-hyprland and xdg-desktop-portal-gtk
+  # to extraPortals; omit them here to avoid duplicate dbus-1 servicedir entries.
   xdg.portal = {
     enable = true;
-    extraPortals = [
-      pkgs.xdg-desktop-portal-hyprland
-      pkgs.xdg-desktop-portal-gtk
-    ];
     config = {
       common.default = [ "gtk" ];
       hyprland.default = [

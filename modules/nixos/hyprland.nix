@@ -12,6 +12,10 @@
 
   # PAM stack for hyprlock (invoked manually via Super+L and by hypridle).
   programs.hyprlock.enable = true;
+  # programs.hyprlock pulls in NixOS's global /etc/systemd/user/hypridle.service,
+  # which fails for users without hypridle.conf (e.g. greeter). Home Manager owns
+  # hypridle.service and ~/.config/hypr/hypridle.conf for normal users.
+  services.hypridle.enable = lib.mkForce false;
 
   # Standard Wayland / Hyprland session environment defaults.
   environment.sessionVariables = {

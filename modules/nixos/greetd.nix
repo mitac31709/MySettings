@@ -204,8 +204,11 @@ in
     '';
   };
 
+  # Keep the greeter's Hyprland isolated from user@<greeter>.service so it does not
+  # start hyprland-session.target / graphical-session.target (hypridle, warp-taskbar,
+  # portals, pipewire) under the read-only /var/empty greeter user.
   services.greetd.settings.default_session.command =
-    "${pkgs.dbus}/bin/dbus-run-session ${pkgs.hyprland}/bin/Hyprland --config ${greeterHyprlandConfig}";
+    "${pkgs.coreutils}/bin/env HYPRLAND_NO_SD_NOTIFY=1 HYPRLAND_NO_SD_VARS=1 HYPRLAND_NO_SD_TARGET=1 ${pkgs.dbus}/bin/dbus-run-session ${pkgs.hyprland}/bin/Hyprland --config ${greeterHyprlandConfig}";
 
   # UniClipboard (and other libsecret apps) need an unlocked Secret Service.
   # KWallet's ksecretd rejects UniClipboard's binary probe; use gnome-keyring.
