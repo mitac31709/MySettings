@@ -176,8 +176,9 @@ let
       esac
     '';
   };
+  capsomniaPkg = pkgs.callPackage ../pkgs/capsomnia { };
 
-  # Presentation marker toggled with waybar keep-screen-on button.
+  # Presentation marker toggled with waybar keep-screen-on button or Capsomnia Keep Display Awake.
   # XDG_RUNTIME_DIR is session-scoped so it clears automatically on logout.
   lockOnceCmd = pkgs.writeShellScript "hypr-lock-once" ''
     if ${pkgs.procps}/bin/pgrep -x hyprlock >/dev/null 2>&1; then
@@ -186,7 +187,7 @@ let
     exec ${hyprlockBin}
   '';
   idleDimCmd = pkgs.writeShellScript "hypr-idle-dim" ''
-    if [ -e "''${XDG_RUNTIME_DIR}/hypr-keep-screen-on" ]; then
+    if [ -e "''${XDG_RUNTIME_DIR}/hypr-keep-screen-on" ] || [ -e "''${XDG_RUNTIME_DIR}/capsomnia/keep-display-awake" ]; then
       exit 0
     fi
     ${brightnessctl} -s set 20% >/dev/null 2>&1 || true
@@ -195,13 +196,13 @@ let
     ${brightnessctl} -r >/dev/null 2>&1 || true
   '';
   idleLockCmd = pkgs.writeShellScript "hypr-idle-lock" ''
-    if [ -e "''${XDG_RUNTIME_DIR}/hypr-keep-screen-on" ]; then
+    if [ -e "''${XDG_RUNTIME_DIR}/hypr-keep-screen-on" ] || [ -e "''${XDG_RUNTIME_DIR}/capsomnia/keep-display-awake" ]; then
       exit 0
     fi
     exec ${lockOnceCmd}
   '';
   idleDpmsOffCmd = pkgs.writeShellScript "hypr-idle-dpms-off" ''
-    if [ -e "''${XDG_RUNTIME_DIR}/hypr-keep-screen-on" ]; then
+    if [ -e "''${XDG_RUNTIME_DIR}/hypr-keep-screen-on" ] || [ -e "''${XDG_RUNTIME_DIR}/capsomnia/keep-display-awake" ]; then
       exit 0
     fi
     exec ${hyprctlBin} dispatch 'hl.dsp.dpms("off")'
@@ -230,6 +231,64 @@ let
 
   # Route Rofi launches through hypr-exec so new windows spawn on the active workspace.
   rofiLauncher = "${rofiBin} -show drun -run-command \"${hyprExecBin} {cmd}\" -run-shell-command \"${hyprExecBin} ${ghosttyBin} -e {cmd}\"";
+  # Super+P: one-off command runner (`rofi -show run`).
+  # Enter runs via hypr-exec; Shift+Enter (or Ctrl+Shift+Enter for custom
+  # text) runs in an interactive Ghostty shell that waits before closing.
+  rofiRunTerm = pkgs.writeShellScript "rofi-run-term" ''
+    args=()
+    for arg in "$@"; do
+      if [[ "$arg" =~ [[:space:]] ]]; then
+        printf -v q '%q' "$arg"
+        args+=("$q")
+      else
+        args+=("$arg")
+      fi
+    done
+    cmd="''${args[*]}"
+    [ -n "$cmd" ] || exit 0
+    exec ${ghosttyBin} -e ${pkgs.bash}/bin/bash -ic '
+      eval "$1"
+      rc=$?
+      printf "\n終了コード: %d [Enter で閉じる] " "$rc"
+      IFS= read -r _ || true
+    ' _ "$cmd"
+  '';
+  rofiRunner = pkgs.writeShellScript "rofi-run" ''
+    exec ${rofiBin} -show run \
+      -mesg 'Enter: 実行  │  Shift+Enter: 端末で実行  │  Ctrl+(Shift+)Enter: 自由入力実行' \
+      -run-command '${hyprExecBin} {cmd}' \
+      -run-shell-command '${rofiRunTerm} {cmd}'
+  '';
+  # Super+N: switch to the lowest unused numbered workspace (no-op if current
+  # workspace is already empty, ignoring pinned floating windows).
+  newWorkspace = pkgs.writeShellApplication {
+    name = "hypr-new-workspace";
+    runtimeInputs = [
+      pkgs.jq
+    ];
+    text = ''
+      cur_id="$(${hyprctlBin} -j activeworkspace | jq -r '.id // empty')"
+      if [ -n "$cur_id" ] && [ "$cur_id" -gt 0 ]; then
+        non_pinned="$(
+          ${hyprctlBin} -j clients | jq --argjson id "$cur_id" '
+            [ .[] | select(.workspace.id == $id and (.pinned | not)) ] | length
+          '
+        )"
+        if [ "$non_pinned" = "0" ]; then
+          exit 0
+        fi
+      fi
+      next_num="$(
+        ${hyprctlBin} -j workspaces | jq -r '
+          ([ .[] | .id | select(. != null and . > 0) ]) as $used |
+          first(range(1; 1000) | select(. as $n | ($used | index($n) | not)))
+        '
+      )"
+      [ -n "$next_num" ] || exit 0
+      exec ${hyprctlBin} dispatch "hl.dsp.focus({ workspace = $next_num })"
+    '';
+  };
+  # waybar cpu / mem → Ghostty + btop; network → Ghostty + nmtui; clock → NTP sync
   openBtop = "${ghosttyBin} -e ${btopBin}";
   openNmtui = "${ghosttyBin} -e ${nmtuiBin}";
   openYazi = "${ghosttyBin} -e ${yaziBin}";
@@ -278,6 +337,270 @@ let
     tooltip="$lines\n\n$ntp_line"
     printf '{"text":"%s","tooltip":"%s"}\n' "$bar" "$tooltip"
   '';
+
+  waybarBattery = pkgs.writeShellApplication {
+    name = "waybar-battery";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gawk
+      pkgs.jq
+    ];
+    text = ''
+      pref_bat=""
+      pref_adapter=""
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --bat)
+            pref_bat="''${2:-}"
+            shift 2
+            ;;
+          --adapter)
+            pref_adapter="''${2:-}"
+            shift 2
+            ;;
+          *)
+            shift
+            ;;
+        esac
+      done
+
+      ps_root="''${WAYBAR_POWER_SUPPLY_DIR:-/sys/class/power_supply}"
+
+      bat_dir=""
+      if [ -n "$pref_bat" ] && [ -d "$ps_root/$pref_bat" ]; then
+        bat_dir="$ps_root/$pref_bat"
+      else
+        for d in "$ps_root"/BAT* "$ps_root"/*; do
+          [ -d "$d" ] || continue
+          [ -r "$d/type" ] || continue
+          IFS= read -r tp < "$d/type" || continue
+          [ "$tp" = "Battery" ] || continue
+          if [ -r "$d/scope" ]; then
+            IFS= read -r sc < "$d/scope" || sc=""
+            if [ "''${sc,,}" = "device" ]; then
+              continue
+            fi
+          fi
+          bat_dir="$d"
+          break
+        done
+      fi
+
+      if [ -z "$bat_dir" ] || [ ! -d "$bat_dir" ]; then
+        printf '{"text":"","class":"empty"}\n'
+        exit 0
+      fi
+
+      read_val() {
+        local f="$1" def="''${2:-}" v
+        if [ -r "$f" ]; then
+          IFS= read -r v < "$f" || v="$def"
+          printf '%s' "$v"
+        else
+          printf '%s' "$def"
+        fi
+      }
+
+      bat_name="$(basename "$bat_dir")"
+      status="$(read_val "$bat_dir/status" "Unknown")"
+      raw_cap="$(read_val "$bat_dir/capacity" "")"
+      vn="$(read_val "$bat_dir/voltage_now" "0")"
+      vmin="$(read_val "$bat_dir/voltage_min_design" "0")"
+
+      adapter_online=""
+      if [ -n "$pref_adapter" ] && [ -r "$ps_root/$pref_adapter/online" ]; then
+        adapter_online="$(read_val "$ps_root/$pref_adapter/online" "")"
+      else
+        for d in "$ps_root"/*; do
+          [ -d "$d" ] || continue
+          [ -r "$d/type" ] || continue
+          IFS= read -r tp < "$d/type" || continue
+          if [ "$tp" = "Mains" ] && [ -r "$d/online" ]; then
+            adapter_online="$(read_val "$d/online" "")"
+            break
+          fi
+        done
+      fi
+
+      mode=""
+      now_val=0
+      full_val=0
+      design_val=0
+      power_val=0
+      pw_unit=""
+      has_power=0
+      if [ -r "$bat_dir/energy_now" ] && [ -r "$bat_dir/energy_full" ]; then
+        mode="energy"
+        now_val="$(read_val "$bat_dir/energy_now" "0")"
+        full_val="$(read_val "$bat_dir/energy_full" "0")"
+        design_val="$(read_val "$bat_dir/energy_full_design" "0")"
+      elif [ -r "$bat_dir/charge_now" ] && [ -r "$bat_dir/charge_full" ]; then
+        mode="charge"
+        now_val="$(read_val "$bat_dir/charge_now" "0")"
+        full_val="$(read_val "$bat_dir/charge_full" "0")"
+        design_val="$(read_val "$bat_dir/charge_full_design" "0")"
+      fi
+
+      if [ -r "$bat_dir/power_now" ]; then
+        power_val="$(read_val "$bat_dir/power_now" "0")"
+        pw_unit="W"
+        has_power=1
+      elif [ -r "$bat_dir/current_now" ]; then
+        power_val="$(read_val "$bat_dir/current_now" "0")"
+        pw_unit="A"
+        has_power=1
+      fi
+
+      disp_status="$status"
+      if [ "$status" = "Unknown" ]; then
+        if [ "$adapter_online" = "1" ]; then
+          disp_status="Plugged"
+        else
+          disp_status="Discharging"
+        fi
+      elif [ "$status" = "Not charging" ] && [ "$adapter_online" = "1" ]; then
+        disp_status="Plugged"
+      fi
+
+      {
+        IFS= read -r -d "" text
+        IFS= read -r -d "" classes
+        IFS= read -r -d "" tip
+      } < <(awk \
+        -v bat="$bat_name" \
+        -v st="$disp_status" \
+        -v ac="$adapter_online" \
+        -v raw_cap="$raw_cap" \
+        -v vn="$vn" \
+        -v vmin="$vmin" \
+        -v mode="$mode" \
+        -v now_v="$now_val" \
+        -v full_v="$full_val" \
+        -v design_v="$design_val" \
+        -v pw_v="$power_val" \
+        -v pw_unit="$pw_unit" \
+        -v has_pw="$has_power" \
+        'BEGIN {
+          if (pw_v < 0) pw_v = -pw_v
+          cap = 0
+          if ((mode == "energy" || mode == "charge") && full_v > 0) {
+            cap = int((100.0 * now_v / full_v) + 0.5)
+          } else if (raw_cap != "") {
+            cap = int(raw_cap + 0)
+          }
+          if (cap < 0) cap = 0
+          if (cap > 100) cap = 100
+
+          if (cap == 100 && st == "Charging") st = "Full"
+
+          if (st == "Charging") icon = "󰂄"
+          else if (st == "Plugged" || st == "Full") icon = "󰚥"
+          else if (cap <= 15) icon = "󰂎"
+          else if (cap <= 35) icon = "󰁼"
+          else if (cap <= 60) icon = "󰁾"
+          else if (cap <= 85) icon = "󰂀"
+          else icon = "󰁹"
+          text = sprintf("%s %d%%", icon, cap)
+
+          cls_st = tolower(st)
+          gsub(/ /, "-", cls_st)
+          classes = cls_st
+          if (cap <= 15) classes = classes " critical"
+          else if (cap <= 30) classes = classes " warning"
+
+          ac_note = (ac == "1") ? "（AC 接続中）" : ""
+          line1 = sprintf("%s: %s %d%%%s", bat, st, cap, ac_note)
+
+          line2 = ""
+          if (vn > 0) {
+            if (vmin > 0) {
+              line2 = sprintf("電圧: %.2f V（設計下限 %.2f V）", vn / 1e6, vmin / 1e6)
+            } else {
+              line2 = sprintf("電圧: %.2f V", vn / 1e6)
+            }
+          }
+
+          v_ref = (vn > 0) ? (vn / 1e6) : ((vmin > 0) ? (vmin / 1e6) : 0)
+          pw_w = 0
+          if (has_pw) {
+            if (pw_unit == "W") pw_w = pw_v / 1e6
+            else if (pw_unit == "A" && v_ref > 0) pw_w = (pw_v / 1e6) * v_ref
+          }
+
+          line3 = ""
+          rem_h = 0
+          if (mode == "energy") {
+            health = (design_v > 0) ? (100.0 * full_v / design_v) : 0
+            if (design_v > 0) {
+              line3 = sprintf("容量: %.2f / %.2f Wh（設計 %.2f Wh / 健康度 %.0f%%）", now_v / 1e6, full_v / 1e6, design_v / 1e6, health)
+            } else {
+              line3 = sprintf("容量: %.2f / %.2f Wh", now_v / 1e6, full_v / 1e6)
+            }
+            if (pw_w > 0.1) {
+              if (st == "Discharging" && now_v > 0) rem_h = (now_v / 1e6) / pw_w
+              else if (st == "Charging" && full_v > now_v) rem_h = ((full_v - now_v) / 1e6) / pw_w
+            }
+          } else if (mode == "charge") {
+            health = (design_v > 0) ? (100.0 * full_v / design_v) : 0
+            if (v_ref > 0) {
+              now_wh = (now_v / 1e6) * v_ref
+              full_wh = (full_v / 1e6) * v_ref
+              if (design_v > 0) {
+                line3 = sprintf("容量: %.2f / %.2f Wh（%.2f / %.2f Ah / 健康度 %.0f%%）", now_wh, full_wh, now_v / 1e6, full_v / 1e6, health)
+              } else {
+                line3 = sprintf("容量: %.2f / %.2f Wh（%.2f / %.2f Ah）", now_wh, full_wh, now_v / 1e6, full_v / 1e6)
+              }
+              if (pw_w > 0.1) {
+                if (st == "Discharging" && now_v > 0) rem_h = now_wh / pw_w
+                else if (st == "Charging" && full_v > now_v) rem_h = (full_wh - now_wh) / pw_w
+              }
+            } else if (design_v > 0) {
+              line3 = sprintf("容量: %.2f / %.2f Ah（健康度 %.0f%%）", now_v / 1e6, full_v / 1e6, health)
+            } else {
+              line3 = sprintf("容量: %.2f / %.2f Ah", now_v / 1e6, full_v / 1e6)
+            }
+          }
+
+          line4 = ""
+          if (has_pw && (pw_unit == "W" || v_ref > 0)) {
+            sign = (st == "Charging") ? "+" : ((st == "Discharging") ? "-" : "")
+            eta_str = ""
+            if (rem_h > 0) {
+              tot_m = int(rem_h * 60 + 0.5)
+              hh = int(tot_m / 60)
+              mm = tot_m % 60
+              dur = (hh > 0) ? sprintf("%d時間%d分", hh, mm) : sprintf("%d分", mm)
+              eta_ts = strftime("%H:%M", systime() + int(rem_h * 3600 + 0.5))
+              if (st == "Charging") {
+                eta_str = sprintf("  満充電まで %s (%s)", dur, eta_ts)
+              } else if (st == "Discharging") {
+                eta_str = sprintf("  残り %s (%s)", dur, eta_ts)
+              }
+            }
+            line4 = sprintf("電力: %s%.2f W%s", sign, pw_w, eta_str)
+          }
+
+          tip = line1
+          if (line2 != "") tip = tip "\n" line2
+          if (line3 != "") tip = tip "\n" line3
+          if (line4 != "") tip = tip "\n" line4
+
+          if (cap == 0 && st == "Discharging" && vn > 5500000) {
+            tip = tip "\n注: 残量 0% 表示でも電圧あり（満充電→空→満充電で較正）"
+          } else if (raw_cap != "" && int(raw_cap + 0) != cap) {
+            tip = tip sprintf("\n注: カーネル capacity=%s%%", raw_cap)
+          }
+
+          printf "%s\0%s\0%s\0", text, classes, tip
+        }')
+
+      jq -cn \
+        --arg text "$text" \
+        --arg tooltip "$tip" \
+        --arg classes "$classes" \
+        '{text: $text, tooltip: $tooltip, class: ($classes | split(" ") | map(select(length > 0)))}'
+    '';
+  };
 
   ntpSync = pkgs.writeShellApplication {
     name = "waybar-ntp-sync";
@@ -773,6 +1096,11 @@ let
     }
     {
       section = "起動・終了";
+      label = "rofi コマンド実行（Enter / 端末: Shift+Enter）";
+      keys = "Super+P";
+    }
+    {
+      section = "起動・終了";
       label = "Zed エディタ";
       run = "zeditor";
       mode = "exec";
@@ -849,7 +1177,7 @@ let
     {
       section = "ウィンドウ・WS";
       label = "分割方向トグル / 疑似タイル (dwindle)";
-      keys = "Super+B / Super+P";
+      keys = "Super+B / Super+Alt+P";
     }
     {
       section = "ウィンドウ・WS";
@@ -860,6 +1188,11 @@ let
       section = "ウィンドウ・WS";
       label = "スクラッチパッド表示 / 退避 (special:magic)";
       keys = "Super+S / Super+Alt+S";
+    }
+    {
+      section = "ウィンドウ・WS";
+      label = "新しい空き WS へ移動";
+      keys = "Super+N";
     }
     {
       section = "ウィンドウ・WS";
@@ -1367,6 +1700,30 @@ let
     }
     {
       section = "開発";
+      label = "Local LLM WebUI（Qwen3.5-4B）";
+      run = "local-llm web";
+      mode = "exec";
+    }
+    {
+      section = "開発";
+      label = "Local LLM 対話チャット（Qwen3.5-4B）";
+      run = "local-llm chat";
+      mode = "term";
+    }
+    {
+      section = "開発";
+      label = "Local LLM 状態確認（API URL・RSS）";
+      run = "local-llm status";
+      mode = "term";
+    }
+    {
+      section = "開発";
+      label = "Local LLM サーバー停止（RAM解放）";
+      run = "local-llm stop";
+      mode = "term";
+    }
+    {
+      section = "開発";
       label = "Antigravity（Remote Control 有効で起動）";
       run = "agy --remote-control";
       mode = "term";
@@ -1454,6 +1811,12 @@ let
       section = "ディスク容量";
       label = "df / lsblk";
       run = "df -hT /; lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINTS";
+      mode = "term";
+    }
+    {
+      section = "ディスク容量";
+      label = "disktui（パーティション管理 TUI）";
+      run = "disktui";
       mode = "term";
     }
     {
@@ -1886,14 +2249,27 @@ let
     # 電源（Chromebook: 電源・Type-C / VAIO: 電源・省電力）
     {
       section = powerSection;
+      label = "Capsomnia（Caps Lock で蓋閉じスリープ抑止・メニュー）";
+      keys = "CapsLock / Super+Alt+c / Waybar ●";
+      run = "${capsomniaPkg}/bin/capsomnia-menu";
+      mode = "exec";
+    }
+    {
+      section = powerSection;
+      label = "Capsomnia 設定画面（画面維持・自動オフタイマー・詳細）";
+      run = "${capsomniaPkg}/bin/capsomnia-settings";
+      mode = "exec";
+    }
+    {
+      section = powerSection;
       label = "輝度 40%（消費の主因を下げる）";
       run = "${brightnessctl} set 40%";
       mode = "exec";
     }
     {
       section = powerSection;
-      label = "バッテリー状態（健康度・W・残り）";
-      run = "awk -v en=$(cat /sys/class/power_supply/BAT1/energy_now) -v ef=$(cat /sys/class/power_supply/BAT1/energy_full) -v ed=$(cat /sys/class/power_supply/BAT1/energy_full_design) -v pw=$(cat /sys/class/power_supply/BAT1/power_now) -v cap=$(cat /sys/class/power_supply/BAT1/capacity) -v st=$(cat /sys/class/power_supply/BAT1/status) 'BEGIN{printf \"%s %s%%  now=%.2fWh full=%.2fWh design=%.2fWh health=%.0f%%  %.2fW  ETA=%.1fh\\n\", st,cap,en/1e6,ef/1e6,ed/1e6,100*ef/ed,pw/1e6,(pw>0?en/pw:0)}'";
+      label = "バッテリー状態（電圧・健康度・W・残り）";
+      run = "for b in /sys/class/power_supply/BAT*; do [ -d \"$b\" ] || continue; st=$(cat \"$b/status\"); cap=$(cat \"$b/capacity\"); vn=$(cat \"$b/voltage_now\"); if [ -r \"$b/energy_now\" ]; then en=$(cat \"$b/energy_now\"); ef=$(cat \"$b/energy_full\"); ed=$(cat \"$b/energy_full_design\"); pw=$(cat \"$b/power_now\"); awk -v nm=\"$(basename \"$b\")\" -v st=\"$st\" -v cap=\"$cap\" -v vn=\"$vn\" -v en=\"$en\" -v ef=\"$ef\" -v ed=\"$ed\" -v pw=\"$pw\" 'BEGIN{printf \"%s %s %s%%  V=%.2fV  now=%.2fWh full=%.2fWh design=%.2fWh health=%.0f%%  %.2fW  ETA=%.1fh\\n\", nm,st,cap,vn/1e6,en/1e6,ef/1e6,ed/1e6,(ed>0?100*ef/ed:0),pw/1e6,(pw>0?en/pw:0)}'; elif [ -r \"$b/charge_now\" ]; then cn=$(cat \"$b/charge_now\"); cf=$(cat \"$b/charge_full\"); cd=$(cat \"$b/charge_full_design\"); cw=$(cat \"$b/current_now\"); awk -v nm=\"$(basename \"$b\")\" -v st=\"$st\" -v cap=\"$cap\" -v vn=\"$vn\" -v cn=\"$cn\" -v cf=\"$cf\" -v cd=\"$cd\" -v cw=\"$cw\" 'BEGIN{if(cw<0)cw=-cw; pw=(vn/1e6)*(cw/1e6); en=(vn/1e6)*(cn/1e6); printf \"%s %s %s%%  V=%.2fV  now=%.2fAh full=%.2fAh design=%.2fAh health=%.0f%%  %.2fW  ETA=%.1fh\\n\", nm,st,cap,vn/1e6,cn/1e6,cf/1e6,cd/1e6,(cd>0?100*cf/cd:0),pw,(pw>0?en/pw:0)}'; fi; done";
       mode = "term";
     }
     {
@@ -2389,6 +2765,8 @@ in
       hl.bind("CTRL + ALT + T",   hl.dsp.exec_cmd(${builtins.toJSON ghosttyBin}))
       hl.bind(mod .. " + D",      hl.dsp.exec_cmd(${builtins.toJSON rofiLauncher}), { dont_inhibit = true })
       hl.bind("ALT + Space",      hl.dsp.exec_cmd(${builtins.toJSON rofiLauncher}), { dont_inhibit = true })
+      hl.bind(mod .. " + P",      hl.dsp.exec_cmd(${builtins.toJSON "${rofiRunner}"}), { dont_inhibit = true })
+      hl.bind(mod .. " + N",      hl.dsp.exec_cmd(${builtins.toJSON (lib.getExe newWorkspace)}), { dont_inhibit = true })
       hl.bind(mod .. " + E",      hl.dsp.exec_cmd(${builtins.toJSON openYazi}))
       hl.bind(mod .. " + V",      hl.dsp.exec_cmd("clipboard-history"))
       hl.bind(mod .. " + L",      hl.dsp.exec_cmd(${builtins.toJSON "${lockOnceCmd}"}))
@@ -2403,7 +2781,7 @@ in
       hl.bind(mod .. " + SHIFT + Space", hl.dsp.window.float({ action = "toggle" }))
       hl.bind(mod .. " + C",           hl.dsp.window.center())
       hl.bind(mod .. " + B",           hl.dsp.layout("togglesplit"))
-      hl.bind(mod .. " + P",           hl.dsp.window.pseudo())
+      hl.bind(mod .. " + ALT + P",     hl.dsp.window.pseudo())
       hl.bind(mod .. " + R",           hl.dsp.submap("resize"))
 
       -- Window groups (tabbed containers)
@@ -2683,11 +3061,12 @@ in
         modules-right = [
           "cpu"
           "memory"
+          "custom/capsomnia"
           "custom/keep-screen-on"
           "network"
           "backlight"
           "pulseaudio"
-          "battery"
+          "custom/battery"
         ];
 
         "custom/cheatsheet" = {
@@ -2722,6 +3101,18 @@ in
           signal = 8;
           hide-empty-text = true;
           tooltip = true;
+        };
+        # Capsomnia status dot + optional countdown (signal 15 from capsomniad).
+        "custom/capsomnia" = {
+          exec = "${capsomniaPkg}/bin/cpsm waybar";
+          return-type = "json";
+          interval = 5;
+          signal = 15;
+          tooltip = true;
+          hide-empty-text = true;
+          on-click = "${capsomniaPkg}/bin/capsomnia-menu";
+          on-click-right = "${capsomniaPkg}/bin/cpsm toggle --no-sleep";
+          on-click-middle = "${capsomniaPkg}/bin/capsomnia-settings";
         };
         "custom/clock" = {
           exec = "${waybarClock}";
@@ -2778,21 +3169,16 @@ in
           max-volume = 100;
           on-click = "${pactl} set-sink-mute @DEFAULT_SINK@ toggle";
         };
-        battery = {
-          format = "{icon} {capacity}%";
-          format-charging = "󰂄 {capacity}%";
-          format-plugged = "󰚥 {capacity}%";
-          format-icons = [
-            "󰂎"
-            "󰁼"
-            "󰁾"
-            "󰂀"
-            "󰁹"
-          ];
-          states = {
-            warning = 30;
-            critical = 15;
-          };
+        "custom/battery" = {
+          exec =
+            "${lib.getExe waybarBattery} "
+            + (if isChromebook then "--adapter AC" else "--bat BAT1 --adapter ACAD");
+          return-type = "json";
+          interval = 5;
+          signal = 16;
+          tooltip = true;
+          escape = true;
+          hide-empty-text = true;
         };
       };
 
@@ -2936,7 +3322,6 @@ in
         color: ${p.fg};
         background: ${p.danger};
       }
-
       #submap {
         color: ${p.bg};
         background: ${p.danger};
@@ -2988,11 +3373,12 @@ in
 
       #cpu,
       #memory,
+      #custom-capsomnia,
       #custom-keep-screen-on,
       #network,
       #backlight,
       #pulseaudio,
-      #battery {
+      #custom-battery {
         padding: 0 9px;
         margin: 4px 1px;
         color: ${p.fgSecondary};
@@ -3003,34 +3389,50 @@ in
 
       #cpu:hover,
       #memory:hover,
+      #custom-capsomnia:hover,
+      #custom-keep-screen-on:hover,
       #network:hover,
-      #pulseaudio:hover,
-      #custom-keep-screen-on:hover {
+      #pulseaudio:hover {
         background: rgba(${p.surfaceAltRgb}, 0.90);
         color: ${p.fg};
       }
 
-      #battery {
+      #custom-capsomnia.on {
+        color: ${p.fg};
+        background: rgba(110, 231, 183, 0.14);
+        border: 1px solid rgba(110, 231, 183, 0.45);
+        font-weight: 600;
+      }
+      #custom-capsomnia.off {
+        color: ${p.fgMuted};
+      }
+      #custom-capsomnia.error {
+        color: ${p.danger};
+        background: ${p.dangerSoft};
+        border: 1px solid ${p.danger};
+      }
+
+      #custom-battery {
         margin-right: 6px;
         color: ${p.fg};
       }
-      #battery.charging,
-      #battery.plugged,
-      #battery.full,
-      #battery.discharging,
-      #battery.warning,
-      #battery.critical {
+      #custom-battery.charging,
+      #custom-battery.plugged,
+      #custom-battery.full,
+      #custom-battery.discharging,
+      #custom-battery.warning,
+      #custom-battery.critical {
         background: transparent;
         animation: none;
       }
-      #battery.charging,
-      #battery.plugged {
+      #custom-battery.charging,
+      #custom-battery.plugged {
         color: ${p.success};
       }
-      #battery.warning {
+      #custom-battery.warning {
         color: ${p.warning};
       }
-      #battery.critical {
+      #custom-battery.critical {
         color: ${p.danger};
         background: ${p.dangerSoft};
       }

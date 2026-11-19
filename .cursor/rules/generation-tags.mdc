@@ -1,0 +1,34 @@
+---
+description: 意味のある NixOS/HM 構成変更時に modules/nixos/release.nix の世代タグを更新する
+alwaysApply: true
+---
+
+# NixOS 世代タグの更新
+
+構成や機能が変わる NixOS / Home Manager の変更を入れたら、`modules/nixos/release.nix` の `system.nixos.tags` を更新する。
+
+## いつ更新するか
+
+- **更新する**: デスクトップ環境、主要パッケージ、サービス、ハードウェア設定、起動まわりなど、世代の「特徴」が変わる変更のとき
+- **スキップする**: ドキュメント（`README.md` / `AGENTS.md`）、`.cursor/rules/`、チートシート文言のみ、コメントやタイポ修正など実質的なシステム挙動が変わらない変更
+
+## 手順
+
+1. `modules/nixos/release.nix` の `system.nixos.tags` を、変更内容を表す短いスラッグに更新する
+   - 使用可能文字: `a-zA-Z0-9:_.-` のみ（スペース不可、小文字ケバブケース推奨）
+   - `nixfmt` の形式を保つ
+2. 変更とあわせて（または直後のコミットとして）コミットする
+
+```nix
+# 例: modules/nixos/release.nix
+{ ... }:
+
+{
+  system.nixos.tags = [ "startup-sound-picker" ];
+}
+```
+
+## やらないこと
+
+- `gen/NN-*` の Git タグ作成（廃止済み）
+- `flake.nix` の `system.configurationRevision` の手動編集（`self.rev` / `self.dirtyRev` から自動設定）

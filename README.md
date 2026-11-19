@@ -26,7 +26,9 @@
 | 操作 | キー | 動作 |
 |------|------|------|
 | 検索／ランチャー | **Super+D** / **Alt+Space** | **rofi** |
+| コマンド実行（一時） | **Super+P** | **rofi**（`-show run`：Enter で即実行／Shift+Enter で端末実行） |
 | 端末 | **Ctrl+Alt+T** / **Super+Return** | **Ghostty** |
+| 新規仮想デスクトップ | **Super+N** | 未使用最小番号の空きワークスペースへ移動 |
 | ファイルマネージャ | **Super+E** | **Yazi**（Ghostty 内） |
 | ロック | **Super+L** | **hyprlock** |
 | クリップボード履歴 | **Super+V** | **cliphist** + rofi |
@@ -333,6 +335,7 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **T3 Code** — 複数コーディングエージェントを束ねるデスクトップ／CLI（nixpkgs `t3code`。`t3` / `t3code-desktop`）。Claude・Cursor・OpenCode を PATH に載せて起動。更新は `flake-update`（nixpkgs）
 - **Hermes** — Nous Research のエージェント（`hermes` / `hermes-acp`）。flake 入力 `hermes-agent` + `home/hermes.nix`（CLI + ACP。gateway / Desktop は無し）。状態は `~/.hermes`。初回は `hermes setup` でプロバイダ認証し、T3 の Providers で Hermes / Local ACP を有効化。ACP 確認は `hermes acp --check`
 - **Antigravity** — Google のターミナルエージェント（`pkgs/antigravity` で CLI バイナリをピン留め）。既定では対話 TTY での `agy` 起動時に `tmux` 2ペインを開き、メイン・サブエージェントの思考と `cli.log` Monitor 理由をリアルタイム翻訳する（`home/antigravity-translate.nix`）。`agy-ja on` / `off` / `toggle` / `status`（または `agy translate on|off|toggle|status`）で自動翻訳の既定 ON/OFF を切り替えられ、起動中セッションでも `F9` / `Ctrl+b t` / tmux ステータスバーの `[翻訳: ON/OFF]` クリックで翻訳ペインを即座に表示・非表示できる（最後の監視終了でモデル RAM も解放）。単発指定は `agy --translate` / `agy --no-translate` / `AGY_NO_TRANSLATE=1` / `agy-ja` / `agy-raw`、非対話・サブコマンド（`-p`, `acp`, `changelog` 等）は素の `antigravity` として直通起動。`plamo-translate` が `llama-cpp` の `llama-server`（PFN `plamo-3-translate-0.8b-GGUF` Q4_K_M）を初回のみ `~/.cache/plamo-translate/` へ自動取得してオンデマンド起動し、無通信 300 秒で自動終了（非使用時 RAM 0）
+- **Local LLM (`llama.cpp` + `Qwen3.5-4B`)** — `home/local-llm.nix` により `pkgs.llama-cpp`（`llama-cli` / `llama-server` / `llama-bench`）とオンデマンドランチャー `local-llm`（`scripts/local-llm.py`）を導入。初回に `unsloth/Qwen3.5-4B-GGUF`（`Q4_K_M`、約 2.55 GiB、SHA-256 検証付き）を `~/.cache/local-llm/` へ自動取得し、CPU 物理コア数・`ctx=8192`・KV 量子化 `q8_0`・思考モード既定 OFF（`--thinking` で切替可）で `127.0.0.1:18922` に OpenAI 互換 API（`/v1`）と内蔵 WebUI を起動し、無通信 600 秒で自動停止して RAM を解放する。`local-llm web`（アプリメニュー `Local LLM (Qwen3.5-4B)`）/ `chat` / `ask` / `status` / `stop` に加え、`local-llm acp` で **T3 Code** 向け ACP v1（プローブ時は RAM 0、`qwen3.5:4b` / `qwen3.5:4b-thinking`、`code` / `ask` モード、`/clear` / `/stop` / `/status`）を提供
 - **dsh-TUI** — DeepSeek Harness の TUI（`dsh-tui` / `dst`）。Node のグローバル npm（`~/.npm-global`、`.npmrc` の `prefix`）へ `npm i -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui`。初回起動でプロファイルを初期化（`pnpm` 必須）。モデル利用は `DEEPSEEK_API_KEY` または `/auth`
 - **ChatGPT** — 公式 Linux デスクトップ（Codex 含む、`pkgs/chatgpt`、`.deb`）。アプリメニュー / `chatgpt`。起動時に Vivaldi 等向け Native Messaging（`com.openai.codexextension`）を入れ、ブラウザ拡張の Browser Use を有効化する
 - **Vivaldi × ChatGPT 拡張** — Vivaldi は `chrome.sidePanel.setOptions` を無視するため、Web Store 版は side panel が真っ白になる（VB-120826）。`vivaldi-chatgpt-extension-patch` が `~/.local/share/vivaldi-chatgpt-extension` に `default_path=codex-work-sidepanel.html` の unpacked 版を作る。初回だけ `vivaldi://extensions` で Store 版を無効化し、Developer mode → Load unpacked でそのディレクトリを読み込む
@@ -343,7 +346,7 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **Vivaldi** — `vivaldi`
 - **Firefox** — `firefox`
 - **Tor Browser** — `tor-browser`
-- **JQuake** — `JQuake` / `jquake`（1.8.4 + `pkgs/jquake` ラッパー。Hyprland/XWayland AWT 修正・更新ダイアログ無効化）。ログイン時に `jquake.service` で常駐し、Hyprland では offscreen `stalonetray` にトレイを保持しつつ左 waybar の専用枠（`custom/jquake`）を表示（左クリックでウィンドウを開く／右クリックでメニュー）。警報時は hyprlock 解除＋前面化/全画面（`home/jquake.nix` / `home/hyprland.nix`）
+- **JQuake** — `JQuake` / `jquake`（1.8.4 + `pkgs/jquake` ラッパー。Hyprland/XWayland AWT 修正・更新ダイアログ無効化）。ログイン時に `jquake.service` で常駐し、Hyprland では offscreen `stalonetray` にトレイを保持しつつ左 waybar の専用枠（`custom/jquake`）を表示（左クリックでウィンドウを開く／右クリックでメニュー）。表示時・警報時は Waybar を残したままワークスペース領域いっぱいに最大化＋警報時は `hyprlock` 解除（`home/jquake.nix` / `home/hyprland.nix`）
 - **ONLYOFFICE** — `onlyoffice-desktopeditors`（文書・表計算・プレゼン）
 - **Affinity** — 未導入（`affinity-v3` なし。flake 入力も overlay も外してある）。戻すときは次の 3 箇所です。
   1. `flake.nix` の `inputs` に `affinity-nix.url = "github:mrshmllow/affinity-nix";` を足し、`nixpkgs.overlays` の先頭に `inputs.affinity-nix.overlays.default` を戻す
@@ -361,7 +364,7 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **暗号化バックアップ** — `restic` + `rclone` で `/home` を Google Drive へ。`agenix` 移行時は `/run/agenix/` 経由で自動無監視実行（未移行時・他端末リカバリ時は Bitwarden `rbw`）。詳細は下記。
 - **デスクトップ** — greetd + ReGreet（Hyprland (UWSM) のみ。ログイン画面も受信専用 Lan Mouse 待機）
 - **bootvine** — 起動コンソールに systemd ジョブの依存ツリーを表示（[bootvine](https://codeberg.org/wvhulle/bootvine)、`services.bootvine.enable`）。反映には `rebuild` のあと再起動が必要
-- **起動音（`startup-sound`）** — ログイン時に `startup-sound.service` が歴代 Windows（3.1 / 95 / 98 / 2000 / XP / 7 / 11）・Mac・GameCube・Nintendo Wii・Wii Sports と `~/.local/share/startup-sounds/`（または `home/startup-sounds/`）の音声からランダム再生（`home/startup-sound.nix`）。左 Waybar の `♪` アイコンから一覧・編集・ON/OFF・再生でき、CLI でも `startup-sound --list` / `--menu` / `--toggle` が利用可能
+- **起動音（`startup-sound`）** — ログイン時に `startup-sound.service` が歴代 Windows（3.1 / 95 / 98 / 2000 / XP / 7 / 11）・Mac・GameCube・Nintendo Wii・Wii Sports・ブルーアーカイブ・マリオカート8 と `~/.local/share/startup-sounds/`（または `home/startup-sounds/`）の音声からランダム再生（`home/startup-sound.nix`）。左 Waybar の `♪` アイコンから一覧・編集・ON/OFF・再生でき、CLI でも `startup-sound --list` / `--menu` / `--toggle` が利用可能
 - **gui** — ディスプレイ無し時は `cage` で単一 GUI アプリを起動（`gui firefox` など）。引数なしは `apps` を起動
 - **apps** — `fzf` アプリ一覧（`gui` 経由起動）。TTY やシェルから利用可。Hyprland の Super+D は rofi
 
@@ -389,6 +392,7 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - sans / 等幅の日本語: `Noto Sans CJK JP`（`noto-fonts-cjk-sans`）
 - serif: `Noto Serif CJK JP`（`noto-fonts-cjk-serif`）
 - 等幅のラテン: `JetBrainsMono Nerd Font`（Ghostty も 12pt）
+- Cursor Gothic: `Cursor Gothic`（`pkgs/cursor-gothic`、Regular / Italic / Bold / BoldItalic の OTF を `fonts.packages` に同梱）
 
 ヒラギノは flake input にしていません。`path:` 入力は、そのディレクトリが無いマシンで flake 全体の評価が失敗するためです。
 
@@ -786,17 +790,20 @@ modules/nixos/chromebook/         # audio（PulseAudio + UCM）/ power（Type-C 
 modules/nixos/backup.nix          # 暗号化 /home → Google Drive バックアップ（agenix / restic / rclone）
 modules/nixos/release.nix         # system.nixos.tags（世代ラベルのスラッグ）
 home/mitac.nix                    # HM エントリ（identity + imports）
+home/local-llm.nix                # llama.cpp + Qwen3.5-4B オンデマンド管理（local-llm / WebUI）
 home/hermes.nix                   # Hermes Agent CLI + ACP（flake 入力 hermes-agent）
 home/secrets.nix                  # agenix ユーザーシークレット連携（~/.ssh / ~/.config/gh / user-env）
 home/flake-tools.nix              # repoPath / flakeHost / scripts（secrets・flake-update・waybar 等）
 home/shell.nix                    # bash エイリアス / rebuild / audio-panic / runbtop
 home/programs.nix                 # git / rbw / neovim / rofi / ghostty / mime / 共通パッケージ（T3 Code 含む）
-home/startup-sound.nix            # ランダム起動音（startup-sound.service / Waybar トレイ管理 / Windows・Mac・GC・Wii）
-home/startup-sounds/              # 起動音の宣言的ローカル追加置き場（README 参照）
+home/startup-sound.nix            # ランダム起動音（startup-sound.service / Waybar トレイ管理 / プリセット・同梱音源）
+home/startup-sounds/              # 起動音の宣言的ローカル追加置き場（ブルアカ・マリオカート8 等、README 参照）
+home/capsomnia.nix                # Capsomnia ユーザー常駐デーモン（capsomniad.service）
 home/lazy-plugins.nix             # nixpkgs 由来 LazyVim プラグイン + treesitter パーサ
 home/clipboard.nix                # cliphist + clipboard-history
 home/hyprland.nix                 # Hyprland Lua 設定（waybar/mako/hyprpaper/hyprlock/hypridle・polkit・チートシート）
 home/nvim/
+scripts/local-llm.py              # local-llm CLI / オンデマンド llama-server マネージャ・T3 Code ACP
 scripts/secrets-tool.sh           # secrets CLI（init / bootstrap / import / edit / rekey / check）
 scripts/restore-on-nixos.sh       # 実機復元（--from / --new-device / --agenix-only）
 ```

@@ -3,6 +3,7 @@
 
 {
   imports = [
+    ./laptop/capsomnia.nix
     ./laptop/graphics.nix
     ./laptop/input.nix
     ./laptop/power.nix

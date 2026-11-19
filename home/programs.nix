@@ -20,6 +20,7 @@ let
   ghostty = "${pkgs.ghostty}/bin/ghostty";
   yazi = "${pkgs.yazi}/bin/yazi";
   lazyPlugins = import ./lazy-plugins.nix { inherit pkgs lib; };
+  agentDesktop = pkgs.callPackage ../pkgs/agent-desktop { };
 in
 {
   # User identity. The system profile also ships git, without this
@@ -256,6 +257,10 @@ in
         text = osConfig.environment.etc."xdg/fcitx5/conf/classicui.conf".text;
         force = true;
       };
+      "fcitx5/conf/waylandim.conf" = {
+        text = osConfig.environment.etc."xdg/fcitx5/conf/waylandim.conf".text;
+        force = true;
+      };
     })
   ];
 
@@ -339,6 +344,8 @@ in
     TERMINAL = "ghostty";
     # Java AWT on tiling Wayland/XWayland compositors: prevents solid black frames.
     _JAVA_AWT_WM_NONREPARENTING = "1";
+    # Expose Qt widget trees over AT-SPI2 for agent-desktop.
+    QT_ACCESSIBILITY = "1";
   };
 
   # Yazi via Ghostty for inode/directory mime (xdg-open etc.).
@@ -480,6 +487,8 @@ in
     opencode
     # Anthropic Claude Code CLI (`claude`).
     claude-code
+    # Computer use CLI for AI agents (`agent-desktop`; pkgs/agent-desktop).
+    agentDesktop
     # T3 Code: desktop + `t3` CLI; PATH wraps already-installed agents.
     (t3code.override {
       enableClaude = true;

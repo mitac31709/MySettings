@@ -233,12 +233,19 @@ in
       kdePackages.fcitx5-qt
       kdePackages.fcitx5-configtool
     ];
-    fcitx5.settings.addons.classicui.globalSection = {
-      "Vertical Candidate List" = true;
-      Font = "Sans 11";
-      Theme = "meltype-dark";
-      DarkTheme = "meltype-dark";
-      UseDarkTheme = true;
+    fcitx5.settings.addons = {
+      classicui.globalSection = {
+        "Vertical Candidate List" = true;
+        Font = "Sans 11";
+        Theme = "meltype-dark";
+        DarkTheme = "meltype-dark";
+        UseDarkTheme = true;
+      };
+      # Keep zwp_virtual_keyboard_v1 alive across deactivate/activate instead of
+      # destroying it on every focus switch (avoids transient NULL virtual keyboard state).
+      waylandim.globalSection = {
+        PersistentVirtualKeyboard = true;
+      };
     };
     fcitx5.settings.inputMethod = {
       GroupOrder."0" = "Default";
@@ -286,6 +293,8 @@ in
       noto-fonts-cjk-sans
       # Serif fallback (Hiragino Mincho ProN) when the local OTFs are absent.
       noto-fonts-cjk-serif
+      # Cursor's bespoke geometric sans-serif typeface ("Cursor Gothic").
+      cursor-gothic
     ]
     ++ lib.optionals hiraginoEnabled [
       (pkgs.callPackage ../../pkgs/hiragino {
@@ -360,6 +369,7 @@ in
       alsa-utils # amixer/alsactl — mute SOF amps if audio wedges
       libva-utils # vainfo — verify VA-API / Parsec hw encode
       iperf3 # LAN / WAN bandwidth test (server: -s, client: -c HOST)
+      (callPackage ../../pkgs/disktui { }) # TUI disk & partition manager (wrapped with parted/cryptsetup/mkfs/smartctl)
     ]
     ++ lib.optionals hasBtrfs [ compsize ];
 

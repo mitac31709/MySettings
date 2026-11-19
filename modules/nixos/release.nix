@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "hyprland-uwsm" ];
+  system.nixos.tags = [ "hyprland-nocturne" ];
 }

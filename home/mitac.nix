@@ -5,6 +5,7 @@
   imports = [
     ./flake-tools.nix
     ./antigravity-translate.nix
+    ./local-llm.nix
     ./hermes.nix
     ./secrets.nix
     ./shell.nix
@@ -21,6 +22,7 @@
     ./vivaldi-extensions-repair.nix
     ./vivaldi-pwa-desktop.nix
     ./jquake.nix
+    ./capsomnia.nix
     ./hyprland.nix
   ];
 

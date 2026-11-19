@@ -34,4 +34,8 @@
       ];
     };
   };
+
+  # Accessibility bus (AT-SPI2 over D-Bus) for computer-use agents (agent-desktop)
+  # and assistive tech; also stops NixOS from exporting NO_AT_BRIDGE=1 / GTK_A11Y=none.
+  services.gnome.at-spi2-core.enable = true;
 }

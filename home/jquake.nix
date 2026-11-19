@@ -1,11 +1,11 @@
-# JQuake: login autostart, offscreen XEmbed tray host, alert raise over hyprlock.
+# JQuake: login autostart, offscreen XEmbed tray host, alert maximize over hyprlock.
 #
 # - Patches a few Settings.properties keys on each start without rewriting the whole file.
 # - Hyprland/XWayland: AWT SystemTray needs an XEmbed tray host. Offscreen stalonetray
 #   hosts JQuake's icon and waybar's `custom/jquake` module opens it via stalonetray
 #   remote click.
-# - On alert we wake DPMS, dismiss hyprlock, and focus/fullscreen/pin the map window
-#   using Hyprland 0.57+ Lua dispatchers.
+# - On alert we wake DPMS, dismiss hyprlock, and maximize/pin the map window while
+#   keeping Waybar visible using Hyprland 0.57+ Lua dispatchers.
 {
   pkgs,
   lib,
@@ -239,8 +239,7 @@ let
           pkill -x hyprlock || true
         fi
         ${hyprctl} dispatch 'hl.dsp.focus({ window = "class:^${jquakeClass}$" })' >/dev/null 2>&1 || true
-        ${hyprctl} dispatch 'hl.dsp.window.fullscreen_state({ internal = 2, client = 2 })' >/dev/null 2>&1 || true
-        ${hyprctl} dispatch 'hl.dsp.window.pin()' >/dev/null 2>&1 || true
+        ${hyprctl} dispatch 'hl.dsp.window.fullscreen_state({ internal = 1, client = 1 })' >/dev/null 2>&1 || true
       }
 
       sock="''${XDG_RUNTIME_DIR}/hypr/''${HYPRLAND_INSTANCE_SIGNATURE}/.socket2.sock"
@@ -317,10 +316,10 @@ in
     };
   };
 
-  # Hyprland: raise/unlock on alert window events.
+  # Hyprland: maximize (keeping Waybar visible) + unlock on alert window events.
   systemd.user.services.jquake-hypr-alert = {
     Unit = {
-      Description = "Raise JQuake over hyprlock on alert";
+      Description = "Raise JQuake maximized over hyprlock on alert";
       After = [
         "graphical-session.target"
         "jquake.service"
