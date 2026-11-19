@@ -2039,118 +2039,153 @@ in
     systemd.enable = false; # UWSM manages the session
     xwayland.enable = true;
     settings = {
-      "$mod" = "SUPER";
-      monitor = ",preferred,auto,1";
-      exec-once = [
-        "${polkitAgent}"
-        "fcitx5 -d --replace"
-      ];
-      input = {
-        kb_layout = "jp";
-        numlock_by_default = true;
-        follow_mouse = 1;
-        touchpad = {
-          natural_scroll = false;
-          tap-to-click = true;
-          clickfinger_behavior = true;
-          disable_while_typing = false;
+      monitor = {
+        output = "";
+        mode = "preferred";
+        position = "auto";
+        scale = 1;
+      };
+      config = {
+        input = {
+          kb_layout = "jp";
+          numlock_by_default = true;
+          follow_mouse = 1;
+          touchpad = {
+            natural_scroll = false;
+            tap_to_click = true;
+            clickfinger_behavior = true;
+            disable_while_typing = false;
+          };
+        };
+        general = {
+          gaps_in = 4;
+          gaps_out = 4;
+          border_size = 2;
+          col = {
+            active_border = "rgb(33c5c5)";
+            inactive_border = "rgb(1c2430)";
+          };
+          layout = "dwindle";
+        };
+        decoration = {
+          rounding = 0;
+          shadow = {
+            enabled = false;
+          };
+          blur = {
+            enabled = false;
+          };
+        };
+        animations = {
+          enabled = true;
+        };
+        misc = {
+          disable_hyprland_logo = true;
+          disable_splash_rendering = true;
+          force_default_wallpaper = 0;
+          background_color = "rgb(0b0f14)";
+          focus_on_activate = true;
+        };
+        dwindle = {
+          preserve_split = true;
         };
       };
-      general = {
-        gaps_in = 4;
-        gaps_out = 4;
-        border_size = 2;
-        "col.active_border" = "rgb(33c5c5)";
-        "col.inactive_border" = "rgb(1c2430)";
-        layout = "dwindle";
-      };
-      decoration = {
-        rounding = 0;
-        shadow = { enabled = false; };
-        blur = { enabled = false; };
-      };
-      animations = { enabled = true; };
-      misc = {
-        disable_hyprland_logo = true;
-        disable_splash_rendering = true;
-        force_default_wallpaper = 0;
-        background_color = "rgb(0b0f14)";
-        focus_on_activate = true;
-      };
-      dwindle = { pseudotile = true; preserve_split = true; };
-      bind = [
-        "$mod, Return, exec, ${ghosttyBin}"
-        "CTRL ALT, T, exec, ${ghosttyBin}"
-        "$mod, D, exec, ${rofiLauncher}"
-        "ALT, Space, exec, ${rofiLauncher}"
-        "$mod, Q, killactive,"
-        "$mod SHIFT, Q, killactive,"
-        "$mod, L, exec, ${lockCmd}"
-        "$mod, E, exec, ${openYazi}"
-        "$mod, V, exec, clipboard-history"
-        "$mod, F, fullscreen, 0"
-        "$mod, R, submap, resize"
-        "$mod SHIFT, Space, togglefloating,"
-        "$mod, B, togglesplit,"
-        "$mod, slash, exec, ${showCheatsheet}"
-        "$mod SHIFT, S, exec, ${lib.getExe screenshotBin} region"
-        "$mod, Print, exec, ${lib.getExe screenshotBin} window"
-        ", Print, exec, ${lib.getExe screenshotBin} full"
-        "SHIFT, Print, exec, ${lib.getExe screenshotBin} region"
-        "$mod, P, exec, ${hyprpickerBin} -a"
-        "$mod, left, movefocus, l"
-        "$mod, right, movefocus, r"
-        "$mod, up, movefocus, u"
-        "$mod, down, movefocus, d"
-        "$mod, H, movefocus, l"
-        "$mod, L, movefocus, r"
-        "$mod, K, movefocus, u"
-        "$mod, J, movefocus, d"
-        "$mod SHIFT, left, movewindow, l"
-        "$mod SHIFT, right, movewindow, r"
-        "$mod SHIFT, up, movewindow, u"
-        "$mod SHIFT, down, movewindow, d"
-        "$mod SHIFT, H, movewindow, l"
-        "$mod SHIFT, L, movewindow, r"
-        "$mod SHIFT, K, movewindow, u"
-        "$mod SHIFT, J, movewindow, d"
-        "$mod, 1, workspace, 1" "$mod, 2, workspace, 2" "$mod, 3, workspace, 3"
-        "$mod, 4, workspace, 4" "$mod, 5, workspace, 5" "$mod, 6, workspace, 6"
-        "$mod, 7, workspace, 7" "$mod, 8, workspace, 8" "$mod, 9, workspace, 9"
-        "$mod SHIFT, 1, movetoworkspace, 1" "$mod SHIFT, 2, movetoworkspace, 2" "$mod SHIFT, 3, movetoworkspace, 3"
-        "$mod SHIFT, 4, movetoworkspace, 4" "$mod SHIFT, 5, movetoworkspace, 5" "$mod SHIFT, 6, movetoworkspace, 6"
-        "$mod SHIFT, 7, movetoworkspace, 7" "$mod SHIFT, 8, movetoworkspace, 8" "$mod SHIFT, 9, movetoworkspace, 9"
-      ];
-      bindl = [
-        ", XF86AudioRaiseVolume, exec, ${volumeUp}"
-        ", XF86AudioLowerVolume, exec, ${pactl} set-sink-volume @DEFAULT_SINK@ -5%"
-        ", XF86AudioMute, exec, ${pactl} set-sink-mute @DEFAULT_SINK@ toggle"
-        ", XF86AudioMicMute, exec, ${pactl} set-source-mute @DEFAULT_SOURCE@ toggle"
-        ", XF86MonBrightnessUp, exec, ${brightnessctl} set +5%"
-        ", XF86MonBrightnessDown, exec, ${brightnessctl} set 5%-"
-      ];
-      windowrulev2 = [
-        "float,class:^(showmethekey-gtk)$"
-        "pin,class:^(showmethekey-gtk)$"
-        "noborder,class:^(showmethekey-gtk)$"
-        "float,class:^(one\\.alynx\\.showmethekey)$"
-        "pin,class:^(one\\.alynx\\.showmethekey)$"
-        "float,class:^(com\\.gabm\\.satty)$"
+      window_rule = [
+        {
+          name = "showmethekey-gtk";
+          match = {
+            class = "^(showmethekey-gtk)$";
+          };
+          float = true;
+          pin = true;
+          border_size = 0;
+        }
+        {
+          name = "showmethekey-alynx";
+          match = {
+            class = "^(one\\.alynx\\.showmethekey)$";
+          };
+          float = true;
+          pin = true;
+        }
+        {
+          name = "satty-float";
+          match = {
+            class = "^(com\\.gabm\\.satty)$";
+          };
+          float = true;
+        }
       ];
     };
     extraConfig = ''
-      submap = resize
-      binde = , right, resizeactive, 20 0
-      binde = , left, resizeactive, -20 0
-      binde = , up, resizeactive, 0 -20
-      binde = , down, resizeactive, 0 20
-      binde = , l, resizeactive, 20 0
-      binde = , h, resizeactive, -20 0
-      binde = , k, resizeactive, 0 -20
-      binde = , j, resizeactive, 0 20
-      bind = , escape, submap, reset
-      bind = , Return, submap, reset
-      submap = reset
+      local mod = "SUPER"
+
+      hl.on("hyprland.start", function()
+        hl.exec_cmd(${builtins.toJSON "${polkitAgent}"})
+        hl.exec_cmd("fcitx5 -d --replace")
+      end)
+
+      hl.bind(mod .. " + Return", hl.dsp.exec_cmd(${builtins.toJSON ghosttyBin}))
+      hl.bind("CTRL + ALT + T", hl.dsp.exec_cmd(${builtins.toJSON ghosttyBin}))
+      hl.bind(mod .. " + D", hl.dsp.exec_cmd(${builtins.toJSON rofiLauncher}))
+      hl.bind("ALT + Space", hl.dsp.exec_cmd(${builtins.toJSON rofiLauncher}))
+      hl.bind(mod .. " + Q", hl.dsp.window.close())
+      hl.bind(mod .. " + SHIFT + Q", hl.dsp.window.close())
+      hl.bind(mod .. " + L", hl.dsp.exec_cmd(${builtins.toJSON lockCmd}))
+      hl.bind(mod .. " + E", hl.dsp.exec_cmd(${builtins.toJSON openYazi}))
+      hl.bind(mod .. " + V", hl.dsp.exec_cmd("clipboard-history"))
+      hl.bind(mod .. " + F", hl.dsp.window.fullscreen({ mode = 0 }))
+      hl.bind(mod .. " + R", hl.dsp.submap("resize"))
+      hl.bind(mod .. " + SHIFT + Space", hl.dsp.window.float({ action = "toggle" }))
+      hl.bind(mod .. " + B", hl.dsp.layout("togglesplit"))
+      hl.bind(mod .. " + slash", hl.dsp.exec_cmd(${builtins.toJSON "${showCheatsheet}"}))
+      hl.bind(mod .. " + SHIFT + S", hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} region"}))
+      hl.bind(mod .. " + Print", hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} window"}))
+      hl.bind("Print", hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} full"}))
+      hl.bind("SHIFT + Print", hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} region"}))
+      hl.bind(mod .. " + P", hl.dsp.exec_cmd(${builtins.toJSON "${hyprpickerBin} -a"}))
+
+      hl.bind(mod .. " + left", hl.dsp.focus({ direction = "left" }))
+      hl.bind(mod .. " + right", hl.dsp.focus({ direction = "right" }))
+      hl.bind(mod .. " + up", hl.dsp.focus({ direction = "up" }))
+      hl.bind(mod .. " + down", hl.dsp.focus({ direction = "down" }))
+      hl.bind(mod .. " + H", hl.dsp.focus({ direction = "left" }))
+      hl.bind(mod .. " + L", hl.dsp.focus({ direction = "right" }))
+      hl.bind(mod .. " + K", hl.dsp.focus({ direction = "up" }))
+      hl.bind(mod .. " + J", hl.dsp.focus({ direction = "down" }))
+
+      hl.bind(mod .. " + SHIFT + left", hl.dsp.window.move({ direction = "left" }))
+      hl.bind(mod .. " + SHIFT + right", hl.dsp.window.move({ direction = "right" }))
+      hl.bind(mod .. " + SHIFT + up", hl.dsp.window.move({ direction = "up" }))
+      hl.bind(mod .. " + SHIFT + down", hl.dsp.window.move({ direction = "down" }))
+      hl.bind(mod .. " + SHIFT + H", hl.dsp.window.move({ direction = "left" }))
+      hl.bind(mod .. " + SHIFT + L", hl.dsp.window.move({ direction = "right" }))
+      hl.bind(mod .. " + SHIFT + K", hl.dsp.window.move({ direction = "up" }))
+      hl.bind(mod .. " + SHIFT + J", hl.dsp.window.move({ direction = "down" }))
+
+      for i = 1, 9 do
+        hl.bind(mod .. " + " .. i, hl.dsp.focus({ workspace = i }))
+        hl.bind(mod .. " + SHIFT + " .. i, hl.dsp.window.move({ workspace = i }))
+      end
+
+      hl.bind("XF86AudioRaiseVolume", hl.dsp.exec_cmd(${builtins.toJSON "${volumeUp}"}), { locked = true })
+      hl.bind("XF86AudioLowerVolume", hl.dsp.exec_cmd(${builtins.toJSON "${pactl} set-sink-volume @DEFAULT_SINK@ -5%"}), { locked = true })
+      hl.bind("XF86AudioMute", hl.dsp.exec_cmd(${builtins.toJSON "${pactl} set-sink-mute @DEFAULT_SINK@ toggle"}), { locked = true })
+      hl.bind("XF86AudioMicMute", hl.dsp.exec_cmd(${builtins.toJSON "${pactl} set-source-mute @DEFAULT_SOURCE@ toggle"}), { locked = true })
+      hl.bind("XF86MonBrightnessUp", hl.dsp.exec_cmd(${builtins.toJSON "${brightnessctl} set +5%"}), { locked = true })
+      hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd(${builtins.toJSON "${brightnessctl} set 5%-"}), { locked = true })
+
+      hl.define_submap("resize", "escape", function()
+        hl.bind("right", hl.dsp.window.resize({ x = 20, y = 0 }), { repeating = true })
+        hl.bind("left", hl.dsp.window.resize({ x = -20, y = 0 }), { repeating = true })
+        hl.bind("up", hl.dsp.window.resize({ x = 0, y = -20 }), { repeating = true })
+        hl.bind("down", hl.dsp.window.resize({ x = 0, y = 20 }), { repeating = true })
+        hl.bind("l", hl.dsp.window.resize({ x = 20, y = 0 }), { repeating = true })
+        hl.bind("h", hl.dsp.window.resize({ x = -20, y = 0 }), { repeating = true })
+        hl.bind("k", hl.dsp.window.resize({ x = 0, y = -20 }), { repeating = true })
+        hl.bind("j", hl.dsp.window.resize({ x = 0, y = 20 }), { repeating = true })
+        hl.bind("Return", hl.dsp.submap("reset"))
+      end)
     '';
   };
 

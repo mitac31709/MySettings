@@ -41,55 +41,63 @@ let
         kill "$lm_pid" 2>/dev/null || true
         wait "$lm_pid" 2>/dev/null || true
       fi
-      ${pkgs.hyprland}/bin/hyprctl dispatch exit >/dev/null 2>&1 || true
+      ${pkgs.hyprland}/bin/hyprctl dispatch 'hl.dsp.exit()' >/dev/null 2>&1 \
+        || ${pkgs.hyprland}/bin/hyprctl dispatch exit >/dev/null 2>&1 \
+        || true
     }
     trap cleanup EXIT INT TERM
 
     ${lib.getExe config.services.displayManager.regreet.package}
   '';
 
-  greeterHyprlandConfig = pkgs.writeText "greeter-hyprland.conf" ''
-    monitor=,preferred,auto,1
-    exec-once = ${greeterRunner}
+  greeterHyprlandConfig = pkgs.writeText "greeter-hyprland.lua" ''
+    hl.monitor({
+      output = "",
+      mode = "preferred",
+      position = "auto",
+      scale = 1,
+    })
 
-    misc {
-      disable_hyprland_logo = true
-      disable_splash_rendering = true
-      force_default_wallpaper = 0
-      background_color = rgb(0b0f14)
-    }
+    hl.on("hyprland.start", function()
+      hl.exec_cmd(${builtins.toJSON "${greeterRunner}"})
+    end)
 
-    input {
-      kb_layout = jp
-      numlock_by_default = true
-      follow_mouse = 1
-      touchpad {
-        natural_scroll = false
-        tap-to-click = true
-        clickfinger_behavior = true
-        disable_while_typing = false
-      }
-    }
-
-    general {
-      border_size = 0
-      gaps_in = 0
-      gaps_out = 0
-    }
-
-    decoration {
-      rounding = 0
-      shadow {
-        enabled = false
-      }
-      blur {
-        enabled = false
-      }
-    }
-
-    animations {
-      enabled = false
-    }
+    hl.config({
+      misc = {
+        disable_hyprland_logo = true,
+        disable_splash_rendering = true,
+        force_default_wallpaper = 0,
+        background_color = "rgb(0b0f14)",
+      },
+      input = {
+        kb_layout = "jp",
+        numlock_by_default = true,
+        follow_mouse = 1,
+        touchpad = {
+          natural_scroll = false,
+          tap_to_click = true,
+          clickfinger_behavior = true,
+          disable_while_typing = false,
+        },
+      },
+      general = {
+        border_size = 0,
+        gaps_in = 0,
+        gaps_out = 0,
+      },
+      decoration = {
+        rounding = 0,
+        shadow = {
+          enabled = false,
+        },
+        blur = {
+          enabled = false,
+        },
+      },
+      animations = {
+        enabled = false,
+      },
+    })
   '';
 in
 {

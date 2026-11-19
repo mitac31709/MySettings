@@ -339,18 +339,26 @@ in
   };
 
   wayland.windowManager.hyprland.extraConfig = lib.mkAfter ''
-    # JQuake / tray host window rules (XWayland)
-    windowrulev2 = float,class:^(stalonetray)$
-    windowrulev2 = noborder,class:^(stalonetray)$
-    windowrulev2 = pin,class:^(stalonetray)$
-    windowrulev2 = nofocus,class:^(stalonetray)$
-    windowrulev2 = opacity 0.0 override,class:^(stalonetray)$
-    windowrulev2 = move -2000 -2000,class:^(stalonetray)$
-    windowrulev2 = float,title:^(JavaEmbeddedFrame)$
-    windowrulev2 = noborder,title:^(JavaEmbeddedFrame)$
-    windowrulev2 = pin,title:^(JavaEmbeddedFrame)$
-    windowrulev2 = nofocus,title:^(JavaEmbeddedFrame)$
-    windowrulev2 = opacity 0.0 override,title:^(JavaEmbeddedFrame)$
-    windowrulev2 = move -2000 -2000,title:^(JavaEmbeddedFrame)$
+    -- JQuake / tray host window rules (XWayland)
+    hl.window_rule({
+      name = "jquake-stalonetray",
+      match = { class = "^(stalonetray)$" },
+      float = true,
+      border_size = 0,
+      pin = true,
+      no_focus = true,
+      opacity = "0.0 override",
+      move = "-2000 -2000",
+    })
+    hl.window_rule({
+      name = "jquake-java-embedded-frame",
+      match = { title = "^(JavaEmbeddedFrame)$" },
+      float = true,
+      border_size = 0,
+      pin = true,
+      no_focus = true,
+      opacity = "0.0 override",
+      move = "-2000 -2000",
+    })
   '';
 }
