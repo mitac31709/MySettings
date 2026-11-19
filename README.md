@@ -26,7 +26,9 @@
 | 操作 | キー | 動作 |
 |------|------|------|
 | 検索／ランチャー | **Super+D** / **Alt+Space** | **rofi** |
+| コマンド実行（一時） | **Super+P** | **rofi**（`-show run`：Enter で即実行／Shift+Enter で端末実行） |
 | 端末 | **Ctrl+Alt+T** / **Super+Return** | **Ghostty** |
+| 新規仮想デスクトップ | **Super+N** | 未使用最小番号の空きワークスペースへ移動 |
 | ファイルマネージャ | **Super+E** | **Yazi**（Ghostty 内） |
 | ロック | **Super+L** | swaylock |
 | クリップボード履歴 | **Super+V** | **cliphist** + rofi |

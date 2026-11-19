@@ -8,5 +8,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "capsomnia" ];
+  system.nixos.tags = [ "sway-new-ws-run" ];
 }

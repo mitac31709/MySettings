@@ -217,6 +217,59 @@ let
   # Route launches through swaymsg exec so new windows land on the
   # workspace active at selection time (not wherever focus is when they map).
   rofiLauncher = "${rofiBin} -show drun -run-command \"swaymsg exec -- {cmd}\" -run-shell-command \"swaymsg exec -- {terminal} -e {cmd}\"";
+  # Super+P: one-off command runner (`rofi -show run`).
+  # Enter runs via swaymsg exec; Shift+Enter (or Ctrl+Shift+Enter for custom
+  # text) runs in an interactive Ghostty shell that waits before closing.
+  rofiRunTerm = pkgs.writeShellScript "rofi-run-term" ''
+    args=()
+    for arg in "$@"; do
+      if [[ "$arg" =~ [[:space:]] ]]; then
+        printf -v q '%q' "$arg"
+        args+=("$q")
+      else
+        args+=("$arg")
+      fi
+    done
+    cmd="''${args[*]}"
+    [ -n "$cmd" ] || exit 0
+    exec ${ghosttyBin} -e ${pkgs.bash}/bin/bash -ic '
+      eval "$1"
+      rc=$?
+      printf "\n終了コード: %d [Enter で閉じる] " "$rc"
+      IFS= read -r _ || true
+    ' _ "$cmd"
+  '';
+  rofiRunner = pkgs.writeShellScript "rofi-run" ''
+    exec ${rofiBin} -show run \
+      -mesg 'Enter: 実行  │  Shift+Enter: 端末で実行  │  Ctrl+(Shift+)Enter: 自由入力実行' \
+      -run-command '${pkgs.sway}/bin/swaymsg exec -- {cmd}' \
+      -run-shell-command '${rofiRunTerm} {cmd}'
+  '';
+  # Super+N: switch to the lowest unused numbered workspace (no-op if current
+  # workspace is already empty, ignoring sticky floating nodes like stalonetray).
+  newWorkspace = pkgs.writeShellApplication {
+    name = "sway-new-workspace";
+    runtimeInputs = [
+      pkgs.jq
+      pkgs.sway
+    ];
+    text = ''
+      next_num="$(
+        swaymsg -t get_tree | jq -r '
+          [.. | objects | select(.type? == "workspace" and .name != "__i3_scratch")] as $ws |
+          ($ws | map(select([.. | objects | select(.focused? == true)] | length > 0)) | .[0]) as $cur |
+          if $cur != null and (($cur.nodes | length) == 0) and (([$cur.floating_nodes[]? | select(.sticky != true)] | length) == 0) then
+            empty
+          else
+            ($ws | map(.num | select(. != null and . > 0))) as $used |
+            first(range(1; 1000) | select(. as $n | ($used | index($n) | not)))
+          end
+        '
+      )"
+      [ -n "$next_num" ] || exit 0
+      exec swaymsg workspace number "$next_num"
+    '';
+  };
   # waybar cpu / mem → Ghostty + btop; network → Ghostty + nmtui; clock → NTP sync
   openBtop = "${ghosttyBin} -e ${btopBin}";
   openNmtui = "${ghosttyBin} -e ${nmtuiBin}";
@@ -1026,6 +1079,11 @@ let
     }
     {
       section = "起動・終了";
+      label = "rofi コマンド実行（Enter / 端末: Shift+Enter）";
+      keys = "Super+P";
+    }
+    {
+      section = "起動・終了";
       label = "Zed エディタ";
       run = "zeditor";
       mode = "exec";
@@ -1101,6 +1159,11 @@ let
       section = "ウィンドウ・WS";
       label = "WS 切替 / ウィンドウを移動";
       keys = "Super+1…9 / Shift+1…9";
+    }
+    {
+      section = "ウィンドウ・WS";
+      label = "新しい空き WS へ移動";
+      keys = "Super+N";
     }
     {
       section = "ウィンドウ・WS";
@@ -2427,6 +2490,8 @@ in
           "${mod}+d" = null;
           "--inhibited ${mod}+d" = "exec ${rofiLauncher}";
           "--inhibited Mod1+space" = "exec ${rofiLauncher}";
+          "--inhibited ${mod}+p" = "exec ${rofiRunner}";
+          "--inhibited ${mod}+n" = "exec ${lib.getExe newWorkspace}";
           "Ctrl+Alt+t" = "exec ${ghosttyBin}";
           "${mod}+Return" = "exec ${ghosttyBin}";
           "${mod}+l" = "exec ${lockCmd}";
