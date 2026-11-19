@@ -8,5 +8,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "virtualbox" ];
+  system.nixos.tags = [ "activity-trackers" ];
 }

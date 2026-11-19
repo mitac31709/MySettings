@@ -23,6 +23,7 @@
     ./vivaldi-pwa-desktop.nix
     ./jquake.nix
     ./capsomnia.nix
+    ./activitywatch.nix
     ./sway.nix
   ];
 

@@ -135,6 +135,10 @@
                     rofi-prompt = final.callPackage ./pkgs/rofi-prompt { };
                     # Wake-on-LAN SSH relay client (`wake-pc`) & desktop entry.
                     wol-pc = final.callPackage ./pkgs/wol-pc { };
+                    # Activity trackers: WhatPulse (+ external pcap daemon) and Screenpipe.
+                    whatpulse = final.callPackage ./pkgs/whatpulse { };
+                    whatpulse-pcap-service = final.callPackage ./pkgs/whatpulse-pcap-service { };
+                    screenpipe = final.callPackage ./pkgs/screenpipe { };
                     # Cursor Gothic sans-serif typeface (OpenType extracted from WOFF2).
                     cursor-gothic = final.callPackage ./pkgs/cursor-gothic { };
                     # Sway 1.12 / wlroots 0.20.2: keep a valid XKB keymap on the seat across

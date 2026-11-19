@@ -54,7 +54,7 @@ NixOS の世代番号はマシン固有です。コミットとの対応はビ�
 
 - Flakes が有効な NixOS マシン（この flake でも有効化します）
 - 初回 rebuild の**前に**、対象ホストの `hosts/<target>/hardware-configuration.nix` を実機で生成したファイルに差し替えること（`hosts/vaio/hardware-configuration.nix` は汎用テンプレート、`hosts/chromebook/hardware-configuration.nix` は delbin 実機設定）
-- 非フリーパッケージ（`code-cursor`、`cursor-cli`、`jquake`、`parsec-bin`、`steam`、`virtualboxExtpack`、`vivaldi`）は `flake.nix` で許可済み。`affinity-v3` は未導入（戻し方は下記）
+- 非フリーパッケージ（`code-cursor`、`cursor-cli`、`jquake`、`parsec-bin`、`screenpipe`、`steam`、`virtualboxExtpack`、`vivaldi`、`whatpulse`）は `flake.nix` で許可済み。`affinity-v3` は未導入（戻し方は下記）
 - Chromebook: MrChromebox（または同等）の UEFI／WP 無効を想定。ファームウェアの書き込みはこのリポジトリの範囲外
 
 ## USB からの新規インストールと初回設定
@@ -340,6 +340,9 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **Parsec** — `parsec-bin`（Intel VA-API / `intel-media-driver` でハードウェアエンコード）。ホテル等で `-6023/-11010` になるときは Tailscale 経由（下記）
 - **Steam** — `programs.steam.enable`
 - **VirtualBox** — `virtualisation.virtualbox.host.enable`（Extension Pack 有効、`mitac` を `vboxusers` グループへ追加）
+- **ActivityWatch** — `home/activitywatch.nix` で `aw-server`（Web UI: `http://127.0.0.1:5600`）と Sway 向け Wayland watcher（`awatcher`、`graphical-session.target` 起動）を常駐
+- **WhatPulse** — `pkgs/whatpulse`（7.0.1 AppImage ラッパー）＋ `pkgs/whatpulse-pcap-service`（通信量計測用 systemd サービス）。打鍵・マウス計測のため `mitac` を `input` グループへ追加済み
+- **Screenpipe** — `pkgs/screenpipe`（2.7.145 AppImage ラッパー）。画面キャプチャ + OCR + 音声文字起こしのローカル検索タイムライン
 - **Bottles** — Wine プレフィックス管理（一般の Windows アプリ用）。`home.packages`
 - **Vivaldi** — `vivaldi`
 - **Firefox** — `firefox`

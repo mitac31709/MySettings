@@ -485,6 +485,9 @@ in
     tor-browser
     # On-screen keystroke overlay (useful for demos / Chromebook Fn keys).
     showmethekey
+    # Activity / work history trackers (ActivityWatch is in home/activitywatch.nix).
+    whatpulse
+    screenpipe
     # Google Quick Share / Nearby Share client for Linux.
     rquickshare
     discord
