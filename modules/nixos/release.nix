@@ -8,5 +8,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "sway-new-ws-run" ];
+  system.nixos.tags = [ "local-llm-qwen35-4b" ];
 }

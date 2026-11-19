@@ -1653,6 +1653,30 @@ let
     }
     {
       section = "開発";
+      label = "Local LLM WebUI（Qwen3.5-4B）";
+      run = "local-llm web";
+      mode = "exec";
+    }
+    {
+      section = "開発";
+      label = "Local LLM 対話チャット（Qwen3.5-4B）";
+      run = "local-llm chat";
+      mode = "term";
+    }
+    {
+      section = "開発";
+      label = "Local LLM 状態確認（API URL・RSS）";
+      run = "local-llm status";
+      mode = "term";
+    }
+    {
+      section = "開発";
+      label = "Local LLM サーバー停止（RAM解放）";
+      run = "local-llm stop";
+      mode = "term";
+    }
+    {
+      section = "開発";
       label = "Antigravity（Remote Control 有効で起動）";
       run = "agy --remote-control";
       mode = "term";
