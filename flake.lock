@@ -62,13 +62,13 @@
     "chatgpt-deb": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-AZJ8uVz59929UWIoa1Z6yvXBM37RQniExcAL7JO1uyY=",
+        "narHash": "sha256-Ik/Rv6n30F8QgIqL2QzsXJdnQOYiPyxTTmkqLUgVAn0=",
         "type": "file",
-        "url": "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.1111.21308_amd64.deb"
+        "url": "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.1111.71025_amd64.deb"
       },
       "original": {
         "type": "file",
-        "url": "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.1111.21308_amd64.deb"
+        "url": "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.1111.71025_amd64.deb"
       }
     },
     "crane": {
@@ -110,13 +110,13 @@
     "grok-bot-deb": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-CBJCGkjj08P+g/xVouk93f81FuNa9EAhL6bzAKZtQ8s=",
+        "narHash": "sha256-GPlTYnocVcv6wG8axUZ4I6PC/Gq1Ls2IxoIaLL4OiTQ=",
         "type": "file",
-        "url": "https://downloads.cursor.com/grokbot/stable/83d46d618ef4c12afa17edd8e3c29d6caf046d17/linux/x64/grok-bot_1.1.0_amd64.deb"
+        "url": "https://downloads.cursor.com/grokbot/stable/cf0aa5097b8fdfea8f2ecd33ce9f71a72655ef08/linux/x64/grok-bot_1.2.0_amd64.deb"
       },
       "original": {
         "type": "file",
-        "url": "https://downloads.cursor.com/grokbot/stable/83d46d618ef4c12afa17edd8e3c29d6caf046d17/linux/x64/grok-bot_1.1.0_amd64.deb"
+        "url": "https://downloads.cursor.com/grokbot/stable/cf0aa5097b8fdfea8f2ecd33ce9f71a72655ef08/linux/x64/grok-bot_1.2.0_amd64.deb"
       }
     },
     "hermes-agent": {

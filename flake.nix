@@ -36,12 +36,12 @@
     };
     # Keep URL version in sync with chatgptVersion below (flake-update.sh).
     chatgpt-deb = {
-      url = "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.1111.21308_amd64.deb";
+      url = "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.1111.71025_amd64.deb";
       flake = false;
     };
     # Keep URL version in sync with grokBotVersion below (flake-update.sh).
     grok-bot-deb = {
-      url = "https://downloads.cursor.com/grokbot/stable/83d46d618ef4c12afa17edd8e3c29d6caf046d17/linux/x64/grok-bot_1.1.0_amd64.deb";
+      url = "https://downloads.cursor.com/grokbot/stable/cf0aa5097b8fdfea8f2ecd33ce9f71a72655ef08/linux/x64/grok-bot_1.2.0_amd64.deb";
       flake = false;
     };
   };
@@ -61,9 +61,9 @@
       # Must match inputs.uniclipboard-deb URL (updated by scripts/flake-update.sh).
       uniclipboardVersion = "1.6.2";
       # Must match inputs.chatgpt-deb URL (updated by scripts/flake-update.sh).
-      chatgptVersion = "26.1111.21308";
+      chatgptVersion = "26.1111.71025";
       # Must match inputs.grok-bot-deb URL (updated by scripts/flake-update.sh).
-      grokBotVersion = "1.1.0";
+      grokBotVersion = "1.2.0";
 
       mkHost =
         {
