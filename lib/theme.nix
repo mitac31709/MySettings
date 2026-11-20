@@ -183,6 +183,30 @@ let
             f.write(png)
         PY
       '';
+
+  # Package an unpacked XCursor / Hyprcursor theme folder under home/cursors/<name>/.
+  # Copies with writable permissions and synthesizes index.theme if absent.
+  mkLocalCursor =
+    pkgs: name:
+    pkgs.runCommand "cursor-theme-${name}" { } ''
+      mkdir -p "$out/share/icons/${name}"
+      cp -a --no-preserve=mode "${../home/cursors}/${name}/." "$out/share/icons/${name}/"
+      if [ ! -f "$out/share/icons/${name}/index.theme" ]; then
+        printf '[Icon Theme]\nName=%s\nComment=Local cursor theme\n' "${name}" \
+          > "$out/share/icons/${name}/index.theme"
+      fi
+    '';
+
+  # Active mouse cursor theme shared across Hyprland, GTK, X11/XWayland,
+  # Hyprcursor, and ReGreet. See home/cursors/README.md to switch to a custom
+  # local or externally packaged cursor theme.
+  cursor = {
+    name = "Adwaita";
+    size = 24;
+    package = pkgs: pkgs.adwaita-icon-theme;
+    # Set true when the package provides a Hyprcursor theme (`hyprcursors/` + `manifest.hl`).
+    hyprcursor = false;
+  };
 in
 {
   inherit
@@ -190,5 +214,7 @@ in
     font
     radius
     mkWallpaper
+    mkLocalCursor
+    cursor
     ;
 }

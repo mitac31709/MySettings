@@ -15,6 +15,31 @@ let
   theme = import ../lib/theme.nix;
   p = theme.palette;
   wallpaperPng = theme.mkWallpaper pkgs;
+  cursorSizeStr = toString theme.cursor.size;
+
+  wallpaperExtensions = [
+    "png"
+    "jpg"
+    "jpeg"
+    "webp"
+    "avif"
+    "bmp"
+    "gif"
+  ];
+  isWallpaperFile =
+    name: lib.any (ext: lib.hasSuffix ".${ext}" (lib.toLower name)) wallpaperExtensions;
+  repoWallpapersDir = ./wallpapers;
+  repoWallpaperFiles =
+    if builtins.pathExists repoWallpapersDir then
+      lib.mapAttrs'
+        (name: _: lib.nameValuePair "wallpapers/${name}" { source = repoWallpapersDir + "/${name}"; })
+        (
+          lib.filterAttrs (name: type: (type == "regular" || type == "symlink") && isWallpaperFile name) (
+            builtins.readDir repoWallpapersDir
+          )
+        )
+    else
+      { };
 
   isChromebook = flakeTarget == "chromebook";
   inputSection = if isChromebook then "入力・Chromebook" else "入力・VAIO";
@@ -997,6 +1022,16 @@ let
       section = "Colorshell・日常";
       label = "5分暗転 / 10分ロック / 15分消灯 (hypridle)";
       keys = "無操作";
+    }
+    {
+      section = "Colorshell・日常";
+      label = "壁紙追加（即反映 / 同期）→ Super+W 切替";
+      keys = "~/wallpapers/ / home/wallpapers/";
+    }
+    {
+      section = "Colorshell・日常";
+      label = "カーソル追加・変更（仮テスト: hyprctl setcursor）";
+      keys = "home/cursors/ + lib/theme.nix";
     }
     {
       section = "Colorshell・日常";
@@ -2235,9 +2270,11 @@ in
     };
 
     extraConfig = ''
-      -- Cursor size & Colorshell wallpaper directory
-      hl.env("XCURSOR_SIZE", "24")
-      hl.env("HYPRCURSOR_SIZE", "24")
+      -- Cursor theme/size (from lib/theme.nix) & Colorshell wallpaper directory
+      hl.env("XCURSOR_THEME", ${builtins.toJSON theme.cursor.name})
+      hl.env("XCURSOR_SIZE", ${builtins.toJSON cursorSizeStr})
+      hl.env("HYPRCURSOR_SIZE", ${builtins.toJSON cursorSizeStr})
+      ${lib.optionalString theme.cursor.hyprcursor ''hl.env("HYPRCURSOR_THEME", ${builtins.toJSON theme.cursor.name})''}
       hl.env("WALLPAPERS", os.getenv("HOME") .. "/wallpapers")
 
       -- Curves & fluid motion (Hyprland 0.57+ Lua animation spec)
@@ -2386,6 +2423,7 @@ in
     if [ -d "$runtimeDir/hypr" ]; then
       for inst in $(${hyprctlBin} instances -j 2>/dev/null | ${pkgs.jq}/bin/jq -r '.[].instance' 2>/dev/null || true); do
         ${hyprctlBin} -i "$inst" reload config-only >/dev/null 2>&1 || true
+        ${hyprctlBin} -i "$inst" setcursor ${lib.escapeShellArg theme.cursor.name} ${cursorSizeStr} >/dev/null 2>&1 || true
       done
     fi
   '';
@@ -2443,9 +2481,13 @@ in
     };
   };
 
-  # Seed default wallpaper into ~/wallpapers so Colorshell (and its # picker)
-  # always has a valid image on NixOS.
-  home.file."wallpapers/nocturne-slate.png".source = wallpaperPng;
+  # Seed default wallpaper plus any images committed under home/wallpapers/ into
+  # ~/wallpapers so Colorshell (Super+W / # picker) can switch across both repo
+  # presets and local images placed directly in ~/wallpapers/.
+  home.file = {
+    "wallpapers/nocturne-slate.png".source = wallpaperPng;
+  }
+  // repoWallpaperFiles;
 
   # Colorshell persists wallpaper switches by writing ~/.config/hypr/hyprpaper.conf.
   # Keep the file writable (do not set services.hyprpaper.settings, which creates a

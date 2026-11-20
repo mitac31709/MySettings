@@ -12,6 +12,8 @@ let
   theme = import ../../lib/theme.nix;
   p = theme.palette;
   wallpaperPng = theme.mkWallpaper pkgs;
+  cursorPkg = theme.cursor.package pkgs;
+  cursorSizeStr = toString theme.cursor.size;
 
   greeterLanMouseConfig = (pkgs.formats.toml { }).generate "greeter-lan-mouse.toml" {
     port = lanMouse.port;
@@ -56,6 +58,11 @@ let
   '';
 
   greeterHyprlandConfig = pkgs.writeText "greeter-hyprland.lua" ''
+    hl.env("XCURSOR_THEME", ${builtins.toJSON theme.cursor.name})
+    hl.env("XCURSOR_SIZE", ${builtins.toJSON cursorSizeStr})
+    hl.env("HYPRCURSOR_SIZE", ${builtins.toJSON cursorSizeStr})
+    ${lib.optionalString theme.cursor.hyprcursor ''hl.env("HYPRCURSOR_THEME", ${builtins.toJSON theme.cursor.name})''}
+
     hl.monitor({
       output = "",
       mode = "preferred",
@@ -118,6 +125,10 @@ in
         pkgs.glycin-loaders
       ];
     });
+    cursorTheme = {
+      package = cursorPkg;
+      name = theme.cursor.name;
+    };
     font = {
       package = pkgs.nerd-fonts.jetbrains-mono;
       name = theme.font.mono;

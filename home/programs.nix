@@ -21,6 +21,18 @@ let
   yazi = "${pkgs.yazi}/bin/yazi";
   lazyPlugins = import ./lazy-plugins.nix { inherit pkgs lib; };
   agentDesktop = pkgs.callPackage ../pkgs/agent-desktop { };
+
+  cursorPkg = theme.cursor.package pkgs;
+  repoCursorsDir = ./cursors;
+  localCursorPackages =
+    if builtins.pathExists repoCursorsDir then
+      lib.mapAttrsToList (name: _: theme.mkLocalCursor pkgs name) (
+        lib.filterAttrs (name: type: type == "directory" && name != theme.cursor.name) (
+          builtins.readDir repoCursorsDir
+        )
+      )
+    else
+      [ ];
 in
 {
   # User identity. The system profile also ships git, without this
@@ -237,11 +249,12 @@ in
 
   home.pointerCursor = {
     enable = true;
-    package = pkgs.adwaita-icon-theme;
-    name = "Adwaita";
-    size = 24;
+    package = cursorPkg;
+    name = theme.cursor.name;
+    size = theme.cursor.size;
     gtk.enable = true;
     x11.enable = true;
+    hyprcursor.enable = theme.cursor.hyprcursor;
   };
 
   dconf.settings = {
@@ -484,97 +497,100 @@ in
     };
   };
 
-  home.packages = with pkgs; [
-    nix-output-monitor
-    # Cat clone with syntax highlighting (`bat`; Debian package name is batcat).
-    bat
-    # Steam Locomotive — joke for mistyping `ls`.
-    sl
-    # Download utility (command: aria2c).
-    aria2
-    # YouTube / media downloader.
-    yt-dlp
-    # Media file technical metadata.
-    mediainfo
-    # RTSP / local video player (`mpv`).
-    mpv
-    # ffmpeg + ffplay (RTSP probe / playback).
-    ffmpeg
-    # 7-Zip with Zstd/Brotli/LZ4/etc. (`7z` / `7zz`). Attribute starts with `_` (digit).
-    _7zip-zstd
-    # Archive manager GUI (7z / Zstd / zip / tar / …). Desktop: PeaZip.
-    peazip
-    code-cursor
-    # Zed code editor (CLI: zeditor).
-    zed-editor
-    # Terminal Agent CLI (`cursor-agent`; also aliased as `agent`).
-    cursor-cli
-    # OpenCode 2 terminal agent (`opencode`; pkgs/opencode overrides nixpkgs 1.x).
-    opencode
-    # Anthropic Claude Code CLI (`claude`).
-    claude-code
-    # Computer use CLI for AI agents (`agent-desktop`; pkgs/agent-desktop).
-    agentDesktop
-    # T3 Code: desktop + `t3` CLI; PATH wraps already-installed agents.
-    (t3code.override {
-      enableClaude = true;
-      enableCursor = true;
-      enableCursorCli = true;
-      enableOpencode = true;
-    })
-    # Google Antigravity CLI (`agy` / `antigravity`; pkgs/antigravity) is installed
-    # via home/antigravity-translate.nix (wrapping `agy` with PLaMo 2-pane watch).
-    # ChatGPT desktop (Codex included). App menu: ChatGPT.
-    chatgpt
-    # Grok Bot desktop agent. App menu: Grok Bot (`grok-bot`).
-    grok-bot
-    # Earthquake map (pkgs/jquake: Hyprland/XWayland AWT fix + sounds cwd + http.agent).
-    jquake
-    onlyoffice-desktopeditors
-    # 3D printer slicer (Bambu/Prusa fork). App menu: OrcaSlicer (`orca-slicer`).
-    orca-slicer
-    # Affinity v3 is not installed. The affinity-nix input and overlay were
-    # removed. Re-add steps are in the README (Affinity). Wine builds often
-    # take hours when cache.forall.systems misses.
-    parsec-bin
-    # Wineprefix manager for Windows apps/games (FHS-wrapped).
-    (bottles.override { removeWarningPopup = true; })
-    # wol-pc (Wake-on-LAN client): packaged via pkgs/wol-pc; reads agenix
-    # (/run/agenix/wol-pc-env) or $WOL_PC_CONFIG.
-    wol-pc
-    sshpass
-    rofi-prompt
-    tmux
-    trayscale
-    vivaldi
-    firefox
-    # Tor Browser Bundle (not the tor daemon alone).
-    tor-browser
-    # On-screen keystroke overlay (useful for demos / Chromebook Fn keys).
-    showmethekey
-    # Google Quick Share / Nearby Share client for Linux.
-    rquickshare
-    discord
-    # ESP32 / Arduino CLI flash & board package manager.
-    arduino-cli
-    # Espressif ROM / flash probe (chip-id, flash-id, …).
-    esptool
-    # Android screen mirror / control (GUI; wraps adb + scrcpy-server).
-    qtscrcpy
-    # adb / fastboot on PATH. QtScrcpy embeds its own adb, but the cheatsheet
-    # runs `adb devices` as a separate command, so this package stays.
-    android-tools
-    # Node.js (`node` / `npm`) and pnpm (standalone binary; uses `node` on PATH).
-    nodejs
-    pnpm
-    # Typst typesetting (CLI). Cursor uses the Tinymist extension for LSP/preview.
-    typst
-    tinymist
-    typstyle
-    # Qalculate! scientific calculator (Qt GUI `qalculate-qt` + CLI `qalc`).
-    qalculate-qt
-    libqalculate
-    # Tilion Fortress: local stealth Chromium engine + `tilion` / `tilion-mcp` CLI (pkgs/tilion-fortress).
-    tilion-fortress
-  ];
+  home.packages =
+    with pkgs;
+    [
+      nix-output-monitor
+      # Cat clone with syntax highlighting (`bat`; Debian package name is batcat).
+      bat
+      # Steam Locomotive — joke for mistyping `ls`.
+      sl
+      # Download utility (command: aria2c).
+      aria2
+      # YouTube / media downloader.
+      yt-dlp
+      # Media file technical metadata.
+      mediainfo
+      # RTSP / local video player (`mpv`).
+      mpv
+      # ffmpeg + ffplay (RTSP probe / playback).
+      ffmpeg
+      # 7-Zip with Zstd/Brotli/LZ4/etc. (`7z` / `7zz`). Attribute starts with `_` (digit).
+      _7zip-zstd
+      # Archive manager GUI (7z / Zstd / zip / tar / …). Desktop: PeaZip.
+      peazip
+      code-cursor
+      # Zed code editor (CLI: zeditor).
+      zed-editor
+      # Terminal Agent CLI (`cursor-agent`; also aliased as `agent`).
+      cursor-cli
+      # OpenCode 2 terminal agent (`opencode`; pkgs/opencode overrides nixpkgs 1.x).
+      opencode
+      # Anthropic Claude Code CLI (`claude`).
+      claude-code
+      # Computer use CLI for AI agents (`agent-desktop`; pkgs/agent-desktop).
+      agentDesktop
+      # T3 Code: desktop + `t3` CLI; PATH wraps already-installed agents.
+      (t3code.override {
+        enableClaude = true;
+        enableCursor = true;
+        enableCursorCli = true;
+        enableOpencode = true;
+      })
+      # Google Antigravity CLI (`agy` / `antigravity`; pkgs/antigravity) is installed
+      # via home/antigravity-translate.nix (wrapping `agy` with PLaMo 2-pane watch).
+      # ChatGPT desktop (Codex included). App menu: ChatGPT.
+      chatgpt
+      # Grok Bot desktop agent. App menu: Grok Bot (`grok-bot`).
+      grok-bot
+      # Earthquake map (pkgs/jquake: Hyprland/XWayland AWT fix + sounds cwd + http.agent).
+      jquake
+      onlyoffice-desktopeditors
+      # 3D printer slicer (Bambu/Prusa fork). App menu: OrcaSlicer (`orca-slicer`).
+      orca-slicer
+      # Affinity v3 is not installed. The affinity-nix input and overlay were
+      # removed. Re-add steps are in the README (Affinity). Wine builds often
+      # take hours when cache.forall.systems misses.
+      parsec-bin
+      # Wineprefix manager for Windows apps/games (FHS-wrapped).
+      (bottles.override { removeWarningPopup = true; })
+      # wol-pc (Wake-on-LAN client): packaged via pkgs/wol-pc; reads agenix
+      # (/run/agenix/wol-pc-env) or $WOL_PC_CONFIG.
+      wol-pc
+      sshpass
+      rofi-prompt
+      tmux
+      trayscale
+      vivaldi
+      firefox
+      # Tor Browser Bundle (not the tor daemon alone).
+      tor-browser
+      # On-screen keystroke overlay (useful for demos / Chromebook Fn keys).
+      showmethekey
+      # Google Quick Share / Nearby Share client for Linux.
+      rquickshare
+      discord
+      # ESP32 / Arduino CLI flash & board package manager.
+      arduino-cli
+      # Espressif ROM / flash probe (chip-id, flash-id, …).
+      esptool
+      # Android screen mirror / control (GUI; wraps adb + scrcpy-server).
+      qtscrcpy
+      # adb / fastboot on PATH. QtScrcpy embeds its own adb, but the cheatsheet
+      # runs `adb devices` as a separate command, so this package stays.
+      android-tools
+      # Node.js (`node` / `npm`) and pnpm (standalone binary; uses `node` on PATH).
+      nodejs
+      pnpm
+      # Typst typesetting (CLI). Cursor uses the Tinymist extension for LSP/preview.
+      typst
+      tinymist
+      typstyle
+      # Qalculate! scientific calculator (Qt GUI `qalculate-qt` + CLI `qalc`).
+      qalculate-qt
+      libqalculate
+      # Tilion Fortress: local stealth Chromium engine + `tilion` / `tilion-mcp` CLI (pkgs/tilion-fortress).
+      tilion-fortress
+    ]
+    ++ localCursorPackages;
 }

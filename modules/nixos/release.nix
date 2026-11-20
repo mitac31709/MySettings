@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "hyprland-scale-1" ];
+  system.nixos.tags = [ "wallpaper-cursor-super-space" ];
 }
