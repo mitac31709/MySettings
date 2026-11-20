@@ -2673,7 +2673,7 @@ in
       margin-bottom = 8;
       modules-left = [ "custom/updates" ];
       modules-center = [ ];
-      modules-right = [ ];
+      modules-right = [ "custom/keep-screen-on" ];
       "custom/updates" = {
         exec = pkgs.writeShellScript "waybar-hypr-flake-updates" ''
           f="''${XDG_RUNTIME_DIR}/flake-update-status"
@@ -2689,6 +2689,20 @@ in
         signal = 9;
         tooltip = true;
         on-click = openFlakeUpdate;
+      };
+      # Keep-screen-on: marker gates hypridle dim/lock/DPMS (and Capsomnia keep-display-awake).
+      "custom/keep-screen-on" = {
+        exec = pkgs.writeShellScript "waybar-hypr-keep-screen-on" ''
+          marker="''${XDG_RUNTIME_DIR}/hypr-keep-screen-on"
+          if [ -e "$marker" ]; then
+            printf '%s\n' '{"text":"scr ON","class":"activated","tooltip":"画面常時オン（減光・ロック・消灯なし／クリックで解除）"}'
+          else
+            printf '%s\n' '{"text":"scr","class":"deactivated","tooltip":"画面を常時オンにする（減光・ロック・消灯を抑制）"}'
+          fi
+        '';
+        return-type = "json";
+        interval = 1;
+        on-click = lib.getExe toggleKeepScreenOn;
       };
     }
     {
@@ -2757,6 +2771,22 @@ in
       color: #9fe7e7;
       background: #15383a;
       border-top: 2px solid #33c5c5;
+    }
+
+    /* Left status bar: keep-screen-on indicator */
+    window.hypr-status-side#waybar #custom-keep-screen-on {
+      padding: 6px 0;
+      background: transparent;
+      min-width: 34px;
+      font-size: 10px;
+    }
+    window.hypr-status-side#waybar #custom-keep-screen-on.activated {
+      color: #e6edf3;
+      background: #15383a;
+      border-top: 2px solid #33c5c5;
+    }
+    window.hypr-status-side#waybar #custom-keep-screen-on.deactivated {
+      color: #6b7785;
     }
 
     /* Bottom status bar: restic backup progress (auto-hides when idle) */
