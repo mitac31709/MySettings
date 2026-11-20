@@ -124,15 +124,34 @@ let
     exec ${pactl} set-sink-volume @DEFAULT_SINK@ "''${new}%"
   '';
 
+  grim = "${pkgs.grim}/bin/grim";
+  slurp = "${pkgs.slurp}/bin/slurp";
+  wlCopy = "${pkgs.wl-clipboard}/bin/wl-copy";
+
+  freezeCaptureHelper = pkgs.writeShellScript "wayfreeze-slurp-grim" ''
+    set -uo pipefail
+    cleanup() {
+      kill "$PPID" 2>/dev/null || pkill -x wayfreeze 2>/dev/null || true
+    }
+    trap cleanup EXIT
+    geom="$(${slurp} -b '#0b0f1466' -c '#33c5c5ff' -s '#00000000' -w 2 2>/dev/null)" || exit 0
+    [ -n "$geom" ] || exit 0
+    ${grim} -g "$geom" "$SCREENCAP_TMP"
+  '';
+
   screenshotBin = pkgs.writeShellApplication {
     name = "screenshot";
     runtimeInputs = [
       pkgs.coreutils
-      pkgs.hyprshot
+      pkgs.grim
+      pkgs.hyprland
+      pkgs.jq
       pkgs.libnotify
       pkgs.procps
       config.programs.rofi.package
       pkgs.satty
+      pkgs.slurp
+      pkgs.wayfreeze
       pkgs.wl-clipboard
     ];
     text = ''
@@ -144,19 +163,19 @@ let
       if [ "$mode" = "menu" ]; then
         choice="$(
           printf '%s\n' \
-            "範囲選択 → Satty 編集 (Super+Shift+S / Shift+Print)" \
-            "全画面（出力） → Satty 切り抜き・編集 (Print)" \
-            "ウィンドウ → Satty 編集 (Super+Print)" \
-            "範囲選択 → 即クリップボード" \
-            "全画面（出力） → 即クリップボード" \
+            "範囲選択（画面停止） → Satty 編集 (Super+Shift+S / Shift+Print)" \
+            "全画面 → Satty 切り抜き・編集 (Print)" \
+            "アクティブウィンドウ → Satty 編集 (Super+Print)" \
+            "範囲選択（画面停止） → 即クリップボード" \
+            "全画面 → 即クリップボード" \
             | rofi -dmenu -i -p 'スクリーンショット' || true
         )"
         case "$choice" in
-          "範囲選択 → Satty"*) mode="region" ;;
-          "全画面（出力） → Satty"*) mode="full" ;;
-          "ウィンドウ"*) mode="window" ;;
-          "範囲選択 → 即"*) mode="quick-region" ;;
-          "全画面（出力） → 即"*) mode="quick-full" ;;
+          "範囲選択（画面停止） → Satty"*) mode="region" ;;
+          "全画面 → Satty"*) mode="full" ;;
+          "アクティブウィンドウ"*) mode="window" ;;
+          "範囲選択（画面停止） → 即"*) mode="quick-region" ;;
+          "全画面 → 即"*) mode="quick-full" ;;
           *) exit 0 ;;
         esac
       fi
@@ -183,28 +202,45 @@ let
 
       case "$mode" in
         region)
-          hyprshot -m region -s -z -r >"$tmp" || exit 0
+          if pgrep -x slurp >/dev/null 2>&1 || pgrep -x wayfreeze >/dev/null 2>&1; then
+            exit 0
+          fi
+          export SCREENCAP_TMP="$tmp"
+          wayfreeze --hide-cursor --after-freeze-cmd "${freezeCaptureHelper}" || true
           [ -s "$tmp" ] || exit 0
           open_satty "$tmp" arrow
           ;;
         full)
-          hyprshot -m output -s -z -r >"$tmp" || exit 0
+          grim "$tmp"
           [ -s "$tmp" ] || exit 0
           open_satty "$tmp" crop
           ;;
         window)
-          hyprshot -m window -s -z -r >"$tmp" || exit 0
+          geom="$(
+            ${hyprctlBin} -j activewindow 2>/dev/null \
+              | jq -r 'select(.at and .size and (.size[0] > 0) and (.size[1] > 0)) | "\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"' \
+              | head -n 1
+          )"
+          if [ -z "$geom" ] || [ "$geom" = "null" ]; then
+            grim "$tmp"
+          else
+            grim -g "$geom" "$tmp"
+          fi
           [ -s "$tmp" ] || exit 0
           open_satty "$tmp" arrow
           ;;
         quick-region)
-          hyprshot -m region -s -z -r >"$tmp" || exit 0
+          if pgrep -x slurp >/dev/null 2>&1 || pgrep -x wayfreeze >/dev/null 2>&1; then
+            exit 0
+          fi
+          export SCREENCAP_TMP="$tmp"
+          wayfreeze --hide-cursor --after-freeze-cmd "${freezeCaptureHelper}" || true
           [ -s "$tmp" ] || exit 0
           wl-copy --type image/png < "$tmp"
           notify-send "スクリーンショット" "選択範囲をクリップボードへコピーしました" >/dev/null 2>&1 || true
           ;;
         quick-full)
-          hyprshot -m output -s -z -r >"$tmp" || exit 0
+          grim "$tmp"
           [ -s "$tmp" ] || exit 0
           wl-copy --type image/png < "$tmp"
           notify-send "スクリーンショット" "全画面をクリップボードへコピーしました" >/dev/null 2>&1 || true
