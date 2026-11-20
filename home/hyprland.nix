@@ -2663,40 +2663,70 @@ in
     };
   };
 
-  xdg.configFile."waybar-hypr-status/config".text = builtins.toJSON {
-    name = "hypr-status";
-    layer = "top";
-    position = "left";
-    width = 34;
-    margin-top = 8;
-    margin-bottom = 8;
-    modules-left = [ "custom/updates" ];
-    modules-center = [ ];
-    modules-right = [ ];
-    "custom/updates" = {
-      exec = pkgs.writeShellScript "waybar-hypr-flake-updates" ''
-        f="''${XDG_RUNTIME_DIR}/flake-update-status"
-        if [ -s "$f" ]; then
-          cat "$f"
-        else
-          # Always show the check button before the first timer run.
-          printf '%s\n' '{"text":"","class":"idle","tooltip":"更新チェック待ち\nクリックで flake-update"}'
-        fi
-      '';
-      return-type = "json";
-      interval = 30;
-      signal = 9;
-      tooltip = true;
-      on-click = openFlakeUpdate;
-    };
-  };
+  xdg.configFile."waybar-hypr-status/config".text = builtins.toJSON [
+    {
+      name = "hypr-status-side";
+      layer = "top";
+      position = "left";
+      width = 34;
+      margin-top = 8;
+      margin-bottom = 8;
+      modules-left = [ "custom/updates" ];
+      modules-center = [ ];
+      modules-right = [ ];
+      "custom/updates" = {
+        exec = pkgs.writeShellScript "waybar-hypr-flake-updates" ''
+          f="''${XDG_RUNTIME_DIR}/flake-update-status"
+          if [ -s "$f" ]; then
+            cat "$f"
+          else
+            # Always show the check button before the first timer run.
+            printf '%s\n' '{"text":"","class":"idle","tooltip":"更新チェック待ち\nクリックで flake-update"}'
+          fi
+        '';
+        return-type = "json";
+        interval = 30;
+        signal = 9;
+        tooltip = true;
+        on-click = openFlakeUpdate;
+      };
+    }
+    {
+      name = "hypr-status-bottom";
+      layer = "top";
+      position = "bottom";
+      height = 26;
+      margin-left = 8;
+      margin-right = 8;
+      exclusive = false;
+      modules-left = [ "custom/restic" ];
+      modules-center = [ ];
+      modules-right = [ ];
+      # Status file written by modules/nixos/backup.nix while restic runs.
+      "custom/restic" = {
+        exec = pkgs.writeShellScript "waybar-hypr-restic" ''
+          f="''${XDG_RUNTIME_DIR}/restic-home-status"
+          if [ -s "$f" ]; then
+            cat "$f"
+          else
+            printf '%s\n' '{"text":"","class":"idle"}'
+          fi
+        '';
+        return-type = "json";
+        interval = 2;
+        signal = 8;
+        hide-empty-text = true;
+        tooltip = true;
+      };
+    }
+  ];
 
   xdg.configFile."waybar-hypr-status/style.css".text = ''
     * {
       border: none;
       border-radius: 0;
       font-family: "JetBrainsMono Nerd Font", sans-serif;
-      font-size: 13px;
+      font-size: 12px;
       min-height: 0;
     }
     window#waybar {
@@ -2711,19 +2741,43 @@ in
     tooltip label {
       color: #9fe7e7;
     }
-    #custom-updates {
+
+    /* Left status bar: flake updates indicator */
+    window.hypr-status-side#waybar #custom-updates {
       padding: 8px 0;
       color: #9fe7e7;
       background: transparent;
       min-width: 34px;
+      font-size: 13px;
     }
-    #custom-updates.idle {
+    window.hypr-status-side#waybar #custom-updates.idle {
       color: #6b7785;
     }
-    #custom-updates.available {
+    window.hypr-status-side#waybar #custom-updates.available {
       color: #9fe7e7;
       background: #15383a;
       border-top: 2px solid #33c5c5;
+    }
+
+    /* Bottom status bar: restic backup progress (auto-hides when idle) */
+    window.hypr-status-bottom#waybar {
+      background: transparent;
+    }
+    window.hypr-status-bottom#waybar #custom-restic {
+      padding: 0 10px;
+      color: #e6edf3;
+      background: #15383a;
+    }
+    window.hypr-status-bottom#waybar #custom-restic.running {
+      color: #9fe7e7;
+      border-left: 2px solid #33c5c5;
+    }
+    window.hypr-status-bottom#waybar #custom-restic.done {
+      color: #98c379;
+    }
+    window.hypr-status-bottom#waybar #custom-restic.failed {
+      color: #e06c75;
+      background: #3a1a1e;
     }
   '';
 
