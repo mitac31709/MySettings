@@ -2606,6 +2606,9 @@ let
         ;;
     esac
   '';
+
+  openBtop = "${ghosttyBin} -e ${btopBin}";
+  openNmtui = "${ghosttyBin} -e ${nmtuiBin}";
 in
 {
   imports = [
@@ -3213,8 +3216,8 @@ in
     };
   };
 
-  # Hyprland status bar (Waybar): persistent indicators for flake updates / restic /
-  # keep-screen-on etc., complementing Colorshell. Modules are added incrementally.
+  # Hyprland status bar (Waybar): Sway-era layout/modules ported for Hyprland,
+  # complementing Colorshell.
   systemd.user.services.waybar-hypr-status = {
     Unit = {
       Description = "Waybar status bar for Hyprland";
@@ -3235,30 +3238,22 @@ in
   };
 
   xdg.configFile."waybar-hypr-status/config".text = builtins.toJSON [
+    # Left vertical bar: updates (top), startup-sound/JQuake/services/tray (bottom).
     {
-      name = "hypr-status-side";
+      name = "side";
       layer = "top";
       position = "left";
       width = 34;
       margin-top = 8;
       margin-bottom = 8;
-      modules-left = [
-        "custom/cheatsheet"
-        "custom/updates"
-      ];
+      modules-left = [ "custom/updates" ];
       modules-center = [ ];
       modules-right = [
         "custom/startup-sound"
         "custom/jquake"
         "custom/services"
-        "custom/capsomnia"
-        "custom/keep-screen-on"
+        "tray"
       ];
-      "custom/cheatsheet" = {
-        format = "?";
-        tooltip = "チートシート";
-        on-click = "${showCheatsheet}";
-      };
       "custom/updates" = {
         exec = pkgs.writeShellScript "waybar-hypr-flake-updates" ''
           f="''${XDG_RUNTIME_DIR}/flake-update-status"
@@ -3302,42 +3297,53 @@ in
         tooltip = true;
         on-click = lib.getExe servicesMenu;
       };
-      "custom/capsomnia" = {
-        exec = "${capsomniaPkg}/bin/cpsm waybar";
-        return-type = "json";
-        interval = 5;
-        signal = 15;
-        tooltip = true;
-        hide-empty-text = true;
-        on-click = "${capsomniaPkg}/bin/capsomnia-menu";
-        on-click-right = "${capsomniaPkg}/bin/cpsm toggle --no-sleep";
-        on-click-middle = "${capsomniaPkg}/bin/capsomnia-settings";
-      };
-      # Keep-screen-on: marker gates hypridle dim/lock/DPMS (and Capsomnia keep-display-awake).
-      "custom/keep-screen-on" = {
-        exec = pkgs.writeShellScript "waybar-hypr-keep-screen-on" ''
-          marker="''${XDG_RUNTIME_DIR}/hypr-keep-screen-on"
-          if [ -e "$marker" ]; then
-            printf '%s\n' '{"text":"scr ON","class":"activated","tooltip":"画面常時オン（減光・ロック・消灯なし／クリックで解除）"}'
-          else
-            printf '%s\n' '{"text":"scr","class":"deactivated","tooltip":"画面を常時オンにする（減光・ロック・消灯を抑制）"}'
-          fi
-        '';
-        return-type = "json";
-        interval = 1;
-        on-click = lib.getExe toggleKeepScreenOn;
+      tray = {
+        icon-size = 16;
+        spacing = 4;
       };
     }
+    # Bottom main bar: Sway-era layout ported to Hyprland modules.
     {
-      name = "hypr-status-bottom";
+      name = "main";
       layer = "top";
       position = "bottom";
       height = 30;
-      margin-left = 8;
-      margin-right = 8;
-      modules-left = [ "custom/restic" ];
-      modules-center = [ ];
-      modules-right = [ "custom/battery" "custom/clock" ];
+      modules-left = [
+        "custom/cheatsheet"
+        "hyprland/workspaces"
+        "custom/restic"
+        "hyprland/submap"
+      ];
+      modules-center = [ "hyprland/window" ];
+      modules-right = [
+        "cpu"
+        "memory"
+        "custom/capsomnia"
+        "custom/keep-screen-on"
+        "custom/battery"
+        "network"
+        "backlight"
+        "pulseaudio"
+        "custom/clock"
+      ];
+      "custom/cheatsheet" = {
+        format = "?";
+        tooltip = "チートシート";
+        on-click = "${showCheatsheet}";
+      };
+      "hyprland/workspaces" = {
+        format = "{name}";
+        on-click = "activate";
+        sort-by-number = true;
+      };
+      "hyprland/window" = {
+        max-length = 48;
+        separate-outputs = true;
+      };
+      "hyprland/submap" = {
+        format = "{}";
+        tooltip = false;
+      };
       # Status file written by modules/nixos/backup.nix while restic runs.
       "custom/restic" = {
         exec = pkgs.writeShellScript "waybar-hypr-restic" ''
@@ -3354,6 +3360,40 @@ in
         hide-empty-text = true;
         tooltip = true;
       };
+      cpu = {
+        format = "cpu {usage}%";
+        interval = 5;
+        on-click = openBtop;
+      };
+      memory = {
+        format = "mem {percentage}%";
+        interval = 5;
+        on-click = openBtop;
+      };
+      "custom/capsomnia" = {
+        exec = "${capsomniaPkg}/bin/cpsm waybar";
+        return-type = "json";
+        interval = 5;
+        signal = 15;
+        tooltip = true;
+        hide-empty-text = true;
+        on-click = "${capsomniaPkg}/bin/capsomnia-menu";
+        on-click-right = "${capsomniaPkg}/bin/cpsm toggle --no-sleep";
+        on-click-middle = "${capsomniaPkg}/bin/capsomnia-settings";
+      };
+      "custom/keep-screen-on" = {
+        exec = pkgs.writeShellScript "waybar-hypr-keep-screen-on" ''
+          marker="''${XDG_RUNTIME_DIR}/hypr-keep-screen-on"
+          if [ -e "$marker" ]; then
+            printf '%s\n' '{"text":"scr ON","class":"activated","tooltip":"画面常時オン（減光・ロック・消灯なし／クリックで解除）"}'
+          else
+            printf '%s\n' '{"text":"scr","class":"deactivated","tooltip":"画面を常時オンにする（減光・ロック・消灯を抑制）"}'
+          fi
+        '';
+        return-type = "json";
+        interval = 1;
+        on-click = lib.getExe toggleKeepScreenOn;
+      };
       "custom/battery" = {
         exec =
           "${lib.getExe waybarBattery} "
@@ -3364,6 +3404,23 @@ in
         tooltip = true;
         escape = true;
         hide-empty-text = true;
+      };
+      network = {
+        interval = 2;
+        format-wifi = "{essid}";
+        format-ethernet = "{ifname}";
+        format-disconnected = "offline";
+        tooltip-format = "↓{bandwidthDownBytes} ↑{bandwidthUpBytes}\n{ifname} {ipaddr}";
+        on-click = openNmtui;
+      };
+      backlight = {
+        format = "bri {percent}%";
+      };
+      pulseaudio = {
+        format = "vol {volume}%";
+        format-muted = "mute";
+        max-volume = 100;
+        on-click = "${pactl} set-sink-mute @DEFAULT_SINK@ toggle";
       };
       "custom/clock" = {
         exec = "${waybarClock}";
@@ -3381,7 +3438,7 @@ in
       border: none;
       border-radius: 0;
       font-family: "JetBrainsMono Nerd Font", sans-serif;
-      font-size: 12px;
+      font-size: 11px;
       min-height: 0;
     }
     window#waybar {
@@ -3397,166 +3454,168 @@ in
       color: #9fe7e7;
     }
 
-    /* Left status bar: cheatsheet */
-    window.hypr-status-side#waybar #custom-cheatsheet {
-      padding: 8px 0;
+    /* Main bottom bar (Sway-era layout, Hyprland modules) */
+    window.main#waybar #custom-cheatsheet,
+    window.main#waybar #cpu,
+    window.main#waybar #memory,
+    window.main#waybar #custom-capsomnia,
+    window.main#waybar #custom-keep-screen-on,
+    window.main#waybar #custom-battery,
+    window.main#waybar #network,
+    window.main#waybar #backlight,
+    window.main#waybar #pulseaudio,
+    window.main#waybar #custom-clock,
+    window.main#waybar #submap,
+    window.main#waybar #window {
+      padding: 0 8px;
+      color: #9fe7e7;
+      background: transparent;
+    }
+    window.main#waybar #custom-cheatsheet {
       color: #33c5c5;
-      background: transparent;
-      min-width: 34px;
-      font-size: 14px;
     }
-
-    /* Left status bar: flake updates indicator */
-    window.hypr-status-side#waybar #custom-updates {
-      padding: 8px 0;
-      color: #9fe7e7;
-      background: transparent;
-      min-width: 34px;
-      font-size: 13px;
-    }
-    window.hypr-status-side#waybar #custom-updates.idle {
+    window.main#waybar #workspaces button {
+      padding: 0 6px;
       color: #6b7785;
-    }
-    window.hypr-status-side#waybar #custom-updates.available {
-      color: #9fe7e7;
-      background: #15383a;
-      border-top: 2px solid #33c5c5;
-    }
-
-    /* Left status bar: startup sound */
-    window.hypr-status-side#waybar #custom-startup-sound {
-      padding: 6px 0;
       background: transparent;
-      min-width: 34px;
-      font-size: 13px;
-      border-top: 1px solid #15383a;
     }
-    window.hypr-status-side#waybar #custom-startup-sound.disabled {
-      color: #6b7785;
-    }
-    window.hypr-status-side#waybar #custom-startup-sound.empty {
-      color: #e5c07b;
-      border-left: 2px solid #e5c07b;
-    }
-
-    /* Left status bar: JQuake */
-    window.hypr-status-side#waybar #custom-jquake {
-      padding: 7px 0;
-      background: transparent;
-      min-width: 34px;
-      font-size: 13px;
-      border-top: 1px solid #15383a;
-    }
-    window.hypr-status-side#waybar #custom-jquake.open {
+    window.main#waybar #workspaces button.active {
       color: #e6edf3;
       background: #15383a;
-      border-left: 2px solid #33c5c5;
+      border-bottom: 2px solid #33c5c5;
     }
-    window.hypr-status-side#waybar #custom-jquake.degraded {
-      color: #e5c07b;
-      border-left: 2px solid #e5c07b;
+    window.main#waybar #workspaces button.urgent {
+      color: #e6edf3;
+      background: #3a1a1e;
     }
-    window.hypr-status-side#waybar #custom-jquake.failed {
+    window.main#waybar #submap {
       color: #e06c75;
-      background: #3a1a1e;
-      border-left: 2px solid #e06c75;
     }
-
-    /* Left status bar: services dashboard */
-    window.hypr-status-side#waybar #custom-services {
-      padding: 6px 0 3px 0;
-      background: transparent;
-      min-width: 34px;
-      font-size: 11px;
-      border-top: 1px solid #15383a;
+    window.main#waybar #window {
+      color: #9aa7b5;
     }
-    window.hypr-status-side#waybar #custom-services.degraded {
-      border-left: 2px solid #e5c07b;
-    }
-    window.hypr-status-side#waybar #custom-services.failed {
-      background: #3a1a1e;
-      border-left: 2px solid #e06c75;
-    }
-
-    /* Left status bar: Capsomnia */
-    window.hypr-status-side#waybar #custom-capsomnia {
-      padding: 6px 0;
-      background: transparent;
-      min-width: 34px;
-      font-size: 11px;
-      border-top: 1px solid #15383a;
-    }
-    window.hypr-status-side#waybar #custom-capsomnia.on {
+    window.main#waybar #custom-capsomnia.on {
       color: #e6edf3;
       background: #132c20;
       border-left: 2px solid #34c759;
     }
-    window.hypr-status-side#waybar #custom-capsomnia.off {
+    window.main#waybar #custom-capsomnia.off {
       color: #6b7785;
     }
-    window.hypr-status-side#waybar #custom-capsomnia.error {
+    window.main#waybar #custom-capsomnia.error {
       color: #e06c75;
       background: #3a1a1e;
       border-left: 2px solid #e06c75;
     }
-
-    /* Left status bar: keep-screen-on indicator */
-    window.hypr-status-side#waybar #custom-keep-screen-on {
-      padding: 6px 0;
-      background: transparent;
-      min-width: 34px;
-      font-size: 10px;
-    }
-    window.hypr-status-side#waybar #custom-keep-screen-on.activated {
+    window.main#waybar #custom-keep-screen-on.activated {
       color: #e6edf3;
       background: #15383a;
-      border-top: 2px solid #33c5c5;
+      border-left: 2px solid #33c5c5;
     }
-    window.hypr-status-side#waybar #custom-keep-screen-on.deactivated {
+    window.main#waybar #custom-keep-screen-on.deactivated {
       color: #6b7785;
     }
-
-    /* Bottom status bar: restic progress + clock */
-    window.hypr-status-bottom#waybar {
-      background: #0b0f14;
-      color: #9fe7e7;
-    }
-    window.hypr-status-bottom#waybar #custom-restic {
-      padding: 0 10px;
+    window.main#waybar #custom-restic {
+      padding: 0 8px;
       color: #e6edf3;
       background: #15383a;
     }
-    window.hypr-status-bottom#waybar #custom-battery {
-      padding: 0 10px;
-      color: #9fe7e7;
-      background: transparent;
-    }
-    window.hypr-status-bottom#waybar #custom-battery.warning { color: #e5c07b; }
-    window.hypr-status-bottom#waybar #custom-battery.critical { color: #e06c75; }
-    window.hypr-status-bottom#waybar #custom-battery.charging,
-    window.hypr-status-bottom#waybar #custom-battery.plugged,
-    window.hypr-status-bottom#waybar #custom-battery.full,
-    window.hypr-status-bottom#waybar #custom-battery.discharging {
-      background: transparent;
-      animation: none;
-    }
-    window.hypr-status-bottom#waybar #custom-clock {
-      padding: 0 10px;
-      color: #9fe7e7;
-      background: transparent;
-    }
-    window.hypr-status-bottom#waybar #custom-restic.running {
+    window.main#waybar #custom-restic.running {
       color: #9fe7e7;
       border-left: 2px solid #33c5c5;
     }
-    window.hypr-status-bottom#waybar #custom-restic.done {
+    window.main#waybar #custom-restic.done {
       color: #98c379;
     }
-    window.hypr-status-bottom#waybar #custom-restic.failed {
+    window.main#waybar #custom-restic.failed {
       color: #e06c75;
       background: #3a1a1e;
     }
+    window.main#waybar #custom-battery.warning { color: #e5c07b; }
+    window.main#waybar #custom-battery.critical { color: #e06c75; }
+    window.main#waybar #custom-battery.charging,
+    window.main#waybar #custom-battery.plugged,
+    window.main#waybar #custom-battery.full,
+    window.main#waybar #custom-battery.discharging {
+      background: transparent;
+      animation: none;
+    }
+    window.main#waybar #network.disconnected { color: #6b7785; }
+    window.main#waybar #pulseaudio.muted { color: #6b7785; }
+
+    /* Side bar: updates (top), startup-sound + JQuake + services + tray (bottom). */
+    window.side#waybar #custom-updates,
+    window.side#waybar #custom-startup-sound,
+    window.side#waybar #custom-jquake,
+    window.side#waybar #custom-services,
+    window.side#waybar #tray {
+      padding: 4px 0;
+      color: #9fe7e7;
+      background: transparent;
+    }
+    window.side#waybar #custom-updates,
+    window.side#waybar #custom-startup-sound,
+    window.side#waybar #custom-jquake,
+    window.side#waybar #custom-services {
+      font-family: "JetBrainsMono Nerd Font", sans-serif;
+      font-size: 13px;
+      min-width: 34px;
+      padding: 8px 0;
+    }
+    window.side#waybar #custom-updates.idle {
+      color: #6b7785;
+    }
+    window.side#waybar #custom-updates.available {
+      color: #9fe7e7;
+      background: #15383a;
+      border-top: 2px solid #33c5c5;
+    }
+    window.side#waybar #custom-startup-sound {
+      padding: 6px 0;
+      border-top: 1px solid #15383a;
+    }
+    window.side#waybar #custom-startup-sound.disabled {
+      color: #6b7785;
+    }
+    window.side#waybar #custom-startup-sound.empty {
+      color: #e5c07b;
+      border-left: 2px solid #e5c07b;
+    }
+    window.side#waybar #custom-jquake {
+      padding: 7px 0;
+      border-top: 1px solid #15383a;
+    }
+    window.side#waybar #custom-jquake.open {
+      color: #e6edf3;
+      background: #15383a;
+      border-left: 2px solid #33c5c5;
+    }
+    window.side#waybar #custom-jquake.degraded {
+      color: #e5c07b;
+      border-left: 2px solid #e5c07b;
+    }
+    window.side#waybar #custom-jquake.failed {
+      color: #e06c75;
+      background: #3a1a1e;
+      border-left: 2px solid #e06c75;
+    }
+    window.side#waybar #custom-services {
+      padding: 6px 0 3px 0;
+      border-top: 1px solid #15383a;
+      font-size: 11px;
+    }
+    window.side#waybar #custom-services.degraded {
+      border-left: 2px solid #e5c07b;
+    }
+    window.side#waybar #custom-services.failed {
+      background: #3a1a1e;
+      border-left: 2px solid #e06c75;
+    }
+    window.side#waybar #tray {
+      padding: 3px 0 6px 0;
+    }
   '';
+
 
   # Hypridle: 5m dim -> 10m lock -> 15m DPMS off (all respect keep-screen-on).
   services.hypridle = {
