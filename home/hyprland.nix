@@ -535,6 +535,134 @@ let
     '';
   };
 
+  waybarServicesStatus = pkgs.writeShellApplication {
+    name = "waybar-services-status";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.jq
+      pkgs.systemd
+    ];
+    text = ''
+      mapfile -t ust < <(
+        systemctl --user is-active \
+          uniclipd.service \
+          lan-mouse.service \
+          taildrop-receive.service \
+          cliphist-text.service \
+          cliphist-image.service 2>/dev/null || true
+      )
+      mapfile -t sst < <(
+        systemctl is-active \
+          tailscaled.service \
+          restic-backups-home.service \
+          restic-backups-home.timer 2>/dev/null || true
+      )
+
+      uc_s="''${ust[0]:-unknown}"
+      lm_s="''${ust[1]:-unknown}"
+      td_s="''${ust[2]:-unknown}"
+      ct_s="''${ust[3]:-unknown}"
+      ci_s="''${ust[4]:-unknown}"
+
+      ts_s="''${sst[0]:-unknown}"
+      rb_s="''${sst[1]:-unknown}"
+      rt_s="''${sst[2]:-unknown}"
+      rb_res="$(systemctl show -p Result --value restic-backups-home.service 2>/dev/null || echo "")"
+
+      overall="ok"
+      mark_level() {
+        case "$1" in
+          failed) overall="failed" ;;
+          warn)
+            if [ "$overall" = "ok" ]; then
+              overall="degraded"
+            fi
+            ;;
+        esac
+      }
+
+      lines=()
+      tips=("裏方デーモン・システム状態")
+
+      add_icon() {
+        local state="$1" glyph="$2"
+        case "$state" in
+          active)
+            lines+=("<span color='#9fe7e7'>''${glyph}</span>")
+            ;;
+          running)
+            lines+=("<span color='#33c5c5'>''${glyph}</span>")
+            ;;
+          failed)
+            mark_level failed
+            lines+=("<span color='#e06c75'>''${glyph}</span>")
+            ;;
+          *)
+            mark_level warn
+            lines+=("<span color='#e5c07b'>''${glyph}</span>")
+            ;;
+        esac
+      }
+
+      add_icon "$uc_s" $'\uf0ea'
+      tips+=("• UniClipboard (uniclipd): $uc_s")
+
+      add_icon "$lm_s" $'\uf245'
+      tips+=("• LAN Mouse: $lm_s")
+
+      add_icon "$td_s" $'\uf019'
+      tips+=("• Taildrop Receive: $td_s")
+
+      if [ "$ct_s" = "active" ] && [ "$ci_s" = "active" ]; then
+        add_icon active $'\uf0c5'
+        tips+=("• Cliphist (text/image): active / active")
+      elif [ "$ct_s" = "failed" ] || [ "$ci_s" = "failed" ]; then
+        add_icon failed $'\uf0c5'
+        tips+=("✗ Cliphist: text=$ct_s image=$ci_s")
+      else
+        add_icon warn $'\uf0c5'
+        tips+=("! Cliphist: text=$ct_s image=$ci_s")
+      fi
+
+      if [ "$ts_s" = "active" ]; then
+        if [ -e /sys/class/net/tailscale0 ]; then
+          add_icon active $'\uf0e8'
+          tips+=("• Tailscale: active (tailscale0 UP)")
+        else
+          add_icon warn $'\uf0e8'
+          tips+=("! Tailscale: active (tailscale0 未接続)")
+        fi
+      else
+        add_icon "$ts_s" $'\uf0e8'
+        tips+=("• Tailscale: $ts_s")
+      fi
+
+      if [ "$rb_s" = "active" ] || [ "$rb_s" = "activating" ]; then
+        add_icon running $'\uf1c0'
+        tips+=("↻ Restic Backup: 実行中 (timer=$rt_s)")
+      elif [ "$rb_s" = "failed" ] || { [ -n "$rb_res" ] && [ "$rb_res" != "success" ]; }; then
+        add_icon failed $'\uf1c0'
+        tips+=("✗ Restic Backup: service=$rb_s result=$rb_res (timer=$rt_s)")
+      elif [ "$rt_s" = "active" ]; then
+        add_icon active $'\uf1c0'
+        tips+=("• Restic Backup: 待機 (timer active / 正常)")
+      else
+        add_icon "$rt_s" $'\uf1c0'
+        tips+=("! Restic Backup: timer=$rt_s service=$rb_s")
+      fi
+
+      tips+=("")
+      tips+=("クリックでサービス管理メニュー")
+
+      IFS=$'\n'
+      text="''${lines[*]}"
+      tooltip="''${tips[*]}"
+      unset IFS
+      jq -cn --arg text "$text" --arg tooltip "$tooltip" --arg class "$overall" \
+        '{text: $text, tooltip: $tooltip, class: $class}'
+    '';
+  };
+
   servicesMenu = pkgs.writeShellApplication {
     name = "services-menu";
     runtimeInputs = [
@@ -552,6 +680,9 @@ let
             run_term() {
               local cmd="$1"
               ${ghosttyBin} -e ${pkgs.bash}/bin/bash -lc "$cmd; printf '\n[Enter で閉じる] '; IFS= read -r _ || true"
+            }
+            refresh_bar() {
+              systemctl --user kill --kill-who=main --signal=RTMIN+10 waybar-hypr-status.service >/dev/null 2>&1 || true
             }
 
             uc_s="$(u_state uniclipd.service)"
@@ -590,42 +721,52 @@ let
             case "$choice" in
               *"UniClipboard"*"再起動")
                 systemctl --user restart uniclipd.service
+                refresh_bar
                 ;;
               *"UniClipboard"*"開始")
                 systemctl --user start uniclipd.service
+                refresh_bar
                 ;;
               *"UniClipboard"*"停止")
                 systemctl --user stop uniclipd.service
+                refresh_bar
                 ;;
               *"UniClipboard"*"GUI を開く")
                 exec ${hyprExecBin} uniclipboard
                 ;;
               *"LAN Mouse"*"再起動")
                 systemctl --user restart lan-mouse.service
+                refresh_bar
                 ;;
               *"LAN Mouse"*"開始")
                 systemctl --user start lan-mouse.service
+                refresh_bar
                 ;;
               *"LAN Mouse"*"停止")
                 systemctl --user stop lan-mouse.service
+                refresh_bar
                 ;;
               *"LAN Mouse"*"GUI を開く")
                 exec ${hyprExecBin} lan-mouse
                 ;;
               *"Taildrop Receive"*"再起動")
                 systemctl --user restart taildrop-receive.service
+                refresh_bar
                 ;;
               *"Taildrop Receive"*"開始")
                 systemctl --user start taildrop-receive.service
+                refresh_bar
                 ;;
               *"Taildrop Receive"*"停止")
                 systemctl --user stop taildrop-receive.service
+                refresh_bar
                 ;;
               *"Taildrop"*"yazi"*)
                 exec ${hyprExecBin} "${ghosttyBin}" -e "${yaziBin}" "$HOME/Downloads"
                 ;;
               *"Cliphist"*"再起動")
                 systemctl --user restart cliphist-text.service cliphist-image.service
+                refresh_bar
                 ;;
               *"Cliphist"*"履歴メニューを開く")
                 exec ${hyprExecBin} clipboard-history
@@ -638,6 +779,7 @@ let
                 ;;
               *"Tailscale"*"sudo"*)
                 run_term "sudo systemctl restart tailscaled.service && tailscale status"
+                refresh_bar
                 ;;
               *"Restic"*"backup status"*)
                 run_term "backup status"
@@ -647,6 +789,7 @@ let
                 ;;
               *"Restic"*"sudo backup run"*)
                 run_term "sudo backup run"
+                refresh_bar
                 ;;
             esac
     '';
@@ -2736,6 +2879,7 @@ in
       modules-right = [
         "custom/startup-sound"
         "custom/jquake"
+        "custom/services"
         "custom/keep-screen-on"
       ];
       "custom/updates" = {
@@ -2772,6 +2916,14 @@ in
         tooltip = true;
         on-click = lib.getExe jquakeOpen;
         on-click-right = lib.getExe jquakeMenu;
+      };
+      "custom/services" = {
+        exec = lib.getExe waybarServicesStatus;
+        return-type = "json";
+        interval = 15;
+        signal = 10;
+        tooltip = true;
+        on-click = lib.getExe servicesMenu;
       };
       # Keep-screen-on: marker gates hypridle dim/lock/DPMS (and Capsomnia keep-display-awake).
       "custom/keep-screen-on" = {
@@ -2891,6 +3043,22 @@ in
     }
     window.hypr-status-side#waybar #custom-jquake.failed {
       color: #e06c75;
+      background: #3a1a1e;
+      border-left: 2px solid #e06c75;
+    }
+
+    /* Left status bar: services dashboard */
+    window.hypr-status-side#waybar #custom-services {
+      padding: 6px 0 3px 0;
+      background: transparent;
+      min-width: 34px;
+      font-size: 11px;
+      border-top: 1px solid #15383a;
+    }
+    window.hypr-status-side#waybar #custom-services.degraded {
+      border-left: 2px solid #e5c07b;
+    }
+    window.hypr-status-side#waybar #custom-services.failed {
       background: #3a1a1e;
       border-left: 2px solid #e06c75;
     }
