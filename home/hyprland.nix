@@ -2880,6 +2880,7 @@ in
         "custom/startup-sound"
         "custom/jquake"
         "custom/services"
+        "custom/capsomnia"
         "custom/keep-screen-on"
       ];
       "custom/updates" = {
@@ -2924,6 +2925,17 @@ in
         signal = 10;
         tooltip = true;
         on-click = lib.getExe servicesMenu;
+      };
+      "custom/capsomnia" = {
+        exec = "${capsomniaPkg}/bin/cpsm waybar";
+        return-type = "json";
+        interval = 5;
+        signal = 15;
+        tooltip = true;
+        hide-empty-text = true;
+        on-click = "${capsomniaPkg}/bin/capsomnia-menu";
+        on-click-right = "${capsomniaPkg}/bin/cpsm toggle --no-sleep";
+        on-click-middle = "${capsomniaPkg}/bin/capsomnia-settings";
       };
       # Keep-screen-on: marker gates hypridle dim/lock/DPMS (and Capsomnia keep-display-awake).
       "custom/keep-screen-on" = {
@@ -3059,6 +3071,28 @@ in
       border-left: 2px solid #e5c07b;
     }
     window.hypr-status-side#waybar #custom-services.failed {
+      background: #3a1a1e;
+      border-left: 2px solid #e06c75;
+    }
+
+    /* Left status bar: Capsomnia */
+    window.hypr-status-side#waybar #custom-capsomnia {
+      padding: 6px 0;
+      background: transparent;
+      min-width: 34px;
+      font-size: 11px;
+      border-top: 1px solid #15383a;
+    }
+    window.hypr-status-side#waybar #custom-capsomnia.on {
+      color: #e6edf3;
+      background: #132c20;
+      border-left: 2px solid #34c759;
+    }
+    window.hypr-status-side#waybar #custom-capsomnia.off {
+      color: #6b7785;
+    }
+    window.hypr-status-side#waybar #custom-capsomnia.error {
+      color: #e06c75;
       background: #3a1a1e;
       border-left: 2px solid #e06c75;
     }
