@@ -373,6 +373,263 @@ let
     '';
   };
 
+  waybarBattery = pkgs.writeShellApplication {
+    name = "waybar-battery";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.gawk
+      pkgs.jq
+    ];
+    text = ''
+      pref_bat=""
+      pref_adapter=""
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --bat)
+            pref_bat="''${2:-}"
+            shift 2
+            ;;
+          --adapter)
+            pref_adapter="''${2:-}"
+            shift 2
+            ;;
+          *)
+            shift
+            ;;
+        esac
+      done
+
+      ps_root="''${WAYBAR_POWER_SUPPLY_DIR:-/sys/class/power_supply}"
+
+      bat_dir=""
+      if [ -n "$pref_bat" ] && [ -d "$ps_root/$pref_bat" ]; then
+        bat_dir="$ps_root/$pref_bat"
+      else
+        for d in "$ps_root"/BAT* "$ps_root"/*; do
+          [ -d "$d" ] || continue
+          [ -r "$d/type" ] || continue
+          IFS= read -r tp < "$d/type" || continue
+          [ "$tp" = "Battery" ] || continue
+          if [ -r "$d/scope" ]; then
+            IFS= read -r sc < "$d/scope" || sc=""
+            if [ "''${sc,,}" = "device" ]; then
+              continue
+            fi
+          fi
+          bat_dir="$d"
+          break
+        done
+      fi
+
+      if [ -z "$bat_dir" ] || [ ! -d "$bat_dir" ]; then
+        printf '{"text":"","class":"empty"}\n'
+        exit 0
+      fi
+
+      read_val() {
+        local f="$1" def="''${2:-}" v
+        if [ -r "$f" ]; then
+          IFS= read -r v < "$f" || v="$def"
+          printf '%s' "$v"
+        else
+          printf '%s' "$def"
+        fi
+      }
+
+      bat_name="$(basename "$bat_dir")"
+      status="$(read_val "$bat_dir/status" "Unknown")"
+      raw_cap="$(read_val "$bat_dir/capacity" "")"
+      vn="$(read_val "$bat_dir/voltage_now" "0")"
+      vmin="$(read_val "$bat_dir/voltage_min_design" "0")"
+
+      adapter_online=""
+      if [ -n "$pref_adapter" ] && [ -r "$ps_root/$pref_adapter/online" ]; then
+        adapter_online="$(read_val "$ps_root/$pref_adapter/online" "")"
+      else
+        for d in "$ps_root"/*; do
+          [ -d "$d" ] || continue
+          [ -r "$d/type" ] || continue
+          IFS= read -r tp < "$d/type" || continue
+          if [ "$tp" = "Mains" ] && [ -r "$d/online" ]; then
+            adapter_online="$(read_val "$d/online" "")"
+            break
+          fi
+        done
+      fi
+
+      mode=""
+      now_val=0
+      full_val=0
+      design_val=0
+      power_val=0
+      pw_unit=""
+      has_power=0
+      if [ -r "$bat_dir/energy_now" ] && [ -r "$bat_dir/energy_full" ]; then
+        mode="energy"
+        now_val="$(read_val "$bat_dir/energy_now" "0")"
+        full_val="$(read_val "$bat_dir/energy_full" "0")"
+        design_val="$(read_val "$bat_dir/energy_full_design" "0")"
+      elif [ -r "$bat_dir/charge_now" ] && [ -r "$bat_dir/charge_full" ]; then
+        mode="charge"
+        now_val="$(read_val "$bat_dir/charge_now" "0")"
+        full_val="$(read_val "$bat_dir/charge_full" "0")"
+        design_val="$(read_val "$bat_dir/charge_full_design" "0")"
+      fi
+
+      if [ -r "$bat_dir/power_now" ]; then
+        power_val="$(read_val "$bat_dir/power_now" "0")"
+        pw_unit="W"
+        has_power=1
+      elif [ -r "$bat_dir/current_now" ]; then
+        power_val="$(read_val "$bat_dir/current_now" "0")"
+        pw_unit="A"
+        has_power=1
+      fi
+
+      disp_status="$status"
+      if [ "$status" = "Unknown" ]; then
+        if [ "$adapter_online" = "1" ]; then
+          disp_status="Plugged"
+        else
+          disp_status="Discharging"
+        fi
+      elif [ "$status" = "Not charging" ] && [ "$adapter_online" = "1" ]; then
+        disp_status="Plugged"
+      fi
+
+      {
+        IFS= read -r -d "" text
+        IFS= read -r -d "" classes
+        IFS= read -r -d "" tip
+      } < <(awk \
+        -v bat="$bat_name" \
+        -v st="$disp_status" \
+        -v ac="$adapter_online" \
+        -v raw_cap="$raw_cap" \
+        -v vn="$vn" \
+        -v vmin="$vmin" \
+        -v mode="$mode" \
+        -v now_v="$now_val" \
+        -v full_v="$full_val" \
+        -v design_v="$design_val" \
+        -v pw_v="$power_val" \
+        -v pw_unit="$pw_unit" \
+        -v has_pw="$has_power" \
+        'BEGIN {
+          if (pw_v < 0) pw_v = -pw_v
+          cap = 0
+          if ((mode == "energy" || mode == "charge") && full_v > 0) {
+            cap = int((100.0 * now_v / full_v) + 0.5)
+          } else if (raw_cap != "") {
+            cap = int(raw_cap + 0)
+          }
+          if (cap < 0) cap = 0
+          if (cap > 100) cap = 100
+
+          if (cap == 100 && st == "Charging") st = "Full"
+
+          text = (st == "Charging") ? sprintf("%d%% chg", cap) : sprintf("%d%% batt", cap)
+
+          cls_st = tolower(st)
+          gsub(/ /, "-", cls_st)
+          classes = cls_st
+          if (cap <= 15) classes = classes " critical"
+          else if (cap <= 30) classes = classes " warning"
+
+          ac_note = (ac == "1") ? "（AC 接続中）" : ""
+          line1 = sprintf("%s: %s %d%%%s", bat, st, cap, ac_note)
+
+          line2 = ""
+          if (vn > 0) {
+            if (vmin > 0) {
+              line2 = sprintf("電圧: %.2f V（設計下限 %.2f V）", vn / 1e6, vmin / 1e6)
+            } else {
+              line2 = sprintf("電圧: %.2f V", vn / 1e6)
+            }
+          }
+
+          v_ref = (vn > 0) ? (vn / 1e6) : ((vmin > 0) ? (vmin / 1e6) : 0)
+          pw_w = 0
+          if (has_pw) {
+            if (pw_unit == "W") pw_w = pw_v / 1e6
+            else if (pw_unit == "A" && v_ref > 0) pw_w = (pw_v / 1e6) * v_ref
+          }
+
+          line3 = ""
+          rem_h = 0
+          if (mode == "energy") {
+            health = (design_v > 0) ? (100.0 * full_v / design_v) : 0
+            if (design_v > 0) {
+              line3 = sprintf("容量: %.2f / %.2f Wh（設計 %.2f Wh / 健康度 %.0f%%）", now_v / 1e6, full_v / 1e6, design_v / 1e6, health)
+            } else {
+              line3 = sprintf("容量: %.2f / %.2f Wh", now_v / 1e6, full_v / 1e6)
+            }
+            if (pw_w > 0.1) {
+              if (st == "Discharging" && now_v > 0) rem_h = (now_v / 1e6) / pw_w
+              else if (st == "Charging" && full_v > now_v) rem_h = ((full_v - now_v) / 1e6) / pw_w
+            }
+          } else if (mode == "charge") {
+            health = (design_v > 0) ? (100.0 * full_v / design_v) : 0
+            if (v_ref > 0) {
+              now_wh = (now_v / 1e6) * v_ref
+              full_wh = (full_v / 1e6) * v_ref
+              if (design_v > 0) {
+                line3 = sprintf("容量: %.2f / %.2f Wh（%.2f / %.2f Ah / 健康度 %.0f%%）", now_wh, full_wh, now_v / 1e6, full_v / 1e6, health)
+              } else {
+                line3 = sprintf("容量: %.2f / %.2f Wh（%.2f / %.2f Ah）", now_wh, full_wh, now_v / 1e6, full_v / 1e6)
+              }
+              if (pw_w > 0.1) {
+                if (st == "Discharging" && now_v > 0) rem_h = now_wh / pw_w
+                else if (st == "Charging" && full_v > now_v) rem_h = (full_wh - now_wh) / pw_w
+              }
+            } else if (design_v > 0) {
+              line3 = sprintf("容量: %.2f / %.2f Ah（健康度 %.0f%%）", now_v / 1e6, full_v / 1e6, health)
+            } else {
+              line3 = sprintf("容量: %.2f / %.2f Ah", now_v / 1e6, full_v / 1e6)
+            }
+          }
+
+          line4 = ""
+          if (has_pw && (pw_unit == "W" || v_ref > 0)) {
+            sign = (st == "Charging") ? "+" : ((st == "Discharging") ? "-" : "")
+            eta_str = ""
+            if (rem_h > 0) {
+              tot_m = int(rem_h * 60 + 0.5)
+              hh = int(tot_m / 60)
+              mm = tot_m % 60
+              dur = (hh > 0) ? sprintf("%d時間%d分", hh, mm) : sprintf("%d分", mm)
+              eta_ts = strftime("%H:%M", systime() + int(rem_h * 3600 + 0.5))
+              if (st == "Charging") {
+                eta_str = sprintf("  満充電まで %s (%s)", dur, eta_ts)
+              } else if (st == "Discharging") {
+                eta_str = sprintf("  残り %s (%s)", dur, eta_ts)
+              }
+            }
+            line4 = sprintf("電力: %s%.2f W%s", sign, pw_w, eta_str)
+          }
+
+          tip = line1
+          if (line2 != "") tip = tip "\n" line2
+          if (line3 != "") tip = tip "\n" line3
+          if (line4 != "") tip = tip "\n" line4
+
+          if (cap == 0 && st == "Discharging" && vn > 5500000) {
+            tip = tip "\n注: 残量 0% 表示でも電圧あり（満充電→空→満充電で較正）"
+          } else if (raw_cap != "" && int(raw_cap + 0) != cap) {
+            tip = tip sprintf("\n注: カーネル capacity=%s%%", raw_cap)
+          }
+
+          printf "%s\0%s\0%s\0", text, classes, tip
+        }')
+
+      jq -cn \
+        --arg text "$text" \
+        --arg tooltip "$tip" \
+        --arg classes "$classes" \
+        '{text: $text, tooltip: $tooltip, class: ($classes | split(" ") | map(select(length > 0)))}'
+    '';
+  };
+
   waybarClock = pkgs.writeShellScript "waybar-hypr-clock" ''
     export LC_ALL=C
     export TZDIR="${pkgs.tzdata}/share/zoneinfo"
@@ -3029,7 +3286,7 @@ in
       margin-right = 8;
       modules-left = [ "custom/restic" ];
       modules-center = [ ];
-      modules-right = [ "custom/clock" ];
+      modules-right = [ "custom/battery" "custom/clock" ];
       # Status file written by modules/nixos/backup.nix while restic runs.
       "custom/restic" = {
         exec = pkgs.writeShellScript "waybar-hypr-restic" ''
@@ -3045,6 +3302,17 @@ in
         signal = 8;
         hide-empty-text = true;
         tooltip = true;
+      };
+      "custom/battery" = {
+        exec =
+          "${lib.getExe waybarBattery} "
+          + (if isChromebook then "--adapter AC" else "--bat BAT1 --adapter ACAD");
+        return-type = "json";
+        interval = 5;
+        signal = 14;
+        tooltip = true;
+        escape = true;
+        hide-empty-text = true;
       };
       "custom/clock" = {
         exec = "${waybarClock}";
@@ -3206,6 +3474,20 @@ in
       padding: 0 10px;
       color: #e6edf3;
       background: #15383a;
+    }
+    window.hypr-status-bottom#waybar #custom-battery {
+      padding: 0 10px;
+      color: #9fe7e7;
+      background: transparent;
+    }
+    window.hypr-status-bottom#waybar #custom-battery.warning { color: #e5c07b; }
+    window.hypr-status-bottom#waybar #custom-battery.critical { color: #e06c75; }
+    window.hypr-status-bottom#waybar #custom-battery.charging,
+    window.hypr-status-bottom#waybar #custom-battery.plugged,
+    window.hypr-status-bottom#waybar #custom-battery.full,
+    window.hypr-status-bottom#waybar #custom-battery.discharging {
+      background: transparent;
+      animation: none;
     }
     window.hypr-status-bottom#waybar #custom-clock {
       padding: 0 10px;
