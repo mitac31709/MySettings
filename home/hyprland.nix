@@ -359,6 +359,8 @@ let
         sleep 0.25
       done
 
+      systemctl --user kill --kill-who=main --signal=RTMIN+11 waybar-hypr-status.service >/dev/null 2>&1 || true
+
       now_jst="$(TZ="Asia/Tokyo" date '+%Y-%m-%d %H:%M:%S %Z')"
       now_utc="$(TZ="UTC" date '+%Y-%m-%d %H:%M:%S %Z')"
       if [ "$synced" -eq 1 ]; then
@@ -370,6 +372,64 @@ let
       fi
     '';
   };
+
+  waybarClock = pkgs.writeShellScript "waybar-hypr-clock" ''
+    export LC_ALL=C
+    export TZDIR="${pkgs.tzdata}/share/zoneinfo"
+    printf -v now '%(%s)T' -1
+    TZ="Asia/Tokyo"  printf -v jst '%(%Y-%m-%d (%a) %H:%M:%S)T' "$now"
+    TZ="UTC"         printf -v utc '%(%Y-%m-%d (%a) %H:%M:%S)T' "$now"
+    TZ="US/Eastern"  printf -v nyc '%(%Y-%m-%d (%a) %H:%M:%S)T' "$now"
+    TZ="US/Pacific"  printf -v lax '%(%Y-%m-%d (%a) %H:%M:%S)T' "$now"
+    TZ="Europe/London" printf -v lon '%(%Y-%m-%d (%a) %H:%M:%S)T' "$now"
+    TZ="Asia/Kolkata"  printf -v ist '%(%Y-%m-%d (%a) %H:%M:%S)T' "$now"
+    TZ="UTC" printf -v utc_s '%(%S)T' "$now"
+    is_pm=0
+    if [ "$utc_s" = "00" ] || [ "$utc_s" = "30" ]; then
+      is_pm=1
+    fi
+    printf -v bar '%-4s %s' "JST" "$jst"
+    printf -v sep $'\n'
+    # Derive TAI-UTC from tzdata leap-seconds.list; GPST = TAI - 19s (epoch 1980-01-06).
+    dtai=10
+    if [ -r "$TZDIR/leap-seconds.list" ]; then
+      while read -r ntp val _; do
+        case "$ntp" in
+          ""|\#*) continue ;;
+        esac
+        case "$ntp$val" in *[!0-9]*) continue ;; esac
+        ntp_now=$((ntp - 2208988800))
+        if [ "$ntp" -le "$ntp_now" ]; then
+          dtai="$val"
+        fi
+      done < "$TZDIR/leap-seconds.list"
+    fi
+    gps_off=$((dtai - 19))
+    gps_unix=$((now + gps_off))
+    gps_sec=$((now - 315964800 + gps_off))
+    gps_week=$((gps_sec / 604800))
+    gps_tow=$((gps_sec % 604800))
+    TZ="UTC" printf -v gps_ts '%(%Y-%m-%d (%a) %H:%M:%S)T' "$gps_unix"
+    printf -v gps_row '%-4s %s (UTC%+ds / W%d %ds)' "GPST" "$gps_ts" "$gps_off" "$gps_week" "$gps_tow"
+    printf -v unix_row '%-4s %s' "UNIX" "$now"
+    lines="$bar$sep$utc$sep$nyc$sep$lax$sep$lon$sep$ist$sep───────────────────────────────────────$sep$gps_row$sep$unix_row"
+
+    if [ -e /run/systemd/timesync/synchronized ]; then
+      ntp_line="NTP: 同期済み（クリックで時刻同期）"
+    else
+      ntp_line="NTP: 同期待ち（クリックで時刻同期）"
+    fi
+    tooltip="$lines\n\n$ntp_line"
+    # Build table with fixed labels in tooltip
+    printf -v t_jst '%-4s %s' "JST" "$jst"
+    printf -v t_utc '%-4s %s' "UTC" "$utc"
+    printf -v t_nyc '%-4s %s' "NYC" "$nyc"
+    printf -v t_lax '%-4s %s' "LAX" "$lax"
+    printf -v t_lon '%-4s %s' "LON" "$lon"
+    printf -v t_ist '%-4s %s' "IST" "$ist"
+    tooltip="$t_jst$sep$t_utc$sep$t_nyc$sep$t_lax$sep$t_lon$sep$t_ist$sep───────────────────────────────────────$sep$gps_row$sep$unix_row\n\n$ntp_line"
+    printf '{"text":"%s","tooltip":"%s"}\n' "$bar" "$tooltip"
+  '';
 
   waybarJquakeStatus = pkgs.writeShellApplication {
     name = "waybar-jquake-status";
@@ -2964,13 +3024,12 @@ in
       name = "hypr-status-bottom";
       layer = "top";
       position = "bottom";
-      height = 26;
+      height = 30;
       margin-left = 8;
       margin-right = 8;
-      exclusive = false;
       modules-left = [ "custom/restic" ];
       modules-center = [ ];
-      modules-right = [ ];
+      modules-right = [ "custom/clock" ];
       # Status file written by modules/nixos/backup.nix while restic runs.
       "custom/restic" = {
         exec = pkgs.writeShellScript "waybar-hypr-restic" ''
@@ -2986,6 +3045,14 @@ in
         signal = 8;
         hide-empty-text = true;
         tooltip = true;
+      };
+      "custom/clock" = {
+        exec = "${waybarClock}";
+        return-type = "json";
+        interval = 1;
+        signal = 11;
+        tooltip = true;
+        on-click = lib.getExe ntpSync;
       };
     }
   ];
@@ -3130,14 +3197,20 @@ in
       color: #6b7785;
     }
 
-    /* Bottom status bar: restic backup progress (auto-hides when idle) */
+    /* Bottom status bar: restic progress + clock */
     window.hypr-status-bottom#waybar {
-      background: transparent;
+      background: #0b0f14;
+      color: #9fe7e7;
     }
     window.hypr-status-bottom#waybar #custom-restic {
       padding: 0 10px;
       color: #e6edf3;
       background: #15383a;
+    }
+    window.hypr-status-bottom#waybar #custom-clock {
+      padding: 0 10px;
+      color: #9fe7e7;
+      background: transparent;
     }
     window.hypr-status-bottom#waybar #custom-restic.running {
       color: #9fe7e7;
