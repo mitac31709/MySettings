@@ -2874,7 +2874,10 @@ in
       width = 34;
       margin-top = 8;
       margin-bottom = 8;
-      modules-left = [ "custom/updates" ];
+      modules-left = [
+        "custom/cheatsheet"
+        "custom/updates"
+      ];
       modules-center = [ ];
       modules-right = [
         "custom/startup-sound"
@@ -2883,6 +2886,11 @@ in
         "custom/capsomnia"
         "custom/keep-screen-on"
       ];
+      "custom/cheatsheet" = {
+        format = "?";
+        tooltip = "チートシート";
+        on-click = "${showCheatsheet}";
+      };
       "custom/updates" = {
         exec = pkgs.writeShellScript "waybar-hypr-flake-updates" ''
           f="''${XDG_RUNTIME_DIR}/flake-update-status"
@@ -3001,6 +3009,15 @@ in
     }
     tooltip label {
       color: #9fe7e7;
+    }
+
+    /* Left status bar: cheatsheet */
+    window.hypr-status-side#waybar #custom-cheatsheet {
+      padding: 8px 0;
+      color: #33c5c5;
+      background: transparent;
+      min-width: 34px;
+      font-size: 14px;
     }
 
     /* Left status bar: flake updates indicator */
