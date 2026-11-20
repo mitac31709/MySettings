@@ -367,6 +367,8 @@ in
       "wheel"
       "systemd-journal" # restic backup notify reads unit logs for progress/summary
       "dialout" # /dev/ttyUSB* / ttyACM* (ESP32, Arduino, …)
+      "input" # /dev/input/event* (WhatPulse keystroke/mouse counting on Wayland)
+      "vboxusers" # VirtualBox host / USB passthrough
     ];
     # Set a password after first boot: passwd mitac
   };
@@ -421,6 +423,45 @@ in
   # Steam needs the NixOS module (32-bit libs, FHS, steam-hardware).
   # Also pulls in hardware.graphics.enable32Bit, which Bottles/Wine need.
   programs.steam.enable = true;
+
+  # VirtualBox host (builds vboxdrv/vboxnet* kernel modules and suid wrappers;
+  # do not also add pkgs.virtualbox to environment.systemPackages).
+  virtualisation.virtualbox.host = {
+    enable = true;
+    enableExtensionPack = true;
+  };
+
+  # WhatPulse External PCap Service: captures network traffic for the WhatPulse
+  # AppImage without needing root/setcap on the desktop client.
+  systemd.services.whatpulse-pcap-service = {
+    description = "WhatPulse External PCap Service";
+    after = [ "network.target" ];
+    wants = [ "network.target" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "simple";
+      ExecStart = "${pkgs.whatpulse-pcap-service}/bin/whatpulse-pcap-service";
+      Restart = "always";
+      RestartSec = 5;
+      NoNewPrivileges = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      PrivateTmp = true;
+      ProtectKernelTunables = true;
+      ProtectKernelModules = true;
+      ProtectControlGroups = true;
+      RestrictRealtime = true;
+      RestrictNamespaces = true;
+      CapabilityBoundingSet = [
+        "CAP_NET_RAW"
+        "CAP_NET_ADMIN"
+      ];
+      AmbientCapabilities = [
+        "CAP_NET_RAW"
+        "CAP_NET_ADMIN"
+      ];
+    };
+  };
 
   # LocalSend (LAN file transfer); opens TCP/UDP 53317 by default.
   programs.localsend.enable = true;

@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "kmscon-chawan" ];
+  system.nixos.tags = [ "kmscon-chawan-activity-trackers" ];
 }
