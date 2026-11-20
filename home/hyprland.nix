@@ -333,6 +333,13 @@ let
       -run-command '${hyprExecBin} {cmd}' \
       -run-shell-command '${rofiRunTerm} {cmd}'
   '';
+  # rofi drun routed through hypr-exec so the window opens on the workspace
+  # active at selection time (not where focus lands when it maps).
+  rofiDrunLauncher = pkgs.writeShellScript "rofi-drun-hypr" ''
+    exec ${rofiBin} -show drun \
+      -run-command '${hyprExecBin} {cmd}' \
+      -run-shell-command '${hyprExecBin} ${ghosttyBin} -e {cmd}'
+  '';
   # Super+N: switch to the lowest unused numbered workspace (no-op if current
   # workspace is already empty, ignoring pinned floating windows).
   newWorkspace = pkgs.writeShellApplication {
@@ -1212,6 +1219,13 @@ let
       section = "起動・終了";
       label = "rofi コマンド実行（Enter / 端末: Shift+Enter）";
       keys = "Super+P";
+    }
+    {
+      section = "起動・終了";
+      label = "rofi drun（hypr-exec 経由で選択時 WS に起動）";
+      keys = "Super+Shift+P";
+      run = "${rofiDrunLauncher}";
+      mode = "exec";
     }
     {
       section = "起動・終了";
@@ -2905,6 +2919,7 @@ in
       hl.bind(mod .. " + M",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w center-window"}), { dont_inhibit = true })
       hl.bind(mod .. " + X",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w logout-menu"}), { dont_inhibit = true })
       hl.bind(mod .. " + P",         hl.dsp.exec_cmd(${builtins.toJSON "${rofiRunner}"}), { dont_inhibit = true })
+      hl.bind(mod .. " + SHIFT + P", hl.dsp.exec_cmd(${builtins.toJSON "${rofiDrunLauncher}"}), { dont_inhibit = true })
       hl.bind(mod .. " + N",         hl.dsp.exec_cmd(${builtins.toJSON (lib.getExe newWorkspace)}), { dont_inhibit = true })
       hl.bind(mod .. " + E",         hl.dsp.exec_cmd(${builtins.toJSON openYazi}))
       hl.bind(mod .. " + V",         hl.dsp.exec_cmd("clipboard-history"))
