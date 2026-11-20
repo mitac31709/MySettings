@@ -2391,12 +2391,14 @@ in
 
   # Colorshell (GTK4 + Astal): top bar, notifications, control center, runner,
   # logout menu, OSD, wallpaper switcher + pywal16 dynamic color engine.
-  # Also enables services.hyprpaper, services.hyprsunset, and Colorshell's Hyprlock config.
+  # Disable Colorshell's bundled hyprlock template (uses removed disable_loading_bar
+  # and bare bash/playerctl/hostnamectl missing from hypridle's service PATH);
+  # configure programs.hyprlock explicitly below.
   programs.colorshell = {
     enable = true;
     hyprpaper.enable = true;
     hyprsunset.enable = true;
-    hyprlock.enable = true;
+    hyprlock.enable = false;
     settings = {
       color = {
         engine = "pywal16";
@@ -2455,6 +2457,97 @@ in
       run install -m 0644 "${initialHyprpaperConf}" "$conf"
     fi
   '';
+
+  # Hyprlock (Hyprlock 0.9+ schema; replaces Colorshell's broken bundled template).
+  programs.hyprlock = {
+    enable = true;
+    settings = {
+      general = {
+        hide_cursor = false;
+        text_trim = false;
+        fractional_scaling = 2;
+      };
+      auth = {
+        pam.enabled = true;
+        fingerprint.enabled = false;
+      };
+      background = [
+        {
+          monitor = "";
+          path = "${wallpaperPng}";
+          blur_passes = 3;
+          color = "rgb(${p.bgHex})";
+        }
+      ];
+      label = [
+        {
+          monitor = "";
+          text = ''cmd[update:30000] ${pkgs.coreutils}/bin/date +"%R"'';
+          color = "rgb(${p.fgHex})";
+          shadow_passes = 1;
+          shadow_size = 2;
+          shadow_color = "rgb(${p.bgHex})";
+          shadow_boost = 0.4;
+          font_size = 112;
+          font_family = "Adwaita Sans";
+          position = "0, -60";
+          halign = "center";
+          valign = "top";
+        }
+        {
+          monitor = "";
+          text = ''cmd[update:43200000] ${pkgs.coreutils}/bin/date +"%Y-%m-%d (%a)"'';
+          color = "rgb(${p.fgSecondaryHex})";
+          shadow_passes = 1;
+          shadow_size = 2;
+          shadow_color = "rgb(${p.bgHex})";
+          shadow_boost = 0.4;
+          font_size = 20;
+          font_family = "Adwaita Sans";
+          position = "0, -220";
+          halign = "center";
+          valign = "top";
+        }
+        {
+          monitor = "";
+          text = "${config.home.username} · ${flakeTarget}";
+          color = "rgb(${p.fgMutedHex})";
+          font_size = 11;
+          font_family = theme.font.mono;
+          position = "0, 12";
+          halign = "center";
+          valign = "bottom";
+        }
+      ];
+      input-field = [
+        {
+          monitor = "";
+          size = "220, 40";
+          outline_thickness = 2;
+          dots_size = 0.2;
+          dots_spacing = 0.4;
+          dots_center = true;
+          outer_color = "rgb(${p.borderHex})";
+          inner_color = "rgb(${p.surfaceHex})";
+          font_color = "rgb(${p.fgHex})";
+          fade_on_empty = false;
+          placeholder_text = "パスワード…";
+          hide_input = false;
+          check_color = "rgb(${p.accentAltHex})";
+          fail_color = "rgb(${p.dangerHex})";
+          fail_text = "<i>$FAIL <b>($ATTEMPTS)</b></i>";
+          capslock_color = "rgb(${p.warningHex})";
+          position = "0, 48";
+          halign = "center";
+          valign = "bottom";
+          shadow_passes = 1;
+          shadow_size = 2;
+          shadow_color = "rgb(${p.bgHex})";
+          shadow_boost = 0.2;
+        }
+      ];
+    };
+  };
 
   # Hypridle: 5m dim -> 10m lock -> 15m DPMS off (all respect keep-screen-on).
   services.hypridle = {

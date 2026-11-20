@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "colorshell-tilion-qalculate" ];
+  system.nixos.tags = [ "system-error-log-fixes" ];
 }

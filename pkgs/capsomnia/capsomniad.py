@@ -223,7 +223,30 @@ def set_backlight_raw(device: str, raw: int) -> bool:
         return False
 
 
+def is_waybar_running() -> bool:
+    uid = os.getuid()
+    try:
+        entries = list(Path("/proc").iterdir())
+    except OSError:
+        return False
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            if entry.stat().st_uid != uid:
+                continue
+            comm = (entry / "comm").read_text(encoding="utf-8", errors="ignore").strip()
+        except OSError:
+            continue
+        if comm in {"waybar", ".waybar-wrapped"}:
+            return True
+    return False
+
+
 def notify_waybar() -> None:
+    # Avoid spawning `systemctl --user` every timer tick on shells without Waybar.
+    if not is_waybar_running():
+        return
     try:
         subprocess.run(
             [
@@ -393,6 +416,32 @@ class CapsomniaDaemon:
         except Exception as err:
             self.last_error_msg = f"ListInhibitors failed: {err}"
             return False
+
+    def is_sleep_preparing(self) -> bool:
+        try:
+            if self.bus is None:
+                self.bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+            res = self.bus.call_sync(
+                "org.freedesktop.login1",
+                "/org/freedesktop/login1",
+                "org.freedesktop.DBus.Properties",
+                "Get",
+                GLib.Variant("(ss)", ("org.freedesktop.login1.Manager", "PreparingForSleep")),
+                GLib.VariantType("(v)"),
+                Gio.DBusCallFlags.NONE,
+                1000,
+                None,
+            )
+            return bool(res.unpack()[0])
+        except Exception:
+            return False
+
+    def request_system_sleep(self, *, reason: str) -> bool:
+        if self.is_sleep_preparing():
+            log(f"skipping {reason} suspend request (logind suspend already in progress)")
+            return True
+        res = self.helper_call({"cmd": "suspend"}, timeout=5.0)
+        return bool(res.get("ok"))
 
     def sync_hypr_xkb(self) -> None:
         dedicated = bool(self.prefs["dedicated_caps_lock_mode"])
@@ -782,8 +831,7 @@ class CapsomniaDaemon:
         if lid_closed is not True:
             log(f"skipping immediate sleep (lid_closed={lid_closed})")
             return False
-        res = self.helper_call({"cmd": "suspend"}, timeout=5.0)
-        return bool(res.get("ok"))
+        return self.request_system_sleep(reason="auto_off_timer")
 
     def on_poll_tick(self) -> bool:
         with self.lock:
@@ -916,8 +964,7 @@ class CapsomniaDaemon:
                 return err_response(self.last_error_msg or "failed to disable")
             sleep_req = False
             if not no_sleep:
-                res = self.helper_call({"cmd": "suspend"}, timeout=5.0)
-                sleep_req = bool(res.get("ok"))
+                sleep_req = self.request_system_sleep(reason="cli_off")
             st = self.status_payload()
             st["sleep_requested"] = sleep_req
             return ok_response(st)
@@ -935,8 +982,7 @@ class CapsomniaDaemon:
                 return err_response(self.last_error_msg or "failed")
             sleep_req = False
             if not no_sleep:
-                res = self.helper_call({"cmd": "suspend"}, timeout=5.0)
-                sleep_req = bool(res.get("ok"))
+                sleep_req = self.request_system_sleep(reason="cli_toggle")
             st = self.status_payload()
             st["sleep_requested"] = sleep_req
             return ok_response(st)

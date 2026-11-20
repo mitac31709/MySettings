@@ -50,4 +50,14 @@ in
       ${vaioLidOpenResume} || true
     fi
   '';
+
+  # Intel Wi-Fi 6 AX200 [8086:2723] hits frequent PCIe AER BadTLP correctable errors
+  # with L1 ASPM / ClkPM enabled on this Ice Lake root port. Disable link ASPM L1/ClkPM
+  # specifically for this device rather than disabling system-wide ASPM.
+  services.udev.extraRules = ''
+    ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x8086", ATTR{device}=="0x2723", TEST=="link/l1_2_aspm", ATTR{link/l1_2_aspm}="0"
+    ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x8086", ATTR{device}=="0x2723", TEST=="link/l1_1_aspm", ATTR{link/l1_1_aspm}="0"
+    ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x8086", ATTR{device}=="0x2723", TEST=="link/l1_aspm", ATTR{link/l1_aspm}="0"
+    ACTION=="add", SUBSYSTEM=="pci", ATTR{vendor}=="0x8086", ATTR{device}=="0x2723", TEST=="link/clkpm", ATTR{link/clkpm}="0"
+  '';
 }

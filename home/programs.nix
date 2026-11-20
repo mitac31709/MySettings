@@ -216,11 +216,35 @@ in
     settings.git_protocol = "https";
   };
 
-  # prefer-dark so GTK / Colorshell and portals default to dark mode.
-  dconf.settings = {
-    "org/gnome/desktop/interface" = {
-      color-scheme = "prefer-dark";
+  # Clean GTK 2/3/4 + Adwaita icon/cursor config (replaces legacy KDE settings.ini
+  # with missing colorreload-gtk-module / breeze_cursors). Keep gtk.colorScheme null
+  # so gtk-4.0/settings.ini uses gtk-interface-color-scheme instead of deprecated
+  # gtk-application-prefer-dark-theme (which triggers libadwaita warnings).
+  gtk = {
+    enable = true;
+    colorScheme = null;
+    iconTheme = {
+      package = pkgs.adwaita-icon-theme;
+      name = "Adwaita";
     };
+    gtk2.force = true;
+    gtk3 = {
+      colorScheme = "dark";
+      extraConfig.gtk-application-prefer-dark-theme = true;
+    };
+    gtk4.extraConfig.gtk-interface-color-scheme = "dark";
+  };
+
+  home.pointerCursor = {
+    enable = true;
+    package = pkgs.adwaita-icon-theme;
+    name = "Adwaita";
+    size = 24;
+    gtk.enable = true;
+    x11.enable = true;
+  };
+
+  dconf.settings = {
     # Keystroke overlay preferences (JP keyboard layout, interactive mode).
     "one/alynx/showmethekey" = {
       clickable = true;
@@ -232,6 +256,8 @@ in
   # Stub: prevent stale light colors.css @import from overriding GTK / Colorshell theme.
   xdg.configFile = lib.mkMerge [
     {
+      "gtk-3.0/settings.ini".force = true;
+      "gtk-4.0/settings.ini".force = true;
       "gtk-3.0/gtk.css".text = ''
         /* keep empty — avoid stale light GTK CSS overrides */
       '';

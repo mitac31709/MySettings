@@ -100,24 +100,36 @@ let
       lib.makeBinPath [
         pkgs.coreutils
         pkgs.getent
+        pkgs.util-linux
       ]
     }:$PATH"
     uid="$(getent passwd ${user} | cut -d: -f3)"
-    export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/''${uid}/bus"
-    export XDG_RUNTIME_DIR="/run/user/''${uid}"
+    bus="/run/user/''${uid}/bus"
+    runtime="/run/user/''${uid}"
     urgency="$1"
     title="$2"
     body="$3"
     # Session bus may be absent (no graphical login); do not fail the backup.
-    if [ ! -S "/run/user/''${uid}/bus" ]; then
+    if [ ! -S "$bus" ]; then
       echo "restic-home-notify: no session bus for ''${user}; skip: $title" >&2
       exit 0
     fi
-    exec ${notifySend} \
+    set -- \
+      ${notifySend} \
       --app-name=Restic \
       --urgency="$urgency" \
       -h ${notifyHint} \
       "$title" "$body"
+    # Progress/cleanup hooks run as root; drop to the session user so dbus-broker accepts EXTERNAL auth.
+    if [ "$(id -u)" -eq 0 ]; then
+      exec runuser -u ${user} -- env \
+        DBUS_SESSION_BUS_ADDRESS="unix:path=''${bus}" \
+        XDG_RUNTIME_DIR="''${runtime}" \
+        "$@"
+    fi
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=''${bus}"
+    export XDG_RUNTIME_DIR="''${runtime}"
+    exec "$@"
   '';
 
   # Write / clear the waybar status JSON under mitac's XDG_RUNTIME_DIR.

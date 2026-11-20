@@ -25,6 +25,8 @@ in
   # ("setgid: Operation not permitted"); ProcSubset=pid and
   # ProtectKernelTunables hide/RO-mount /proc/sysrq-trigger (sysrqOom).
   systemd.services.keyd.serviceConfig = {
+    # keyd 2.6.0 exits 15 on SIGTERM instead of returning 0.
+    SuccessExitStatus = [ 15 ];
     CapabilityBoundingSet = lib.mkForce [
       "CAP_SYS_NICE"
       "CAP_IPC_LOCK"

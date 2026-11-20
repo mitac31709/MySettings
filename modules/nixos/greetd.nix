@@ -33,7 +33,10 @@ let
       cert_path="/var/lib/regreet/lan-mouse.pem"
     fi
 
+    # Receive-only in greeter: skip portal capture so lan-mouse never spawns xdg-desktop-portal.
     ${lib.getExe pkgs.lan-mouse} \
+      --capture-backend dummy \
+      --emulation-backend wlroots \
       --config ${greeterLanMouseConfig} \
       --cert-path "$cert_path" \
       daemon &
@@ -105,6 +108,16 @@ in
 {
   services.displayManager.regreet = {
     enable = true;
+    # nixpkgs regreet bundles vendored glycin without libglycin hooks/loaders, so
+    # glycin::Loader fails and ReGreet falls back to looping the static PNG
+    # through GStreamer gtk::MediaFile at ~150% CPU until GTK4 hangs.
+    package = pkgs.regreet.overrideAttrs (old: {
+      nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ pkgs.libglycin.patchVendorHook ];
+      buildInputs = (old.buildInputs or [ ]) ++ [
+        pkgs.libglycin.setupHook
+        pkgs.glycin-loaders
+      ];
+    });
     font = {
       package = pkgs.nerd-fonts.jetbrains-mono;
       name = theme.font.mono;
@@ -133,6 +146,7 @@ in
       };
       widget.clock = {
         format = "%Y-%m-%d (%a)  %H:%M:%S";
+        locale = "ja_JP";
         resolution = "1s";
         timezone = "Asia/Tokyo";
       };
@@ -205,10 +219,10 @@ in
   };
 
   # Keep the greeter's Hyprland isolated from user@<greeter>.service so it does not
-  # start hyprland-session.target / graphical-session.target (hypridle, warp-taskbar,
-  # portals, pipewire) under the read-only /var/empty greeter user.
+  # start hyprland-session.target / graphical-session.target or D-Bus portals / AT-SPI
+  # under the read-only /var/empty greeter user.
   services.greetd.settings.default_session.command =
-    "${pkgs.coreutils}/bin/env HYPRLAND_NO_SD_NOTIFY=1 HYPRLAND_NO_SD_VARS=1 HYPRLAND_NO_SD_TARGET=1 ${pkgs.dbus}/bin/dbus-run-session ${pkgs.hyprland}/bin/Hyprland --config ${greeterHyprlandConfig}";
+    "${pkgs.coreutils}/bin/env -u DBUS_SESSION_BUS_ADDRESS HYPRLAND_NO_SD_NOTIFY=1 HYPRLAND_NO_SD_VARS=1 HYPRLAND_NO_SD_TARGET=1 GDK_DEBUG=no-portals GTK_A11Y=none NO_AT_BRIDGE=1 ${pkgs.hyprland}/bin/Hyprland --config ${greeterHyprlandConfig}";
 
   # UniClipboard (and other libsecret apps) need an unlocked Secret Service.
   # KWallet's ksecretd rejects UniClipboard's binary probe; use gnome-keyring.

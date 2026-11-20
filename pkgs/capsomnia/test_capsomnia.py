@@ -199,6 +199,36 @@ class CapsomniaCoreTests(unittest.TestCase):
         finally:
             os.close(r_fd)
 
+    def test_sleep_request_skips_when_logind_already_preparing(self) -> None:
+        from unittest.mock import MagicMock, patch
+        from gi.repository import GLib
+        from capsomniad import CapsomniaDaemon
+
+        daemon = CapsomniaDaemon.__new__(CapsomniaDaemon)
+        fake_bus = MagicMock()
+        fake_bus.call_sync.return_value = GLib.Variant("(v)", (GLib.Variant("b", True),))
+        daemon.bus = fake_bus
+        daemon.helper_call = MagicMock(return_value={"ok": True})
+
+        with patch("capsomniad.read_lid_closed", return_value=True):
+            self.assertTrue(daemon.request_system_sleep_if_closed())
+        daemon.helper_call.assert_not_called()
+
+        fake_bus.call_sync.return_value = GLib.Variant("(v)", (GLib.Variant("b", False),))
+        with patch("capsomniad.read_lid_closed", return_value=True):
+            self.assertTrue(daemon.request_system_sleep_if_closed())
+        daemon.helper_call.assert_called_once_with({"cmd": "suspend"}, timeout=5.0)
+
+    def test_notify_waybar_skips_subprocess_when_waybar_absent(self) -> None:
+        from unittest.mock import patch
+        from capsomniad import notify_waybar
+
+        with patch("capsomniad.is_waybar_running", return_value=False), patch(
+            "capsomniad.subprocess.run"
+        ) as mock_run:
+            notify_waybar()
+        mock_run.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
