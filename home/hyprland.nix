@@ -45,6 +45,10 @@ let
   inputSection = if isChromebook then "入力・Chromebook" else "入力・VAIO";
   powerSection = if isChromebook then "電源・Type-C" else "電源・省電力";
 
+  repoPath = config.mitac.repoPath;
+  flakeUpdateCheck = lib.getExe config.mitac.scripts.flakeUpdateCheck;
+  flakeUpdate = lib.getExe config.mitac.scripts.flakeUpdate;
+
   colorshellBin = lib.getExe config.programs.colorshell.package;
   ghosttyBin = "${pkgs.ghostty}/bin/ghostty";
   rofiBin = lib.getExe config.programs.rofi.package;
@@ -56,6 +60,14 @@ let
   brightnessctl = "${pkgs.brightnessctl}/bin/brightnessctl";
   btopBin = "${pkgs.btop}/bin/btop";
   nmtuiBin = "${pkgs.networkmanager}/bin/nmtui";
+
+  flakeUpdateRunner = pkgs.writeShellScript "open-flake-update" ''
+    rc=0
+    ${flakeUpdate} || rc=$?
+    printf '\n終了コード: %d [Enter で閉じる] ' "$rc"
+    IFS= read -r _ || true
+  '';
+  openFlakeUpdate = "${ghosttyBin} -e ${flakeUpdateRunner}";
 
   # Initial writable hyprpaper.conf seeded for Colorshell (hyprpaper 0.8+ block syntax).
   initialHyprpaperConf = pkgs.writeText "hyprpaper-initial.conf" ''
@@ -2512,6 +2524,33 @@ in
     fi
   '';
 
+  # Periodic flake / .deb update probe for the Hyprland status bar updates indicator.
+  systemd.user.services.flake-update-check = {
+    Unit = {
+      Description = "Check MySettings flake / pinned .deb updates for Hyprland status bar";
+      ConditionPathExists = "${repoPath}/flake.nix";
+    };
+    Service = {
+      Type = "oneshot";
+      ExecStart = flakeUpdateCheck;
+    };
+  };
+  systemd.user.timers.flake-update-check = {
+    Unit = {
+      Description = "Periodic flake update check for Hyprland status bar";
+      ConditionPathExists = "${repoPath}/flake.nix";
+    };
+    Timer = {
+      # Boot直後の Wi‑Fi/WARP 未接続で誤検知しにくいよう少し遅らせる。
+      OnBootSec = "5min";
+      OnUnitActiveSec = "6h";
+      Persistent = true;
+    };
+    Install = {
+      WantedBy = [ "timers.target" ];
+    };
+  };
+
   # Hyprlock (Hyprlock 0.9+ schema; replaces Colorshell's broken bundled template).
   programs.hyprlock = {
     enable = true;
@@ -2602,6 +2641,91 @@ in
       ];
     };
   };
+
+  # Hyprland status bar (Waybar): persistent indicators for flake updates / restic /
+  # keep-screen-on etc., complementing Colorshell. Modules are added incrementally.
+  systemd.user.services.waybar-hypr-status = {
+    Unit = {
+      Description = "Waybar status bar for Hyprland";
+      After = [ "graphical-session.target" ];
+      PartOf = [ "graphical-session.target" ];
+      StartLimitIntervalSec = 30;
+      StartLimitBurst = 3;
+    };
+    Service = {
+      ExecStart = "${pkgs.waybar}/bin/waybar -c %h/.config/waybar-hypr-status/config -s %h/.config/waybar-hypr-status/style.css";
+      ExecReload = "${pkgs.coreutils}/bin/kill -SIGUSR2 $MAINPID";
+      Restart = "on-failure";
+      RestartSec = 2;
+    };
+    Install = {
+      WantedBy = [ "graphical-session.target" ];
+    };
+  };
+
+  xdg.configFile."waybar-hypr-status/config".text = builtins.toJSON {
+    name = "hypr-status";
+    layer = "top";
+    position = "left";
+    width = 34;
+    margin-top = 8;
+    margin-bottom = 8;
+    modules-left = [ "custom/updates" ];
+    modules-center = [ ];
+    modules-right = [ ];
+    "custom/updates" = {
+      exec = pkgs.writeShellScript "waybar-hypr-flake-updates" ''
+        f="''${XDG_RUNTIME_DIR}/flake-update-status"
+        if [ -s "$f" ]; then
+          cat "$f"
+        else
+          # Always show the check button before the first timer run.
+          printf '%s\n' '{"text":"","class":"idle","tooltip":"更新チェック待ち\nクリックで flake-update"}'
+        fi
+      '';
+      return-type = "json";
+      interval = 30;
+      signal = 9;
+      tooltip = true;
+      on-click = openFlakeUpdate;
+    };
+  };
+
+  xdg.configFile."waybar-hypr-status/style.css".text = ''
+    * {
+      border: none;
+      border-radius: 0;
+      font-family: "JetBrainsMono Nerd Font", sans-serif;
+      font-size: 13px;
+      min-height: 0;
+    }
+    window#waybar {
+      background: #0b0f14;
+      color: #9fe7e7;
+    }
+    tooltip {
+      background: #0b0f14;
+      color: #9fe7e7;
+      border: 1px solid #33c5c5;
+    }
+    tooltip label {
+      color: #9fe7e7;
+    }
+    #custom-updates {
+      padding: 8px 0;
+      color: #9fe7e7;
+      background: transparent;
+      min-width: 34px;
+    }
+    #custom-updates.idle {
+      color: #6b7785;
+    }
+    #custom-updates.available {
+      color: #9fe7e7;
+      background: #15383a;
+      border-top: 2px solid #33c5c5;
+    }
+  '';
 
   # Hypridle: 5m dim -> 10m lock -> 15m DPMS off (all respect keep-screen-on).
   services.hypridle = {
