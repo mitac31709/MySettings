@@ -269,7 +269,7 @@ in
       };
     })
     (lib.optionalAttrs (hasSecretFile lanMouseSecretFile) {
-      # Share one per-host TLS identity across mitac and regreet's greeter so
+      # Share one per-host TLS identity across mitac and the Dux Greeter user so
       # peers see the same fingerprint at the login screen and in Hyprland.
       "lan-mouse-pem" = {
         file = secretsDir + "/${lanMouseSecretFile}";
@@ -279,8 +279,8 @@ in
       };
       "lan-mouse-greeter-pem" = {
         file = secretsDir + "/${lanMouseSecretFile}";
-        owner = "greeter";
-        group = "greeter";
+        owner = "dms-greeter";
+        group = "dms-greeter";
         mode = "0400";
       };
     })

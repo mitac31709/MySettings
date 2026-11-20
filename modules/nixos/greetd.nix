@@ -1,5 +1,5 @@
-# greetd + ReGreet on minimal Hyprland (Lua 0.57+ config) with receive-only Lan Mouse
-# for remote login across vaio / chromebook.
+# greetd + Dux Greeter (Quickshell) on minimal Hyprland (Lua 0.57+ config),
+# with receive-only Lan Mouse for remote login across vaio / chromebook.
 {
   config,
   pkgs,
@@ -12,8 +12,10 @@ let
   theme = import ../../lib/theme.nix;
   p = theme.palette;
   wallpaperPng = theme.mkWallpaper pkgs;
-  cursorPkg = theme.cursor.package pkgs;
   cursorSizeStr = toString theme.cursor.size;
+
+  duxGreeterPkg = config.services.displayManager.dux-greeter.package;
+  duxCacheDir = "/var/lib/dms-greeter";
 
   greeterLanMouseConfig = (pkgs.formats.toml { }).generate "greeter-lan-mouse.toml" {
     port = lanMouse.port;
@@ -24,15 +26,14 @@ let
   greeterCertPath =
     config.age.secrets."lan-mouse-greeter-pem".path or "/run/agenix/lan-mouse-greeter-pem";
 
-  greeterRunner = pkgs.writeShellScript "regreet-with-lan-mouse" ''
+  # Started from the greeter Hyprland config. Poll the parent (Hyprland) so the
+  # daemon is gone before the user session binds UDP 4242.
+  greeterLanMouse = pkgs.writeShellScript "greeter-lan-mouse" ''
     set -u
-
-    # Ensure ReGreet sees NixOS desktop sessions (Hyprland UWSM) and GTK themes/icons.
-    export XDG_DATA_DIRS="${config.services.displayManager.sessionData.desktops}/share:/run/current-system/sw/share''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
 
     cert_path=${lib.escapeShellArg greeterCertPath}
     if [ ! -r "$cert_path" ]; then
-      cert_path="/var/lib/regreet/lan-mouse.pem"
+      cert_path="${duxCacheDir}/lan-mouse.pem"
     fi
 
     # Receive-only in greeter: skip portal capture so lan-mouse never spawns xdg-desktop-portal.
@@ -45,16 +46,16 @@ let
     lm_pid=$!
 
     cleanup() {
-      # Wait for the greeter daemon to exit so UDP port 4242 is free before the user session starts.
       if kill -0 "$lm_pid" 2>/dev/null; then
         kill "$lm_pid" 2>/dev/null || true
         wait "$lm_pid" 2>/dev/null || true
       fi
-      ${pkgs.hyprland}/bin/hyprctl dispatch 'hl.dsp.exit()' >/dev/null 2>&1 || true
     }
     trap cleanup EXIT INT TERM
 
-    ${lib.getExe config.services.displayManager.regreet.package}
+    while kill -0 "$PPID" 2>/dev/null; do
+      sleep 0.2
+    done
   '';
 
   greeterHyprlandConfig = pkgs.writeText "greeter-hyprland.lua" ''
@@ -62,6 +63,9 @@ let
     hl.env("XCURSOR_SIZE", ${builtins.toJSON cursorSizeStr})
     hl.env("HYPRCURSOR_SIZE", ${builtins.toJSON cursorSizeStr})
     ${lib.optionalString theme.cursor.hyprcursor ''hl.env("HYPRCURSOR_THEME", ${builtins.toJSON theme.cursor.name})''}
+
+    -- dms-greeter also sets this, but keep it explicit in the compositor config.
+    hl.env("DMS_RUN_GREETER", "1")
 
     hl.monitor({
       output = "",
@@ -71,7 +75,7 @@ let
     })
 
     hl.on("hyprland.start", function()
-      hl.exec_cmd(${builtins.toJSON "${greeterRunner}"})
+      hl.exec_cmd(${builtins.toJSON "${greeterLanMouse}"})
     end)
 
     hl.config({
@@ -111,129 +115,115 @@ let
       },
     })
   '';
+
+  # dms-greeter prefers start-hyprland when it is in PATH; that watchdog starts
+  # hyprland-session.target under the greeter user. Expose only the bare
+  # compositor + hyprctl instead.
+  greeterHyprlandBin = pkgs.runCommand "hyprland-greeter-bin" { } ''
+    mkdir -p "$out/bin"
+    ln -s ${lib.getExe' pkgs.hyprland "Hyprland"} "$out/bin/Hyprland"
+    ln -s ${lib.getExe' pkgs.hyprland "hyprctl"} "$out/bin/hyprctl"
+  '';
+
+  # Dux custom theme: the "Nocturne Slate" palette shared with the desktop.
+  greeterTheme = pkgs.writeText "dms-colors.json" (
+    builtins.toJSON {
+      name = "Nocturne Slate";
+      primary = p.accent;
+      primaryText = p.bg;
+      primaryContainer = p.accentSoft;
+      secondary = p.accentAlt;
+      surfaceTint = p.accent;
+      surface = p.surface;
+      surfaceText = p.fg;
+      surfaceVariant = p.surfaceAlt;
+      surfaceVariantText = p.fgSecondary;
+      surfaceContainerLowest = p.bg;
+      surfaceContainerLow = p.surface;
+      surfaceContainer = p.surface;
+      surfaceContainerHigh = p.surfaceAlt;
+      surfaceContainerHighest = p.surfaceHover;
+      background = p.bg;
+      backgroundText = p.fg;
+      outline = p.border;
+      error = p.danger;
+      warning = p.warning;
+      info = p.accentAlt;
+      matugen_type = "scheme-tonal-spot";
+    }
+  );
+
+  greeterSettings = pkgs.writeText "settings.json" (
+    builtins.toJSON {
+      currentThemeName = "custom";
+      customThemeFile = "${greeterTheme}";
+      fontFamily = "Inter";
+      monoFontFamily = "Fira Code";
+      fontScale = 1.0;
+      radiusStrength = 50;
+      animationDuration = 180;
+      clockFormat = "auto";
+      showSeconds = false;
+      lockDateFormat = "yyyy-MM-dd (ddd)";
+      # The greeter has no usable network; avoid weather lookups at login.
+      weatherEnabled = false;
+      lockScreenShowWeather = false;
+      lockScreenShowPowerActions = true;
+      greeterRememberLastSession = false;
+      greeterRememberLastUser = false;
+      greeterEnableFprint = false;
+      greeterEnableU2f = false;
+    }
+  );
+
+  greeterSession = pkgs.writeText "session.json" (
+    builtins.toJSON {
+      wallpaperPath = "${wallpaperPng}";
+      wallpaperFillMode = "PreserveAspectCrop";
+    }
+  );
+
+  greeterCommand = pkgs.writeShellScript "dux-greeter-session" ''
+    set -eu
+
+    export PATH=${
+      lib.makeBinPath [
+        greeterHyprlandBin
+        pkgs.quickshell
+        pkgs.glib
+        pkgs.bash
+        pkgs.coreutils
+      ]
+    }
+    export XDG_DATA_DIRS="${config.services.displayManager.sessionData.desktops}/share:/run/current-system/sw/share''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
+
+    # Keep the greeter's compositor isolated from user@<greeter>.service so it
+    # does not start graphical-session.target, portals or AT-SPI.
+    exec ${lib.getExe' pkgs.coreutils "env"} -u DBUS_SESSION_BUS_ADDRESS \
+      HYPRLAND_NO_SD_NOTIFY=1 HYPRLAND_NO_SD_VARS=1 HYPRLAND_NO_SD_TARGET=1 \
+      GDK_DEBUG=no-portals GTK_A11Y=none NO_AT_BRIDGE=1 \
+      ${lib.getExe' duxGreeterPkg "dms-greeter"} \
+      --cache-dir ${duxCacheDir} \
+      --command hyprland \
+      -C ${greeterHyprlandConfig}
+  '';
 in
 {
-  services.displayManager.regreet = {
+  services.displayManager.regreet.enable = false;
+
+  services.displayManager.dux-greeter = {
     enable = true;
-    # nixpkgs regreet bundles vendored glycin without libglycin hooks/loaders, so
-    # glycin::Loader fails and ReGreet falls back to looping the static PNG
-    # through GStreamer gtk::MediaFile at ~150% CPU until GTK4 hangs.
-    package = pkgs.regreet.overrideAttrs (old: {
-      nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ pkgs.libglycin.patchVendorHook ];
-      buildInputs = (old.buildInputs or [ ]) ++ [
-        pkgs.libglycin.setupHook
-        pkgs.glycin-loaders
-      ];
-    });
-    cursorTheme = {
-      package = cursorPkg;
-      name = theme.cursor.name;
-    };
-    font = {
-      package = pkgs.nerd-fonts.jetbrains-mono;
-      name = theme.font.mono;
-      size = 12;
-    };
-    settings = {
-      GTK = {
-        application_prefer_dark_theme = true;
-      };
-      background = {
-        path = "${wallpaperPng}";
-        fit = "Cover";
-      };
-      appearance = {
-        greeting_msg = "Welcome · ${config.networking.hostName}";
-      };
-      commands = {
-        reboot = [
-          "${pkgs.systemd}/bin/systemctl"
-          "reboot"
-        ];
-        poweroff = [
-          "${pkgs.systemd}/bin/systemctl"
-          "poweroff"
-        ];
-      };
-      widget.clock = {
-        format = "%Y-%m-%d (%a)  %H:%M:%S";
-        locale = "ja_JP";
-        resolution = "1s";
-        timezone = "Asia/Tokyo";
-      };
-    };
-    extraCss = ''
-      window {
-        background-color: ${p.bg};
-        color: ${p.fg};
-        font-family: "${theme.font.mono}", sans-serif;
-      }
-
-      box, grid {
-        color: ${p.fg};
-      }
-
-      frame, .background > box {
-        border-radius: ${toString theme.radius.popup}px;
-      }
-
-      entry {
-        background-color: rgba(${p.surfaceRgb}, 0.90);
-        color: ${p.fg};
-        border: 1px solid ${p.border};
-        border-radius: ${toString theme.radius.control}px;
-        padding: 8px 12px;
-        caret-color: ${p.accent};
-      }
-
-      entry:focus {
-        border-color: ${p.accent};
-        box-shadow: 0 0 0 1px rgba(${p.accentRgb}, 0.35);
-      }
-
-      button {
-        background-color: rgba(${p.surfaceAltRgb}, 0.92);
-        color: ${p.fg};
-        border: 1px solid ${p.border};
-        border-radius: ${toString theme.radius.control}px;
-        padding: 7px 14px;
-        transition: background-color 140ms ease, border-color 140ms ease;
-      }
-
-      button:hover {
-        background-color: ${p.surfaceHover};
-        border-color: ${p.accent};
-      }
-
-      button.suggested-action {
-        background-color: ${p.accentSoft};
-        color: ${p.accent};
-        border-color: ${p.accent};
-      }
-
-      button.destructive-action {
-        background-color: ${p.dangerSoft};
-        color: ${p.danger};
-        border-color: ${p.danger};
-      }
-
-      combobox button {
-        background-color: rgba(${p.surfaceRgb}, 0.90);
-        border: 1px solid ${p.border};
-        border-radius: ${toString theme.radius.control}px;
-      }
-
-      label {
-        color: ${p.fg};
-      }
-    '';
+    compositor.name = "hyprland";
+    configFiles = [
+      greeterSettings
+      greeterSession
+      greeterTheme
+    ];
   };
 
-  # Keep the greeter's Hyprland isolated from user@<greeter>.service so it does not
-  # start hyprland-session.target / graphical-session.target or D-Bus portals / AT-SPI
-  # under the read-only /var/empty greeter user.
-  services.greetd.settings.default_session.command =
-    "${pkgs.coreutils}/bin/env -u DBUS_SESSION_BUS_ADDRESS HYPRLAND_NO_SD_NOTIFY=1 HYPRLAND_NO_SD_VARS=1 HYPRLAND_NO_SD_TARGET=1 GDK_DEBUG=no-portals GTK_A11Y=none NO_AT_BRIDGE=1 ${pkgs.hyprland}/bin/Hyprland --config ${greeterHyprlandConfig}";
+  # The module creates the dms-greeter user, cache dir and config seeding; only
+  # replace its command to add the greeter-only environment isolation.
+  services.greetd.settings.default_session.command = lib.mkForce "${greeterCommand}";
 
   # UniClipboard (and other libsecret apps) need an unlocked Secret Service.
   # KWallet's ksecretd rejects UniClipboard's binary probe; use gnome-keyring.
@@ -253,11 +243,7 @@ in
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = pkgs.writeShellScript "numLockOnTty" ''
-        for tty in /dev/tty{1..6}; do
-          ${pkgs.kbd}/bin/setleds -D +num < "$tty" || true
-        done
-      '';
+      ExecStart = "${pkgs.kbd}/bin/setleds +num < /dev/console";
     };
   };
 }

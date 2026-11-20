@@ -1,4 +1,4 @@
-# Graphical desktop stack: Hyprland (UWSM) + greetd/ReGreet + console-gui + portals.
+# Graphical desktop stack: Hyprland (UWSM) + greetd/Dux Greeter + console-gui + portals.
 {
   config,
   lib,
@@ -12,7 +12,7 @@
     ./console-gui.nix
   ];
 
-  # XKB default layout (used by XWayland / console / greeter) and CUPS printing.
+  # XKB default layout (used by XWayland / console) and CUPS printing.
   # No standalone Xorg server is needed for the pure Wayland Hyprland stack.
   services.xserver.xkb = {
     layout = "jp";
@@ -39,7 +39,7 @@
   services.gnome.at-spi2-core.enable = true;
 
   # Audio user daemons default to ConditionUser=!root, so the greetd greeter
-  # user (UID 994, HOME=/var/empty) starts them and fails creating state.
+  # user (dms-greeter) starts them and fails creating state.
   systemd.user.sockets = lib.mkMerge [
     (lib.mkIf (config.services.pipewire.enable && !config.services.pipewire.systemWide) (
       {

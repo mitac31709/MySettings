@@ -2249,7 +2249,7 @@ let
     }
     {
       section = "端末連携";
-      label = "注: vaio 左端 → chromebook (ReGreet ログイン画面も可・解除 Ctrl+Shift+Super+Alt)";
+      label = "注: vaio 左端 → chromebook (Dux Greeter ログイン画面も可・解除 Ctrl+Shift+Super+Alt)";
     }
     {
       section = "端末連携";

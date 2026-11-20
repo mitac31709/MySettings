@@ -1,6 +1,6 @@
 # MySettings — NixOS flake（mitac）
 
-ホスト／ユーザー `mitac` 向けの Flakes + Home Manager 構成。ログインは **greetd + ReGreet（最小 Hyprland 上＋`lan-mouse` 受信）**、デスクトップは **Hyprland（UWSM）のみ**。**VAIO（Intel 第8世代以降）** と **Chromebook（ASUS CX5500FE / delbin）** の両対応です。
+ホスト／ユーザー `mitac` 向けの Flakes + Home Manager 構成。ログインは **greetd + Dux Greeter（最小 Hyprland 上＋`lan-mouse` 受信）**、デスクトップは **Hyprland（UWSM）のみ**。**VAIO（Intel 第8世代以降）** と **Chromebook（ASUS CX5500FE / delbin）** の両対応です。
 
 ## ブランチ
 
@@ -9,9 +9,9 @@
 | `main` | **作業・適用の既定**。VAIO（`.#vaio`）および delbin Chromebook（`.#chromebook`、レガシー別名 `.#mitac`）向け設定を含む |
 | `chromebook` | レガシー。新規作業には使わない |
 
-## セッション（greetd + ReGreet）
+## セッション（greetd + Dux Greeter）
 
-起動後は最小構成 Hyprland 上で **ReGreet**（`modules/nixos/greetd.nix`）と受信専用の **Lan Mouse** が起動します（他端末からログイン入力可能、提供セッションは **Hyprland (UWSM)** のみ）。
+起動後は最小構成 Hyprland 上で **Dux Greeter**（`modules/nixos/greetd.nix`）と受信専用の **Lan Mouse** が起動します（他端末からログイン入力可能、提供セッションは **Hyprland (UWSM)** のみ）。
 
 起動時から lan-mouse でログイン入力するには Wayland compositor（ここでは greeter 用 Hyprland）が必須のため、TTY 直の **tuigreet** とは同じ段階では両立できません。純 tuigreet にする場合は greeter 中の lan-mouse を諦める必要があります。
 
@@ -70,7 +70,7 @@ NixOS の世代番号はマシン固有です。コミットとの対応はビ�
 
 新しい PC や空の SSD へ NixOS Live USB から導入する手順です。この flake は `systemd-boot`（UEFI 専用、`modules/nixos/common.nix`）と `zramSwap`（RAM 100% / `zstd`、`modules/nixos/laptop/power.nix`）を使うため、**UEFI ブート有効（セキュアブート無効）**・GPT（ESP + root、swap パーティション不要）を前提とします。
 
-> **初回設定は Graphical ISO の日本語 LXQt 環境で行うのがおすすめ**: `ja_JP.UTF-8` と `Asia/Tokyo`・日本語キーボードを選べば日本語表示（フォント）・Firefox・GUI 端末（QTerminal）・クリップボードが初期状態から使えるため、GitHub 認証・Bitwarden（`rbw` + GUI `pinentry-qt`）・Google Drive OAuth の操作や長い文字列の扱いが格段に楽になります（日本語入力 IME の Meltype はこの flake 適用後に有効になります）。Minimal ISO 等の GUI 無しコンソール（TTY）を直接使う場合のみ、コンソールフォントに日本語グリフが無いため ISO 既定の英語（`en_US.UTF-8`）のままで進めてください。なお、この flake は Calamares が生成する `/etc/nixos/configuration.nix`（一時的な **LXQt / LightDM 設定**）を import しないため、設定取得・復元後に `nixos-rebuild switch --flake` と再起動を行えばクリーンに **greetd（ReGreet）+ Hyprland 専用環境**へ切り替わります。
+> **初回設定は Graphical ISO の日本語 LXQt 環境で行うのがおすすめ**: `ja_JP.UTF-8` と `Asia/Tokyo`・日本語キーボードを選べば日本語表示（フォント）・Firefox・GUI 端末（QTerminal）・クリップボードが初期状態から使えるため、GitHub 認証・Bitwarden（`rbw` + GUI `pinentry-qt`）・Google Drive OAuth の操作や長い文字列の扱いが格段に楽になります（日本語入力 IME の Meltype はこの flake 適用後に有効になります）。Minimal ISO 等の GUI 無しコンソール（TTY）を直接使う場合のみ、コンソールフォントに日本語グリフが無いため ISO 既定の英語（`en_US.UTF-8`）のままで進めてください。なお、この flake は Calamares が生成する `/etc/nixos/configuration.nix`（一時的な **LXQt / LightDM 設定**）を import しないため、設定取得・復元後に `nixos-rebuild switch --flake` と再起動を行えばクリーンに **greetd（Dux Greeter）+ Hyprland 専用環境**へ切り替わります。
 
 ### 0. USB メディアの作成と起動
 
@@ -108,7 +108,7 @@ NixOS の世代番号はマシン固有です。コミットとの対応はビ�
      nixos-rebuild switch --flake .#vaio
    ```
 7. 完了後、カーネル／bootvine／`greetd`／Hyprland セッションへクリーンに切り替えるため `sudo reboot` する。
-   （※ この flake は一時的な LXQt を含まないため、再起動後は `ReGreet` + Hyprland のみになります。後で旧世代の LXQt ストアパスを掃除したい場合は `sudo nix-collect-garbage -d` を実行できます）
+   （※ この flake は一時的な LXQt を含まないため、再起動後は `Dux Greeter` + Hyprland のみになります。後で旧世代の LXQt ストアパスを掃除したい場合は `sudo nix-collect-garbage -d` を実行できます）
 
 #### パターン B: Live USB（CLI）から `nixos-install --flake` で直接導入
 
@@ -157,7 +157,7 @@ GUI インストーラを経由せず、USB のターミナルから直接この
      nixos-install --flake /tmp/MySettings#vaio
    ```
    プロンプトに従って `root` パスワードを設定する。
-5. **【必須】再起動前に作業コピーの配置・`mitac` のパスワード設定・所有者変更を行う**（`modules/nixos/common.nix` に初期パスワードが無いため、未設定だと `ReGreet` でログインできません）：
+5. **【必須】再起動前に作業コピーの配置・`mitac` のパスワード設定・所有者変更を行う**（`modules/nixos/common.nix` に初期パスワードが無いため、未設定だと `Dux Greeter` でログインできません）：
    ```bash
    sudo cp -a /tmp/MySettings /mnt/home/mitac/MySettings
    sudo nixos-enter --root /mnt
@@ -173,7 +173,7 @@ GUI インストーラを経由せず、USB のターミナルから直接この
 
 ### 2. 初回ログイン後の設定チェックリスト
 
-再起動後の `ReGreet` でユーザー `mitac` を選んでログインすると **Hyprland (UWSM)** が起動します（端末: **Ctrl+Alt+T** / **Super+Return**、IME トグル: **Ctrl+Super+Space**、英数⇔日本語: **半角/全角**、ランチャー: **Super+D** / **Super+Space** / **Alt+Space**）。秘密情報はこのリポジトリ内の **`secrets/*.age`（agenix）+ Bitwarden（`agenix-master-key`）** で宣言的に管理できます。未展開または未移行の項目のみ実機で設定します。
+再起動後の `Dux Greeter` でユーザー `mitac` を選んでログインすると **Hyprland (UWSM)** が起動します（端末: **Ctrl+Alt+T** / **Super+Return**、IME トグル: **Ctrl+Super+Space**、英数⇔日本語: **半角/全角**、ランチャー: **Super+D** / **Super+Space** / **Alt+Space**）。秘密情報はこのリポジトリ内の **`secrets/*.age`（agenix）+ Bitwarden（`agenix-master-key`）** で宣言的に管理できます。未展開または未移行の項目のみ実機で設定します。
 
 1. **宣言的シークレットの展開（`secrets/*.age` を利用している場合）**:
    - `/etc/agenix/master.key` をまだ配置していない場合は、まず `secrets bootstrap`（または `cd ~/MySettings && ./scripts/restore-on-nixos.sh --agenix-only`）を実行して Bitwarden の `agenix-master-key` を配置し、`rebuild` を実行します（`/run/agenix/*`・Wi-Fi プロファイル・`gh` 認証・SSH 鍵・backup 鍵・ユーザー環境変数が一括展開されます）。
@@ -277,7 +277,7 @@ Calamares（Graphical ISO）で `btrfs` を選ぶと初回導入時は `compress
 
 #### 再起動後の復元と圧縮確認
 
-1. `ReGreet` で `mitac` にログインする（日本語 Hyprland 環境が起動します。端末は **Ctrl+Alt+T**）。
+1. `Dux Greeter` で `mitac` にログインする（日本語 Hyprland 環境が起動します。端末は **Ctrl+Alt+T**）。
 2. `cd ~/MySettings && ./scripts/restore-on-nixos.sh --from <vaio|chromebook|mitac> --new-device` を実行する（VAIO 側の最新環境を戻すなら `--from vaio --new-device`、旧来の単一バックアップから戻すなら `--from mitac --new-device`）。`rbw` の設定・ロック解除・同期を経て Bitwarden の `restic-home` から暗号化パスワードと Google OAuth 情報が自動取得され、Bitwarden に **`agenix-master-key`** がある場合は `/etc/agenix/master.key` も同時に配置されます。
 3. 上記コマンド（`--new-device` 付き）により、新しく生成済みの `~/MySettings`（新しい Btrfs UUID の `hosts/chromebook/hardware-configuration.nix`）や現在の `rbw` / `rclone.conf` を壊さずに `/home/mitac` が復元され、Bluetooth / WARP・P2P 鍵・トークン系認証は他端末と競合しないよう初期状態にリセットされます。その後 `rebuild` を実行すると、`/run/agenix/*` の各種シークレット・`restic`/`rclone` 設定・保存済み Wi-Fi・GitHub CLI 認証・SSH 鍵・Tailscale 鍵が agenix から宣言的に展開されます。
 4. 圧縮率と scrub タイマーを確認する：
@@ -374,7 +374,7 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **フォント** — JetBrainsMono Nerd Font（ターミナル／等幅の既定）、Adwaita Sans / Mono（Colorshell・Hyprlock 用）
 - **シークレット管理（agenix × Bitwarden）** — `secrets/*.age` を NixOS（`modules/nixos/secrets.nix`）で `/run/agenix/*` へ復号し、共通マスター鍵 `agenix-master-key` のみを Bitwarden（`rbw`）で保持。`secrets` コマンド（`scripts/secrets-tool.sh`）で管理
 - **暗号化バックアップ** — `restic` + `rclone` で `/home` を Google Drive へ。`agenix` 移行時は `/run/agenix/` 経由で自動無監視実行（未移行時・他端末リカバリ時は Bitwarden `rbw`）。詳細は下記。
-- **デスクトップ** — greetd + ReGreet（Hyprland (UWSM) + **Colorshell**。ログイン画面も受信専用 Lan Mouse 待機）
+- **デスクトップ** — greetd + Dux Greeter（Hyprland (UWSM) + **Colorshell**。ログイン画面も受信専用 Lan Mouse 待機）
 - **bootvine** — 起動コンソールに systemd ジョブの依存ツリーを表示（[bootvine](https://codeberg.org/wvhulle/bootvine)、`services.bootvine.enable`）。反映には `rebuild` のあと再起動が必要
 - **起動音（`startup-sound`）** — ログイン時に `startup-sound.service` が歴代 Windows（3.1 / 95 / 98 / 2000 / XP / 7 / 11）・Mac・GameCube・Nintendo Wii・Wii Sports・ブルーアーカイブ・マリオカート8 と `~/.local/share/startup-sounds/`（または `home/startup-sounds/`）の音声からランダム再生（`home/startup-sound.nix`）。チートシート `Super+/` や CLI から `startup-sound --list` / `--menu` / `--toggle` が利用可能
 - **gui** — ディスプレイ無し時は `cage` で単一 GUI アプリを起動（`gui firefox` など）。引数なしは `apps` を起動
@@ -455,7 +455,7 @@ Nerd Font のアイコンが空白に見える場合: `fc-cache -rf` を実行�
 | `wol-pc-env.age` | `/run/agenix/wol-pc-env` | Wake-on-LAN 設定（`wake-pc` が `/run/agenix/wol-pc-env` または `$WOL_PC_CONFIG` を参照） |
 | `adbkey.age` | `/run/agenix/adbkey` | ADB USB デバッグ秘密鍵 `~/.android/adbkey`（`secrets/adbkey.pub` があれば `~/.android/adbkey.pub` もリンク） |
 | `opencode-service.json.age` | `/run/agenix/opencode-service.json` | OpenCode ローカルサービスパスワード `~/.config/opencode/service.json` |
-| `lan-mouse-{chromebook,vaio}.pem.age` | `/run/agenix/lan-mouse-{,greeter-}pem` | 端末別 Lan Mouse TLS 秘密鍵（`mitac` `~/.config/lan-mouse/lan-mouse.pem` と `greeter` 用で同一ホスト鍵を共有） |
+| `lan-mouse-{chromebook,vaio}.pem.age` | `/run/agenix/lan-mouse-{,greeter-}pem` | 端末別 Lan Mouse TLS 秘密鍵（`mitac` `~/.config/lan-mouse/lan-mouse.pem` と `dms-greeter` 用で同一ホスト鍵を共有） |
 
 ### 初回セットアップ・日常運用（`secrets` CLI）
 
@@ -791,7 +791,7 @@ modules/nixos/secrets.nix         # agenix 複号設定、nm-agenix-profiles、T
 modules/nixos/remote-builder.nix  # wsl-builder リモートビルダー設定（agenix 経由）
 modules/nixos/desktop.nix         # hyprland + greetd + console-gui + portals + XKB/印刷
 modules/nixos/hyprland.nix        # Hyprland (UWSM) システム側（セッション変数・hyprlock・greetd 既定セッション等）
-modules/nixos/greetd.nix          # ReGreet + 受信専用 Lan Mouse（最小 Hyprland 上）
+modules/nixos/greetd.nix          # Dux Greeter + 受信専用 Lan Mouse（最小 Hyprland 上）
 modules/nixos/console-gui.nix     # gui / apps（cage 単一アプリ起動・CLI ランチャー等）
 modules/nixos/laptop.nix          # ノート PC 共通ハードウェア集約（./laptop/*）
 modules/nixos/laptop/             # graphics（Intel iHD + SOF + i915.enable_psr=0/dc=0）/ input（keyd OOM）/ power（zram + thermald + auto-cpufreq + power-chords）

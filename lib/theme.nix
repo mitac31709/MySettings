@@ -1,5 +1,5 @@
 # Unified visual design system for the Hyprland desktop ("Nocturne Slate").
-# Shared across Hyprland, Waybar, Hyprlock, Hyprpaper, Mako, Rofi, ReGreet,
+# Shared across Hyprland, Waybar, Hyprlock, Hyprpaper, Mako, Rofi, Dux Greeter,
 # Ghostty, Satty, and Fcitx5 (Meltype).
 let
   palette = {
@@ -198,7 +198,7 @@ let
     '';
 
   # Active mouse cursor theme shared across Hyprland, GTK, X11/XWayland,
-  # Hyprcursor, and ReGreet. See home/cursors/README.md to switch to a custom
+  # Hyprcursor, and Dux Greeter. See home/cursors/README.md to switch to a custom
   # local or externally packaged cursor theme.
   cursor = {
     name = "Adwaita";
