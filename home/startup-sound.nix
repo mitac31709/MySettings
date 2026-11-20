@@ -183,6 +183,7 @@ let
 
       refresh_waybar() {
         systemctl --user kill --kill-who=main --signal=RTMIN+13 waybar.service >/dev/null 2>&1 || true
+        systemctl --user kill --kill-who=main --signal=RTMIN+13 waybar-hypr-status.service >/dev/null 2>&1 || true
       }
 
       notify() {

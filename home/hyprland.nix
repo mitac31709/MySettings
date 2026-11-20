@@ -48,6 +48,7 @@ let
   repoPath = config.mitac.repoPath;
   flakeUpdateCheck = lib.getExe config.mitac.scripts.flakeUpdateCheck;
   flakeUpdate = lib.getExe config.mitac.scripts.flakeUpdate;
+  startupSoundBin = lib.getExe config.mitac.scripts.startupSound;
 
   colorshellBin = lib.getExe config.programs.colorshell.package;
   ghosttyBin = "${pkgs.ghostty}/bin/ghostty";
@@ -2673,7 +2674,10 @@ in
       margin-bottom = 8;
       modules-left = [ "custom/updates" ];
       modules-center = [ ];
-      modules-right = [ "custom/keep-screen-on" ];
+      modules-right = [
+        "custom/startup-sound"
+        "custom/keep-screen-on"
+      ];
       "custom/updates" = {
         exec = pkgs.writeShellScript "waybar-hypr-flake-updates" ''
           f="''${XDG_RUNTIME_DIR}/flake-update-status"
@@ -2689,6 +2693,16 @@ in
         signal = 9;
         tooltip = true;
         on-click = openFlakeUpdate;
+      };
+      "custom/startup-sound" = {
+        exec = "${startupSoundBin} --waybar";
+        return-type = "json";
+        interval = 10;
+        signal = 13;
+        tooltip = true;
+        on-click = "${startupSoundBin} --menu";
+        on-click-right = "${startupSoundBin} --toggle-and-notify";
+        on-click-middle = "${startupSoundBin} --play-bg";
       };
       # Keep-screen-on: marker gates hypridle dim/lock/DPMS (and Capsomnia keep-display-awake).
       "custom/keep-screen-on" = {
@@ -2771,6 +2785,22 @@ in
       color: #9fe7e7;
       background: #15383a;
       border-top: 2px solid #33c5c5;
+    }
+
+    /* Left status bar: startup sound */
+    window.hypr-status-side#waybar #custom-startup-sound {
+      padding: 6px 0;
+      background: transparent;
+      min-width: 34px;
+      font-size: 13px;
+      border-top: 1px solid #15383a;
+    }
+    window.hypr-status-side#waybar #custom-startup-sound.disabled {
+      color: #6b7785;
+    }
+    window.hypr-status-side#waybar #custom-startup-sound.empty {
+      color: #e5c07b;
+      border-left: 2px solid #e5c07b;
     }
 
     /* Left status bar: keep-screen-on indicator */
