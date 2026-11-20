@@ -1014,6 +1014,17 @@ let
     }
     {
       section = "Colorshell・日常";
+      label = "Chawan（端末ブラウザ: cha / mancha）";
+      run = "cha";
+      mode = "term";
+    }
+    {
+      section = "Colorshell・日常";
+      label = "日本語 TTY (kmscon) 切替 / GUI へ戻る";
+      keys = "Ctrl+Alt+F2-F6 / Ctrl+Alt+F1";
+    }
+    {
+      section = "Colorshell・日常";
       label = "NTP 時刻同期 (ntp-sync)";
       run = lib.getExe ntpSync;
       mode = "exec";

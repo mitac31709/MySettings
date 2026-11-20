@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "wallpaper-cursor-super-space" ];
+  system.nixos.tags = [ "kmscon-chawan" ];
 }

@@ -565,6 +565,8 @@ in
       firefox
       # Tor Browser Bundle (not the tor daemon alone).
       tor-browser
+      # Terminal web browser (`cha`) and man-page viewer (`mancha`).
+      chawan
       # On-screen keystroke overlay (useful for demos / Chromebook Fn keys).
       showmethekey
       # Google Quick Share / Nearby Share client for Linux.

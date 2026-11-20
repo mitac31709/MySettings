@@ -327,6 +327,19 @@ in
     emoji = [ "Noto Color Emoji" ];
   };
 
+  # Userspace KMS/DRM console for TTY2-TTY6 with Japanese font rendering
+  # (TTY1 stays owned by greetd while services.displayManager.enable is true).
+  services.kmscon = {
+    enable = true;
+    useXkbConfig = true;
+    config = {
+      font-engine = "pango";
+      font-name = "${theme.font.mono}, Noto Sans Mono CJK JP";
+      font-size = 16;
+      hwaccel = true;
+    };
+  };
+
   nix.settings = {
     experimental-features = [
       "nix-command"
