@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "system-error-log-fixes" ];
+  system.nixos.tags = [ "hyprland-scale-1" ];
 }
