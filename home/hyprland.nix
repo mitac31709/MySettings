@@ -371,6 +371,55 @@ let
     '';
   };
 
+  waybarJquakeStatus = pkgs.writeShellApplication {
+    name = "waybar-jquake-status";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.hyprland
+      pkgs.jq
+      pkgs.systemd
+    ];
+    text = ''
+      mapfile -t ust < <(
+        systemctl --user is-active \
+          jquake.service \
+          stalonetray-jquake.service \
+          jquake-hypr-alert.service 2>/dev/null || true
+      )
+      jq_s="''${ust[0]:-unknown}"
+      st_s="''${ust[1]:-unknown}"
+      al_s="''${ust[2]:-unknown}"
+
+      is_open=0
+      if ${hyprctlBin} clients -j 2>/dev/null | jq -e '
+        [.[] | select(.class == "net-jquake-app-Main")] | length > 0
+      ' >/dev/null; then
+        is_open=1
+      fi
+
+      glyph=$'\uf469'
+      if [ "$jq_s" = "failed" ] || [ "$st_s" = "failed" ] || [ "$al_s" = "failed" ]; then
+        cls="failed"
+        glyph=$'\uf071'
+        tip=$'✗ JQuake: 異常停止\njquake='"$jq_s"$' tray='"$st_s"$' alert='"$al_s"$'\n\n左クリックで起動・表示\n右クリックで管理メニュー'
+      elif [ "$jq_s" = "active" ] && [ "$st_s" = "active" ] && [ "$al_s" = "active" ]; then
+        if [ "$is_open" -eq 1 ]; then
+          cls="open"
+          tip=$'JQuake: 表示中\n\n左クリックでフォーカス\n右クリックで管理メニュー'
+        else
+          cls="active"
+          tip=$'JQuake: 待機中（強震モニタ・EEW 監視）\n\n左クリックで表示\n右クリックで管理メニュー'
+        fi
+      else
+        cls="degraded"
+        tip=$'! JQuake: 停止中\njquake='"$jq_s"$' tray='"$st_s"$' alert='"$al_s"$'\n\n左クリックで起動・表示\n右クリックで管理メニュー'
+      fi
+
+      jq -cn --arg text "$glyph" --arg tooltip "$tip" --arg class "$cls" \
+        '{text: $text, tooltip: $tooltip, class: $class}'
+    '';
+  };
+
   jquakeOpen = pkgs.writeShellApplication {
     name = "jquake-open";
     runtimeInputs = [
@@ -391,10 +440,12 @@ let
       if [ "''${ust[0]:-}" != "active" ] || [ "''${ust[1]:-}" != "active" ] || [ "''${ust[2]:-}" != "active" ]; then
         systemctl --user reset-failed stalonetray-jquake.service jquake.service jquake-hypr-alert.service >/dev/null 2>&1 || true
         systemctl --user start stalonetray-jquake.service jquake.service jquake-hypr-alert.service
+        systemctl --user kill --kill-who=main --signal=RTMIN+12 waybar-hypr-status.service >/dev/null 2>&1 || true
       fi
 
       if ${hyprctlBin} clients -j 2>/dev/null | jq -e '[.[] | select(.class == "net-jquake-app-Main")] | length > 0' >/dev/null; then
         ${hyprctlBin} dispatch 'hl.dsp.focus({ window = "class:^net-jquake-app-Main$" })' >/dev/null 2>&1 || true
+        systemctl --user kill --kill-who=main --signal=RTMIN+12 waybar-hypr-status.service >/dev/null 2>&1 || true
         exit 0
       fi
 
@@ -424,6 +475,7 @@ let
         fi
         sleep 0.1
       done
+      systemctl --user kill --kill-who=main --signal=RTMIN+12 waybar-hypr-status.service >/dev/null 2>&1 || true
     '';
   };
 
@@ -454,6 +506,10 @@ let
             choice="$(printf '%s\n' "$menu" | ${rofiBin} -dmenu -i -p 'JQuake' || true)"
             [ -n "$choice" ] || exit 0
 
+            refresh_jquake_bar() {
+              systemctl --user kill --kill-who=main --signal=RTMIN+12 waybar-hypr-status.service >/dev/null 2>&1 || true
+            }
+
             case "$choice" in
               *"ウィンドウを開く")
                 exec ${lib.getExe jquakeOpen}
@@ -461,13 +517,16 @@ let
               *"再起動"*)
                 systemctl --user reset-failed stalonetray-jquake.service jquake.service jquake-hypr-alert.service >/dev/null 2>&1 || true
                 systemctl --user restart stalonetray-jquake.service jquake.service jquake-hypr-alert.service
+                refresh_jquake_bar
                 ;;
               *"停止")
                 systemctl --user stop jquake.service jquake-hypr-alert.service stalonetray-jquake.service
+                refresh_jquake_bar
                 ;;
               *"開始")
                 systemctl --user reset-failed stalonetray-jquake.service jquake.service jquake-hypr-alert.service >/dev/null 2>&1 || true
                 systemctl --user start stalonetray-jquake.service jquake.service jquake-hypr-alert.service
+                refresh_jquake_bar
                 ;;
               *"状態・ログ表示")
                 exec ${ghosttyBin} -e ${pkgs.bash}/bin/bash -lc "systemctl --user status jquake stalonetray-jquake jquake-hypr-alert --no-pager; echo; journalctl --user -u jquake -u stalonetray-jquake -u jquake-hypr-alert -n 30 --no-pager; printf '\n[Enter で閉じる] '; IFS= read -r _ || true"
@@ -2676,6 +2735,7 @@ in
       modules-center = [ ];
       modules-right = [
         "custom/startup-sound"
+        "custom/jquake"
         "custom/keep-screen-on"
       ];
       "custom/updates" = {
@@ -2703,6 +2763,15 @@ in
         on-click = "${startupSoundBin} --menu";
         on-click-right = "${startupSoundBin} --toggle-and-notify";
         on-click-middle = "${startupSoundBin} --play-bg";
+      };
+      "custom/jquake" = {
+        exec = lib.getExe waybarJquakeStatus;
+        return-type = "json";
+        interval = 5;
+        signal = 12;
+        tooltip = true;
+        on-click = lib.getExe jquakeOpen;
+        on-click-right = lib.getExe jquakeMenu;
       };
       # Keep-screen-on: marker gates hypridle dim/lock/DPMS (and Capsomnia keep-display-awake).
       "custom/keep-screen-on" = {
@@ -2801,6 +2870,29 @@ in
     window.hypr-status-side#waybar #custom-startup-sound.empty {
       color: #e5c07b;
       border-left: 2px solid #e5c07b;
+    }
+
+    /* Left status bar: JQuake */
+    window.hypr-status-side#waybar #custom-jquake {
+      padding: 7px 0;
+      background: transparent;
+      min-width: 34px;
+      font-size: 13px;
+      border-top: 1px solid #15383a;
+    }
+    window.hypr-status-side#waybar #custom-jquake.open {
+      color: #e6edf3;
+      background: #15383a;
+      border-left: 2px solid #33c5c5;
+    }
+    window.hypr-status-side#waybar #custom-jquake.degraded {
+      color: #e5c07b;
+      border-left: 2px solid #e5c07b;
+    }
+    window.hypr-status-side#waybar #custom-jquake.failed {
+      color: #e06c75;
+      background: #3a1a1e;
+      border-left: 2px solid #e06c75;
     }
 
     /* Left status bar: keep-screen-on indicator */
