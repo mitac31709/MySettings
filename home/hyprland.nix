@@ -3437,21 +3437,25 @@ in
     * {
       border: none;
       border-radius: 0;
-      font-family: "JetBrainsMono Nerd Font", sans-serif;
+      font-family: "${theme.font.mono}", sans-serif;
       font-size: 11px;
       min-height: 0;
     }
+
+    /* Nocturne Slate (lib/theme.nix) — unified with Colorshell */
     window#waybar {
-      background: #0b0f14;
-      color: #9fe7e7;
+      background: rgba(${p.bgRgb}, 0.82);
+      color: ${p.fg};
     }
+
     tooltip {
-      background: #0b0f14;
-      color: #9fe7e7;
-      border: 1px solid #33c5c5;
+      background: rgba(${p.surfaceRgb}, 0.98);
+      color: ${p.fg};
+      border: 1px solid ${p.borderStrong};
+      border-radius: ${toString theme.radius.popup}px;
     }
     tooltip label {
-      color: #9fe7e7;
+      color: ${p.fg};
     }
 
     /* Main bottom bar (Sway-era layout, Hyprland modules) */
@@ -3468,71 +3472,97 @@ in
     window.main#waybar #submap,
     window.main#waybar #window {
       padding: 0 8px;
-      color: #9fe7e7;
+      margin: 3px 1px;
+      border-radius: ${toString theme.radius.pill}px;
+      color: ${p.fgSecondary};
       background: transparent;
     }
+
     window.main#waybar #custom-cheatsheet {
-      color: #33c5c5;
+      color: ${p.accent};
+      font-weight: bold;
     }
+
+    window.main#waybar #custom-clock {
+      color: ${p.fg};
+      font-weight: 600;
+    }
+
     window.main#waybar #workspaces button {
-      padding: 0 6px;
-      color: #6b7785;
+      padding: 0 7px;
+      margin: 3px 1px;
+      color: ${p.fgMuted};
       background: transparent;
+      border-radius: ${toString theme.radius.pill}px;
+    }
+    window.main#waybar #workspaces button:hover {
+      color: ${p.fg};
+      background: ${p.surfaceAlt};
     }
     window.main#waybar #workspaces button.active {
-      color: #e6edf3;
-      background: #15383a;
-      border-bottom: 2px solid #33c5c5;
+      color: ${p.fg};
+      background: ${p.accentSoft};
+      border-bottom: 2px solid ${p.accent};
     }
     window.main#waybar #workspaces button.urgent {
-      color: #e6edf3;
-      background: #3a1a1e;
+      color: ${p.fg};
+      background: ${p.dangerSoft};
+      border-bottom: 2px solid ${p.danger};
     }
+
     window.main#waybar #submap {
-      color: #e06c75;
+      color: ${p.warning};
+      background: ${p.surfaceAlt};
     }
+
     window.main#waybar #window {
-      color: #9aa7b5;
+      color: ${p.fgMuted};
     }
+
     window.main#waybar #custom-capsomnia.on {
-      color: #e6edf3;
-      background: #132c20;
-      border-left: 2px solid #34c759;
+      color: ${p.success};
+      background: ${p.accentSoft};
+      border-left: 2px solid ${p.success};
     }
     window.main#waybar #custom-capsomnia.off {
-      color: #6b7785;
+      color: ${p.fgMuted};
     }
     window.main#waybar #custom-capsomnia.error {
-      color: #e06c75;
-      background: #3a1a1e;
-      border-left: 2px solid #e06c75;
+      color: ${p.danger};
+      background: ${p.dangerSoft};
+      border-left: 2px solid ${p.danger};
     }
+
     window.main#waybar #custom-keep-screen-on.activated {
-      color: #e6edf3;
-      background: #15383a;
-      border-left: 2px solid #33c5c5;
+      color: ${p.fg};
+      background: ${p.accentSoft};
+      border-left: 2px solid ${p.accent};
     }
     window.main#waybar #custom-keep-screen-on.deactivated {
-      color: #6b7785;
+      color: ${p.fgMuted};
     }
+
     window.main#waybar #custom-restic {
       padding: 0 8px;
-      color: #e6edf3;
-      background: #15383a;
+      margin: 3px 1px;
+      border-radius: ${toString theme.radius.pill}px;
+      color: ${p.fg};
+      background: ${p.surfaceAlt};
     }
     window.main#waybar #custom-restic.running {
-      color: #9fe7e7;
-      border-left: 2px solid #33c5c5;
+      color: ${p.accent};
+      border-left: 2px solid ${p.accent};
     }
     window.main#waybar #custom-restic.done {
-      color: #98c379;
+      color: ${p.success};
     }
     window.main#waybar #custom-restic.failed {
-      color: #e06c75;
-      background: #3a1a1e;
+      color: ${p.danger};
+      background: ${p.dangerSoft};
     }
-    window.main#waybar #custom-battery.warning { color: #e5c07b; }
-    window.main#waybar #custom-battery.critical { color: #e06c75; }
+
+    window.main#waybar #custom-battery.warning { color: ${p.warning}; }
+    window.main#waybar #custom-battery.critical { color: ${p.danger}; }
     window.main#waybar #custom-battery.charging,
     window.main#waybar #custom-battery.plugged,
     window.main#waybar #custom-battery.full,
@@ -3540,77 +3570,84 @@ in
       background: transparent;
       animation: none;
     }
-    window.main#waybar #network.disconnected { color: #6b7785; }
-    window.main#waybar #pulseaudio.muted { color: #6b7785; }
 
-    /* Side bar: updates (top), startup-sound + JQuake + services + tray (bottom). */
+    window.main#waybar #network.disconnected { color: ${p.fgMuted}; }
+    window.main#waybar #pulseaudio.muted { color: ${p.fgMuted}; }
+
+    /* Side bar: updates (top), startup-sound + JQuake + services + tray (bottom) */
     window.side#waybar #custom-updates,
     window.side#waybar #custom-startup-sound,
     window.side#waybar #custom-jquake,
     window.side#waybar #custom-services,
     window.side#waybar #tray {
-      padding: 4px 0;
-      color: #9fe7e7;
+      color: ${p.fgSecondary};
       background: transparent;
     }
     window.side#waybar #custom-updates,
     window.side#waybar #custom-startup-sound,
     window.side#waybar #custom-jquake,
     window.side#waybar #custom-services {
-      font-family: "JetBrainsMono Nerd Font", sans-serif;
+      font-family: "${theme.font.mono}", sans-serif;
       font-size: 13px;
       min-width: 34px;
+      margin: 1px 3px;
       padding: 8px 0;
+      border-radius: ${toString theme.radius.control}px;
     }
+
     window.side#waybar #custom-updates.idle {
-      color: #6b7785;
+      color: ${p.fgMuted};
     }
     window.side#waybar #custom-updates.available {
-      color: #9fe7e7;
-      background: #15383a;
-      border-top: 2px solid #33c5c5;
+      color: ${p.accent};
+      background: ${p.accentSoft};
+      border-top: 2px solid ${p.accent};
     }
+
     window.side#waybar #custom-startup-sound {
       padding: 6px 0;
-      border-top: 1px solid #15383a;
+      border-top: 1px solid ${p.border};
     }
     window.side#waybar #custom-startup-sound.disabled {
-      color: #6b7785;
+      color: ${p.fgMuted};
     }
     window.side#waybar #custom-startup-sound.empty {
-      color: #e5c07b;
-      border-left: 2px solid #e5c07b;
+      color: ${p.warning};
+      border-left: 2px solid ${p.warning};
     }
+
     window.side#waybar #custom-jquake {
       padding: 7px 0;
-      border-top: 1px solid #15383a;
+      border-top: 1px solid ${p.border};
     }
     window.side#waybar #custom-jquake.open {
-      color: #e6edf3;
-      background: #15383a;
-      border-left: 2px solid #33c5c5;
+      color: ${p.fg};
+      background: ${p.accentSoft};
+      border-left: 2px solid ${p.accent};
     }
     window.side#waybar #custom-jquake.degraded {
-      color: #e5c07b;
-      border-left: 2px solid #e5c07b;
+      color: ${p.warning};
+      border-left: 2px solid ${p.warning};
     }
     window.side#waybar #custom-jquake.failed {
-      color: #e06c75;
-      background: #3a1a1e;
-      border-left: 2px solid #e06c75;
+      color: ${p.danger};
+      background: ${p.dangerSoft};
+      border-left: 2px solid ${p.danger};
     }
+
     window.side#waybar #custom-services {
       padding: 6px 0 3px 0;
-      border-top: 1px solid #15383a;
+      border-top: 1px solid ${p.border};
       font-size: 11px;
     }
     window.side#waybar #custom-services.degraded {
-      border-left: 2px solid #e5c07b;
+      border-left: 2px solid ${p.warning};
     }
     window.side#waybar #custom-services.failed {
-      background: #3a1a1e;
-      border-left: 2px solid #e06c75;
+      background: ${p.dangerSoft};
+      border-left: 2px solid ${p.danger};
     }
+
     window.side#waybar #tray {
       padding: 3px 0 6px 0;
     }
