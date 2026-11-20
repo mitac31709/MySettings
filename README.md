@@ -17,15 +17,15 @@
 
 | セッション | 内容 |
 |------------|------|
-| **Hyprland (UWSM)** | キーボード中心のタイル WM（Lua 設定＋**Colorshell** GTK4/Astal デスクトップシェル）。`pywal16` による壁紙連動の動的配色（枠色同期あり）、hyprpaper / hyprsunset / hyprlock / hypridle。ランチャーは **Colorshell Runner**（Super+D / Alt+Space）。キーボード配列は **jp** |
+| **Hyprland (UWSM)** | キーボード中心のタイル WM（Lua 設定＋**Colorshell** GTK4/Astal デスクトップシェル）。`pywal16` による壁紙連動の動的配色（枠色同期あり）、hyprpaper / hyprsunset / hyprlock / hypridle。ランチャーは **Colorshell Runner**（Super+D / Super+Space / Alt+Space）。キーボード配列は **jp** |
 
 ### 操作感
 
-**Super+Space** は Fcitx5 の IME 有効/無効（グループは Meltype のみ）。
+**Ctrl+Super+Space** は Fcitx5 の IME 有効/無効（グループは Meltype のみ）。
 
 | 操作 | キー | 動作 |
 |------|------|------|
-| 検索／ランチャー | **Super+D** / **Alt+Space** | **Colorshell Runner**（アプリ検索 / `>` クリップボード / `#` 壁紙 / 計算 / コマンド） |
+| 検索／ランチャー | **Super+D** / **Super+Space** / **Alt+Space** | **Colorshell Runner**（アプリ検索 / `>` クリップボード / `#` 壁紙 / 計算 / コマンド） |
 | アプリ一覧 | **Super+Shift+D** | **Colorshell Apps Drawer** |
 | 壁紙切替・動的配色 | **Super+W** | **Colorshell Runner** 壁紙ピッカー（`#`、`~/wallpapers`、pywal16 動的配色） |
 | コントロールセンター | **Super+I** | **Colorshell Control Center**（Wi-Fi / Bluetooth / 音量 / ナイトライト） |
@@ -173,7 +173,7 @@ GUI インストーラを経由せず、USB のターミナルから直接この
 
 ### 2. 初回ログイン後の設定チェックリスト
 
-再起動後の `ReGreet` でユーザー `mitac` を選んでログインすると **Hyprland (UWSM)** が起動します（端末: **Ctrl+Alt+T** / **Super+Return**、IME トグル: **Super+Space**、英数⇔日本語: **半角/全角**、ランチャー: **Super+D** / **Alt+Space**）。秘密情報はこのリポジトリ内の **`secrets/*.age`（agenix）+ Bitwarden（`agenix-master-key`）** で宣言的に管理できます。未展開または未移行の項目のみ実機で設定します。
+再起動後の `ReGreet` でユーザー `mitac` を選んでログインすると **Hyprland (UWSM)** が起動します（端末: **Ctrl+Alt+T** / **Super+Return**、IME トグル: **Ctrl+Super+Space**、英数⇔日本語: **半角/全角**、ランチャー: **Super+D** / **Super+Space** / **Alt+Space**）。秘密情報はこのリポジトリ内の **`secrets/*.age`（agenix）+ Bitwarden（`agenix-master-key`）** で宣言的に管理できます。未展開または未移行の項目のみ実機で設定します。
 
 1. **宣言的シークレットの展開（`secrets/*.age` を利用している場合）**:
    - `/etc/agenix/master.key` をまだ配置していない場合は、まず `secrets bootstrap`（または `cd ~/MySettings && ./scripts/restore-on-nixos.sh --agenix-only`）を実行して Bitwarden の `agenix-master-key` を配置し、`rebuild` を実行します（`/run/agenix/*`・Wi-Fi プロファイル・`gh` 認証・SSH 鍵・backup 鍵・ユーザー環境変数が一括展開されます）。
@@ -380,7 +380,7 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 
 [Meltype](https://github.com/yksr-melt/Meltype)（Linux プレビュー）を **Fcitx5** アドオンとして入れています（Hyprland Wayland 向け）。IME グループは **Meltype のみ**（`fcitx5-mozc` / `keyboard-jp` は入れない）。ローマ字の日本語と英語を自動で打ち分けます。
 
-- **Super+Space**: Fcitx Trigger（IME 有効 ⇔ 無効）。グループが Meltype だけなので、どちらもエンジンは Meltype のまま
+- **Ctrl+Super+Space**: Fcitx Trigger（IME 有効 ⇔ 無効。**Super+Space** は Hyprland の Colorshell Runner 用）。グループが Meltype だけなので、どちらもエンジンは Meltype のまま
 - Meltype 内の英数 ⇔ 日本語: **半角/全角**（Fcitx の Trigger には割り当てない。ChatGPT 等 Electron で直接入力に落ちて戻せなくなるのを防ぐ）
 - **z + 記号 / hjkl**: `zl`→`→`、`zh`→`←`、`zj`→`↓`、`zk`→`↑`、`z/`→`・`、`z.`→`…` など（Meltype 1.4+、既定 ON）
 - 学習・設定: `~/.local/share/Meltype`（`home/meltype.nix` が **AppRules** を upsert。エンジンパッチではなくアプリ別設定で制御）

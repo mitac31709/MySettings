@@ -265,10 +265,11 @@ in
       # so ChatGPT can leave "English" and return to Meltype.
       Behavior.ShareInputState = "All";
       Behavior.ActiveByDefault = true;
-      # Super+Space = Fcitx Trigger (active ⇔ inactive). With only Meltype in
-      # the group, both sides stay Meltype. Do NOT bind Zenkaku_Hankaku here —
-      # that key belongs to Meltype's internal 英数⇔日本語 toggle.
-      "Hotkey/TriggerKeys"."0" = "Super+space";
+      # Ctrl+Super+Space = Fcitx Trigger (active ⇔ inactive; Super+Space is
+      # bound to Colorshell runner in Hyprland). With only Meltype in the group,
+      # both sides stay Meltype. Do NOT bind Zenkaku_Hankaku here — that key
+      # belongs to Meltype's internal 英数⇔日本語 toggle.
+      "Hotkey/TriggerKeys"."0" = "Control+Super+space";
       "Hotkey/AltTriggerKeys" = { };
       "Hotkey/EnumerateForwardKeys" = { };
       "Hotkey/EnumerateBackwardKeys" = { };

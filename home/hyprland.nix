@@ -570,7 +570,7 @@ let
     {
       section = "起動・終了";
       label = "Colorshell ランナー（アプリ / >履歴 / #壁紙 / 計算 / コマンド）";
-      keys = "Super+D / Alt+Space";
+      keys = "Super+D / Super+Space / Alt+Space";
       run = "${colorshellBin} runner";
       mode = "exec";
     }
@@ -807,7 +807,7 @@ let
     {
       section = inputSection;
       label = "IME 有効/無効（Meltype）";
-      keys = "Super+Space";
+      keys = "Ctrl+Super+Space";
     }
     {
       section = inputSection;
@@ -2281,6 +2281,7 @@ in
       hl.bind(mod .. " + Return",    hl.dsp.exec_cmd(${builtins.toJSON ghosttyBin}))
       hl.bind("CTRL + ALT + T",      hl.dsp.exec_cmd(${builtins.toJSON ghosttyBin}))
       hl.bind(mod .. " + D",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} runner"}), { dont_inhibit = true })
+      hl.bind(mod .. " + Space",     hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} runner"}), { dont_inhibit = true })
       hl.bind("ALT + Space",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} runner"}), { dont_inhibit = true })
       hl.bind(mod .. " + SHIFT + D", hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w apps-drawer"}), { dont_inhibit = true })
       hl.bind(mod .. " + W",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} runner -t \"#\""}), { dont_inhibit = true })
