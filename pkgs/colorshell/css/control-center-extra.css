@@ -1,0 +1,30 @@
+/* MySettings: Sysfs Battery telemetry card in Control Center */
+.control-center-container .battery-info-card {
+  background: var(--bg-primary);
+  border-radius: 16px;
+  padding: 10px 12px;
+}
+.control-center-container .battery-info-card image {
+  -gtk-icon-size: 15px;
+}
+.control-center-container .battery-info-card .headline {
+  font-size: 12px;
+  font-weight: 700;
+}
+.control-center-container .battery-info-card .detail {
+  font-size: 11px;
+  color: var(--fg-disabled);
+}
+.control-center-container .battery-info-card .note {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #f0b866;
+}
+.control-center-container .battery-info-card.warning .headline,
+.control-center-container .battery-info-card.anomaly .headline {
+  color: #f0b866;
+}
+.control-center-container .battery-info-card.critical .headline {
+  color: #f06d7d;
+}

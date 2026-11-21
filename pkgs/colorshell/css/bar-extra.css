@@ -1,0 +1,42 @@
+/* MySettings: Flake updates pill & sysfs battery state highlights */
+.bar-container .updates {
+  min-width: 24px;
+}
+.bar-container .updates image {
+  -gtk-icon-size: 14px;
+}
+.bar-container .updates.idle image {
+  color: var(--fg-disabled);
+}
+.bar-container .updates.checking image,
+.bar-container .updates.checking label {
+  color: var(--fg-primary);
+}
+.bar-container .updates.available {
+  background: var(--bg-secondary);
+}
+.bar-container .updates.available image,
+.bar-container .updates.available label {
+  color: #38bdf8;
+}
+.bar-container .updates .count {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.bar-container .status .battery.warning image,
+.bar-container .status .battery.warning label {
+  color: #f0b866;
+}
+.bar-container .status .battery.critical image,
+.bar-container .status .battery.critical label {
+  color: #f06d7d;
+}
+.bar-container .status .battery.anomaly image,
+.bar-container .status .battery.anomaly label {
+  color: #f0b866;
+}
+.bar-container .status .battery.charging image,
+.bar-container .status .battery.charging label {
+  color: #52d699;
+}

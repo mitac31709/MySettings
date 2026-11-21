@@ -44,9 +44,24 @@ let
   isChromebook = flakeTarget == "chromebook";
   inputSection = if isChromebook then "入力・Chromebook" else "入力・VAIO";
   powerSection = if isChromebook then "電源・Type-C" else "電源・省電力";
+  repoPath = config.mitac.repoPath;
+  flakeUpdateCheck = lib.getExe config.mitac.scripts.flakeUpdateCheck;
+  flakeUpdate = lib.getExe config.mitac.scripts.flakeUpdate;
 
+  colorshellPkg = pkgs.callPackage ../pkgs/colorshell {
+    baseColorshell = inputs.colorshell.packages.${pkgs.stdenv.hostPlatform.system}.colorshell;
+  };
   colorshellBin = lib.getExe config.programs.colorshell.package;
   ghosttyBin = "${pkgs.ghostty}/bin/ghostty";
+  flakeUpdateRunner = pkgs.writeShellScript "run-flake-update" ''
+    rc=0
+    ${flakeUpdate} || rc=$?
+    printf '\n終了コード: %d [Enter で閉じる] ' "$rc"
+    IFS= read -r _ || true
+  '';
+  openFlakeUpdate = pkgs.writeShellScriptBin "open-flake-update" ''
+    exec ${ghosttyBin} -e ${flakeUpdateRunner}
+  '';
   rofiBin = lib.getExe config.programs.rofi.package;
   yaziBin = "${pkgs.yazi}/bin/yazi";
   hyprlockBin = "${pkgs.hyprlock}/bin/hyprlock";
@@ -615,14 +630,14 @@ let
     }
     {
       section = "起動・終了";
-      label = "Colorshell コントロールセンター（Wi-Fi / BT / 音量 / ナイトライト）";
+      label = "Colorshell コントロールセンター（Wi-Fi / BT / 音量 / バッテリー詳細）";
       keys = "Super+I";
       run = "${colorshellBin} toggle -w control-center";
       mode = "exec";
     }
     {
       section = "起動・終了";
-      label = "Colorshell 通知センター・カレンダー・メディア";
+      label = "Colorshell カレンダー・世界時計・GPST・NTP・メディア";
       keys = "Super+M";
       run = "${colorshellBin} toggle -w center-window";
       mode = "exec";
@@ -1026,6 +1041,7 @@ let
     {
       section = "Colorshell・日常";
       label = "NTP 時刻同期 (ntp-sync)";
+      keys = "時計右クリック / Super+M";
       run = lib.getExe ntpSync;
       mode = "exec";
     }
@@ -1116,7 +1132,7 @@ let
     # NixOS
     {
       section = "NixOS";
-      label = "更新チェック";
+      label = "更新チェック（Colorshell バー更新アイコン右クリック／6h 自動）";
       run = "flake-update-check";
       mode = "term";
     }
@@ -1937,7 +1953,7 @@ let
     }
     {
       section = "周辺";
-      label = "警報時は hyprlock 解除→前面化/全画面（緊急）";
+      label = "警報時は hyprlock 解除→全WS追従(pin)で前面化・最大化（緊急）";
     }
   ];
 
@@ -2045,6 +2061,7 @@ in
     servicesMenu
     ntpSync
     toggleKeepScreenOn
+    openFlakeUpdate
   ];
 
   # Unified Rofi Polkit authentication agent managed under UWSM graphical-session.target.
@@ -2194,6 +2211,7 @@ in
         binds = {
           movefocus_cycles_fullscreen = true;
           movefocus_cycles_groupfirst = true;
+          allow_pin_fullscreen = true;
         };
 
         layers = {
@@ -2446,6 +2464,7 @@ in
   # configure programs.hyprlock explicitly below.
   programs.colorshell = {
     enable = true;
+    package = colorshellPkg;
     hyprpaper.enable = true;
     hyprsunset.enable = true;
     hyprlock.enable = false;
@@ -2465,7 +2484,7 @@ in
         media = "mpv";
       };
       clock = {
-        date_format = "%a %m-%d, %H:%M";
+        date_format = "%a %m-%d %H:%M:%S";
       };
       notifications = {
         position_h = "right";
@@ -2489,6 +2508,43 @@ in
     };
     Service = {
       RestartSec = 2;
+      Environment = [
+        "TZDIR=${pkgs.tzdata}/share/zoneinfo"
+        "COLORSHELL_ADAPTER_DEV=${if isChromebook then "AC" else "ACAD"}"
+        "COLORSHELL_FLAKE_UPDATE_CMD=${lib.getExe openFlakeUpdate}"
+        "COLORSHELL_FLAKE_UPDATE_CHECK_CMD=${flakeUpdateCheck}"
+        "COLORSHELL_NTP_SYNC_CMD=${lib.getExe ntpSync}"
+      ]
+      ++ lib.optionals (!isChromebook) [
+        "COLORSHELL_BATTERY_DEV=BAT1"
+      ];
+    };
+  };
+
+  # Periodic flake / .deb update probe for the Colorshell top-bar Updates indicator & notifications.
+  systemd.user.services.flake-update-check = {
+    Unit = {
+      Description = "Check MySettings flake / pinned .deb updates for Colorshell";
+      ConditionPathExists = "${repoPath}/flake.nix";
+    };
+    Service = {
+      Type = "oneshot";
+      ExecStart = flakeUpdateCheck;
+    };
+  };
+  systemd.user.timers.flake-update-check = {
+    Unit = {
+      Description = "Periodic flake update check for Colorshell";
+      ConditionPathExists = "${repoPath}/flake.nix";
+    };
+    Timer = {
+      # Boot+3min often races Wi-Fi/WARP; fetches then fail spuriously.
+      OnBootSec = "5min";
+      OnUnitActiveSec = "6h";
+      Persistent = true;
+    };
+    Install = {
+      WantedBy = [ "timers.target" ];
     };
   };
 

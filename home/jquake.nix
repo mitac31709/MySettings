@@ -224,21 +224,49 @@ let
       pkgs.socat
       pkgs.jq
       pkgs.procps
-      pkgs.systemd
       pkgs.coreutils
       pkgs.hyprland
     ];
     text = ''
-      refresh_jquake_bar() {
-        systemctl --user kill --kill-who=main --signal=RTMIN+12 waybar.service >/dev/null 2>&1 || true
+      is_jquake_addr() {
+        local raw="$1"
+        local addr="0x''${raw#0x}"
+        ${hyprctl} -j clients 2>/dev/null \
+          | jq -e --arg addr "$addr" --arg cls ${lib.escapeShellArg jquakeClass} '
+              any(.[]; (.address | ascii_downcase) == ($addr | ascii_downcase) and .class == $cls)
+            ' >/dev/null 2>&1
       }
 
       raise_alert() {
+        # Wake outputs (pairs with JQuake wakeUpScreen).
         ${hyprctl} dispatch 'hl.dsp.dpms("on")' >/dev/null 2>&1 || true
+        # Session lock sits above all app surfaces; dismiss so the map is visible.
         if pgrep -x hyprlock >/dev/null 2>&1; then
           pkill -x hyprlock || true
         fi
+
+        local info floating pinned
+        info="$(
+          ${hyprctl} -j clients 2>/dev/null \
+            | jq -c --arg cls ${lib.escapeShellArg jquakeClass} '
+                first(.[] | select(.class == $cls)) // empty
+              '
+        )"
+
         ${hyprctl} dispatch 'hl.dsp.focus({ window = "class:^${jquakeClass}$" })' >/dev/null 2>&1 || true
+
+        if [ -n "$info" ]; then
+          floating="$(printf '%s\n' "$info" | jq -r '.floating // false')"
+          pinned="$(printf '%s\n' "$info" | jq -r '.pinned // false')"
+          if [ "$floating" != "true" ]; then
+            ${hyprctl} dispatch 'hl.dsp.window.float({ action = "toggle" })' >/dev/null 2>&1 || true
+          fi
+          if [ "$pinned" != "true" ]; then
+            ${hyprctl} dispatch 'hl.dsp.window.pin()' >/dev/null 2>&1 || true
+          fi
+        fi
+
+        ${hyprctl} dispatch 'hl.dsp.window.bring_to_top()' >/dev/null 2>&1 || true
         ${hyprctl} dispatch 'hl.dsp.window.fullscreen_state({ internal = 1, client = 1 })' >/dev/null 2>&1 || true
       }
 
@@ -249,12 +277,14 @@ let
 
       socat -u UNIX-CONNECT:"$sock" - | while IFS= read -r line; do
         case "$line" in
-          openwindow*${jquakeClass}*|urgent*${jquakeClass}*)
+          openwindow\>\>*,*,"${jquakeClass}",*)
             raise_alert
-            refresh_jquake_bar
             ;;
-          closewindow*)
-            refresh_jquake_bar
+          urgent\>\>*)
+            addr="''${line#urgent>>}"
+            if is_jquake_addr "$addr"; then
+              raise_alert
+            fi
             ;;
         esac
       done
@@ -341,6 +371,15 @@ in
   };
 
   wayland.windowManager.hyprland.extraConfig = lib.mkAfter ''
+    -- JQuake main window (XWayland): sticky floating maximized (keep top bar visible).
+    hl.window_rule({
+      name = "jquake-main",
+      match = { class = "^(${jquakeClass})$" },
+      float = true,
+      pin = true,
+      border_size = 2,
+      maximize = true,
+    })
     -- JQuake / XEmbed tray host window rules (XWayland)
     hl.window_rule({
       name = "jquake-stalonetray",

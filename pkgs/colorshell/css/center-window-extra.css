@@ -1,0 +1,58 @@
+/* MySettings: World Clocks / GPST / UNIX / NTP card in CenterWindow */
+popupwindow.center-window .container .world-clocks {
+  background: var(--bg-primary);
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+popupwindow.center-window .container .world-clocks .wc-row {
+  padding: 1px 0;
+}
+popupwindow.center-window .container .world-clocks .wc-tag {
+  font-family: "JetBrainsMono Nerd Font", "Adwaita Mono", monospace;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 38px;
+  color: var(--fg-primary);
+}
+popupwindow.center-window .container .world-clocks .wc-value {
+  font-family: "JetBrainsMono Nerd Font", "Adwaita Mono", monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--fg-primary);
+}
+popupwindow.center-window .container .world-clocks .wc-meta {
+  font-family: "JetBrainsMono Nerd Font", "Adwaita Mono", monospace;
+  font-size: 10px;
+  color: var(--fg-disabled);
+}
+popupwindow.center-window .container .world-clocks .wc-gpst {
+  margin-top: 4px;
+  padding-top: 5px;
+  border-top: 1px solid oklch(from var(--fg-primary) l c h / .12);
+}
+popupwindow.center-window .container .world-clocks .wc-ntp-bar {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid oklch(from var(--fg-primary) l c h / .12);
+}
+popupwindow.center-window .container .world-clocks .wc-ntp-state {
+  font-size: 11px;
+  font-weight: 600;
+}
+popupwindow.center-window .container .world-clocks .wc-ntp-state.synced {
+  color: #52d699;
+}
+popupwindow.center-window .container .world-clocks .wc-ntp-state.waiting {
+  color: #f0b866;
+}
+popupwindow.center-window .container .world-clocks .wc-ntp-button {
+  padding: 4px 10px;
+  border-radius: 10px;
+}
+popupwindow.center-window .container .world-clocks .wc-ntp-button image {
+  -gtk-icon-size: 12px;
+}
+popupwindow.center-window .container .world-clocks .wc-ntp-button label {
+  font-size: 11px;
+  font-weight: 600;
+}
