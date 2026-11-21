@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""User session daemon for Capsomnia on NixOS/Sway."""
+"""User session daemon for Capsomnia on NixOS/Hyprland."""
 
 from __future__ import annotations
 
@@ -59,31 +59,60 @@ def log(msg: str) -> None:
     print(f"capsomniad: {msg}", flush=True)
 
 
-def find_sway_socket() -> str | None:
-    env_sock = os.environ.get("SWAYSOCK")
-    if env_sock and Path(env_sock).is_socket():
-        return env_sock
+_MOD_ALIASES: dict[str, str] = {
+    "mod4": "SUPER",
+    "super": "SUPER",
+    "win": "SUPER",
+    "meta": "SUPER",
+    "logo": "SUPER",
+    "mod1": "ALT",
+    "alt": "ALT",
+    "control": "CTRL",
+    "ctrl": "CTRL",
+    "shift": "SHIFT",
+}
+
+
+def normalize_hyprland_shortcut(shortcut: str) -> str:
+    parts = [p.strip() for p in shortcut.split("+") if p.strip()]
+    if not parts:
+        return ""
+    out: list[str] = []
+    for i, part in enumerate(parts):
+        low = part.lower()
+        if i < len(parts) - 1 and low in _MOD_ALIASES:
+            out.append(_MOD_ALIASES[low])
+        elif len(part) == 1 and part.isalpha():
+            out.append(part.upper())
+        else:
+            out.append(part)
+    return " + ".join(out)
+
+
+def find_hyprland_instance() -> str | None:
     rt = os.environ.get("XDG_RUNTIME_DIR") or f"/run/user/{os.getuid()}"
-    matches = sorted(glob.glob(f"{rt}/sway-ipc.{os.getuid()}.*.sock"))
+    env_sig = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
+    if env_sig and Path(f"{rt}/hypr/{env_sig}/.socket.sock").is_socket():
+        return env_sig
+    matches = sorted(glob.glob(f"{rt}/hypr/*/.socket.sock"))
     for m in matches:
-        if Path(m).is_socket():
-            return m
+        sock = Path(m)
+        if sock.is_socket():
+            return sock.parent.name
     return None
 
 
-def build_swaymsg_argv(sock: str, *args: str) -> list[str]:
-    if args and not args[0].startswith("-"):
-        return ["swaymsg", "-s", sock, "--", *args]
-    return ["swaymsg", "-s", sock, *args]
+def build_hyprctl_argv(instance: str, *args: str) -> list[str]:
+    return ["hyprctl", "-i", instance, *args]
 
 
-def run_swaymsg(*args: str, timeout: float = 2.0) -> tuple[bool, str]:
-    sock = find_sway_socket()
-    if not sock:
-        return False, "sway socket unavailable"
+def run_hyprctl(*args: str, timeout: float = 2.0) -> tuple[bool, str]:
+    instance = find_hyprland_instance()
+    if not instance:
+        return False, "hyprland instance unavailable"
     try:
         proc = subprocess.run(
-            build_swaymsg_argv(sock, *args),
+            build_hyprctl_argv(instance, *args),
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -93,13 +122,26 @@ def run_swaymsg(*args: str, timeout: float = 2.0) -> tuple[bool, str]:
         err = proc.stderr.strip()
         if proc.returncode == 0:
             return True, out
-        return False, err or out or f"swaymsg exited with code {proc.returncode}"
+        return False, err or out or f"hyprctl exited with code {proc.returncode}"
     except (OSError, subprocess.SubprocessError) as err:
         return False, str(err)
 
 
+def run_hypr_eval(lua_code: str, timeout: float = 2.0) -> tuple[bool, str]:
+    ok, out = run_hyprctl("eval", lua_code, timeout=timeout)
+    if not ok:
+        return False, out
+    if out and out != "ok" and ("error" in out.lower() or "expected" in out.lower()):
+        return False, out
+    return True, out
+
+
+def set_output_dpms(out_name: str, state: str) -> tuple[bool, str]:
+    return run_hyprctl("dispatch", f"hl.dsp.dpms({json.dumps(state)}, {json.dumps(out_name)})")
+
+
 def get_builtin_output_name() -> str | None:
-    ok, out = run_swaymsg("-t", "get_outputs")
+    ok, out = run_hyprctl("-j", "monitors", "all")
     if not ok or not out:
         return None
     try:
@@ -110,7 +152,7 @@ def get_builtin_output_name() -> str | None:
         return None
     for item in outputs:
         name = str(item.get("name") or "")
-        if name.startswith("eDP"):
+        if name.startswith(("eDP", "LVDS", "DSI")):
             return name
     return None
 
@@ -128,17 +170,17 @@ def read_lid_closed() -> bool | None:
     return None
 
 
-def is_swaylock_running() -> bool | None:
+def is_hyprlock_running() -> bool | None:
     try:
         proc = subprocess.run(
-            ["pgrep", "-x", "swaylock"],
+            ["pgrep", "-x", "hyprlock"],
             capture_output=True,
             check=False,
         )
         if proc.returncode == 0:
             return True
         proc2 = subprocess.run(
-            ["pgrep", "-x", ".swaylock-wrapped"],
+            ["pgrep", "-x", ".hyprlock-wrapped"],
             capture_output=True,
             check=False,
         )
@@ -181,7 +223,30 @@ def set_backlight_raw(device: str, raw: int) -> bool:
         return False
 
 
+def is_waybar_running() -> bool:
+    uid = os.getuid()
+    try:
+        entries = list(Path("/proc").iterdir())
+    except OSError:
+        return False
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        try:
+            if entry.stat().st_uid != uid:
+                continue
+            comm = (entry / "comm").read_text(encoding="utf-8", errors="ignore").strip()
+        except OSError:
+            continue
+        if comm in {"waybar", ".waybar-wrapped"}:
+            return True
+    return False
+
+
 def notify_waybar() -> None:
+    # Avoid spawning `systemctl --user` every timer tick on shells without Waybar.
+    if not is_waybar_running():
+        return
     try:
         subprocess.run(
             [
@@ -352,42 +417,61 @@ class CapsomniaDaemon:
             self.last_error_msg = f"ListInhibitors failed: {err}"
             return False
 
-    def sync_sway_xkb(self) -> None:
+    def is_sleep_preparing(self) -> bool:
+        try:
+            if self.bus is None:
+                self.bus = Gio.bus_get_sync(Gio.BusType.SYSTEM, None)
+            res = self.bus.call_sync(
+                "org.freedesktop.login1",
+                "/org/freedesktop/login1",
+                "org.freedesktop.DBus.Properties",
+                "Get",
+                GLib.Variant("(ss)", ("org.freedesktop.login1.Manager", "PreparingForSleep")),
+                GLib.VariantType("(v)"),
+                Gio.DBusCallFlags.NONE,
+                1000,
+                None,
+            )
+            return bool(res.unpack()[0])
+        except Exception:
+            return False
+
+    def request_system_sleep(self, *, reason: str) -> bool:
+        if self.is_sleep_preparing():
+            log(f"skipping {reason} suspend request (logind suspend already in progress)")
+            return True
+        res = self.helper_call({"cmd": "suspend"}, timeout=5.0)
+        return bool(res.get("ok"))
+
+    def sync_hypr_xkb(self) -> None:
         dedicated = bool(self.prefs["dedicated_caps_lock_mode"])
         if self.applied_xkb_dedicated == dedicated:
             return
-        if find_sway_socket() is None:
+        if find_hyprland_instance() is None:
             return
         opt = "caps:none" if dedicated else ""
-        ok, err = run_swaymsg("input", "type:keyboard", "xkb_options", opt)
+        ok, err = run_hypr_eval(f"hl.config({{ input = {{ kb_options = {json.dumps(opt)} }} }})")
         if ok:
             self.applied_xkb_dedicated = dedicated
         else:
-            log(f"sway xkb_options update failed: {err}")
+            log(f"hyprland kb_options update failed: {err}")
 
-    def sync_sway_shortcut(self) -> None:
-        desired = str(self.prefs.get("shortcut") or "").strip()
+    def sync_hypr_shortcut(self) -> None:
+        desired = normalize_hyprland_shortcut(str(self.prefs.get("shortcut") or ""))
         if self.applied_shortcut == desired:
             return
-        if find_sway_socket() is None:
+        if find_hyprland_instance() is None:
             return
         if self.applied_shortcut:
-            run_swaymsg("unbindsym", "--inhibited", "--locked", self.applied_shortcut)
+            run_hypr_eval(f"hl.unbind({json.dumps(self.applied_shortcut)})")
         if desired:
-            ok, err = run_swaymsg(
-                "bindsym",
-                "--inhibited",
-                "--locked",
-                desired,
-                "exec",
-                "cpsm",
-                "toggle",
-                "--no-sleep",
+            ok, err = run_hypr_eval(
+                f'hl.bind({json.dumps(desired)}, hl.dsp.exec_cmd("cpsm toggle --no-sleep"), {{ locked = true, dont_inhibit = true }})'
             )
             if ok:
                 self.applied_shortcut = desired
             else:
-                log(f"sway shortcut bind failed ({desired}): {err}")
+                log(f"hyprland shortcut bind failed ({desired}): {err}")
         else:
             self.applied_shortcut = ""
 
@@ -421,8 +505,9 @@ class CapsomniaDaemon:
 
     def sync_keep_display_marker(self) -> None:
         self.rt_dir.mkdir(parents=True, exist_ok=True)
-        active = bool(self.awake_on and self.prefs["keep_display_awake"])
-        if active:
+        # Unified keep-screen-on: always inhibit hypridle dim/lock/DPMS-off while active.
+        # Closed-lid display behavior (min backlight vs DPMS-off) is handled in sync_display_for_lid.
+        if self.awake_on:
             self.keep_display_marker.touch(exist_ok=True)
         else:
             self.keep_display_marker.unlink(missing_ok=True)
@@ -436,7 +521,7 @@ class CapsomniaDaemon:
             if self.did_power_off_builtin_display and lid_closed is False:
                 out_name = get_builtin_output_name()
                 if out_name:
-                    run_swaymsg("output", out_name, "power", "on")
+                    set_output_dpms(out_name, "on")
                 self.did_power_off_builtin_display = False
             return
 
@@ -444,7 +529,7 @@ class CapsomniaDaemon:
             if self.did_power_off_builtin_display:
                 out_name = get_builtin_output_name()
                 if out_name:
-                    run_swaymsg("output", out_name, "power", "on")
+                    set_output_dpms(out_name, "on")
                 self.did_power_off_builtin_display = False
 
             if lid_closed is True:
@@ -465,14 +550,14 @@ class CapsomniaDaemon:
                 if not self.did_power_off_builtin_display:
                     out_name = get_builtin_output_name()
                     if out_name:
-                        ok, _ = run_swaymsg("output", out_name, "power", "off")
+                        ok, _ = set_output_dpms(out_name, "off")
                         if ok:
                             self.did_power_off_builtin_display = True
             elif lid_closed is False:
                 if self.did_power_off_builtin_display:
                     out_name = get_builtin_output_name()
                     if out_name:
-                        run_swaymsg("output", out_name, "power", "on")
+                        set_output_dpms(out_name, "on")
                     self.did_power_off_builtin_display = False
 
     def apply_awake_state(self, target_on: bool, *, reason: str, is_user_action: bool = False) -> bool:
@@ -499,7 +584,7 @@ class CapsomniaDaemon:
                 self.confirmed_sleep_inhibited = present
 
             dedicated = bool(self.prefs["dedicated_caps_lock_mode"])
-            self.sync_sway_xkb()
+            self.sync_hypr_xkb()
             h_res = self.helper_call(
                 {
                     "cmd": "set_mode",
@@ -566,9 +651,14 @@ class CapsomniaDaemon:
             else (("開" if lang == "ja" else "Open") if lid_closed is False else ("不明" if lang == "ja" else "Unknown"))
         )
         disp_str = (
-            ("常時維持" if lang == "ja" else "Keep awake")
+            ("最小輝度で維持" if lang == "ja" else "Keep alive (min backlight)")
             if self.prefs["keep_display_awake"]
-            else ("蓋閉じで消灯" if lang == "ja" else "Sleep on lid close")
+            else ("消灯して処理継続" if lang == "ja" else "Blank screen, keep running")
+        )
+        caps_str = (
+            ("有効（大文字固定なし）" if lang == "ja" else "Enabled (dedicated)")
+            if self.prefs["dedicated_caps_lock_mode"]
+            else ("LED 連動（通常 CapsLock）" if lang == "ja" else "LED linked")
         )
         timer_str = (
             format_countdown(rem)
@@ -581,32 +671,52 @@ class CapsomniaDaemon:
         )
         if lang == "ja":
             tip_lines = [
-                f"Capsomnia: {state_label}",
-                f"タイマー: {timer_str}",
-                f"画面動作: {disp_str}",
+                f"画面常時オン (Capsomnia): {state_label}",
+                f"蓋閉じ処理継続: {'有効' if self.awake_on else '通常（スリープ）'}",
+                f"蓋閉じ時の画面: {disp_str}",
+                f"Caps Lock 切替: {caps_str}",
+                f"自動オフタイマー: {timer_str}",
                 f"蓋の状態: {lid_str}",
             ]
             if self.last_error_msg:
                 tip_lines.append(f"エラー: {self.last_error_msg}")
             tip_lines.append("")
-            tip_lines.append("左クリック: メニュー / 右クリック: 切替 / 中クリック: 設定")
+            tip_lines.append("左クリック: ON/OFF 切替 / 右クリック: コントロールセンター / 中クリック: 詳細設定")
         else:
             tip_lines = [
-                f"Capsomnia: {state_label}",
-                f"Timer: {timer_str}",
-                f"Display: {disp_str}",
+                f"Keep Screen On (Capsomnia): {state_label}",
+                f"Closed-lid tasks: {'Active' if self.awake_on else 'Normal (sleep)'}",
+                f"Closed-lid display: {disp_str}",
+                f"Caps Lock switch: {caps_str}",
+                f"Auto-off timer: {timer_str}",
                 f"Lid: {lid_str}",
             ]
             if self.last_error_msg:
                 tip_lines.append(f"Error: {self.last_error_msg}")
             tip_lines.append("")
-            tip_lines.append("Left click: Menu / Right click: Toggle / Middle click: Settings")
+            tip_lines.append("Left click: Toggle / Right click: Control Center / Middle click: Settings")
 
         payload = json.dumps(
             {
                 "text": text,
                 "tooltip": "\n".join(tip_lines),
                 "class": cls,
+                "awake_on": self.awake_on,
+                "sleep_inhibited": self.confirmed_sleep_inhibited,
+                "status_error": self.status_error,
+                "error_message": self.last_error_msg,
+                "lid_closed": lid_closed,
+                "hotspot_active": self.hotspot_active,
+                "timer": self.timer.status_dict(self.awake_on, now),
+                "settings": {
+                    "dedicated_caps_lock_mode": bool(self.prefs["dedicated_caps_lock_mode"]),
+                    "show_menu_bar_icon": show_icon,
+                    "keep_display_awake": bool(self.prefs["keep_display_awake"]),
+                    "lock_on_lid_open": bool(self.prefs["lock_on_lid_open"]),
+                    "keep_hotspot_alive": bool(self.prefs["keep_hotspot_alive"]),
+                    "auto_off_minutes": int(self.prefs["auto_off_minutes"]),
+                    "shortcut": str(self.prefs.get("shortcut") or ""),
+                },
             },
             ensure_ascii=False,
         )
@@ -681,7 +791,7 @@ class CapsomniaDaemon:
                         if ev.get("event") == "subscribed":
                             with self.lock:
                                 self.helper_connected = True
-                                self.sync_sway_xkb()
+                                self.sync_hypr_xkb()
                                 self.helper_call(
                                     {
                                         "cmd": "set_mode",
@@ -747,14 +857,13 @@ class CapsomniaDaemon:
         if lid_closed is not True:
             log(f"skipping immediate sleep (lid_closed={lid_closed})")
             return False
-        res = self.helper_call({"cmd": "suspend"}, timeout=5.0)
-        return bool(res.get("ok"))
+        return self.request_system_sleep(reason="auto_off_timer")
 
     def on_poll_tick(self) -> bool:
         with self.lock:
             now = time.monotonic()
-            self.sync_sway_xkb()
-            self.sync_sway_shortcut()
+            self.sync_hypr_xkb()
+            self.sync_hypr_shortcut()
 
             # Debounced off in non-dedicated mode.
             if self.pending_off_at is not None and now >= self.pending_off_at:
@@ -796,21 +905,19 @@ class CapsomniaDaemon:
             lid_closed = read_lid_closed()
             self.sync_display_for_lid(lid_closed)
 
-            eligible_lock = bool(
-                self.awake_on and self.prefs["keep_display_awake"] and self.prefs["lock_on_lid_open"]
-            )
-            locked_now = is_swaylock_running() if eligible_lock else None
+            eligible_lock = bool(self.awake_on and self.prefs["lock_on_lid_open"])
+            locked_now = is_hyprlock_running() if eligible_lock else None
             if self.lid_lock_tracker.update(
                 eligible=eligible_lock,
                 clamshell_closed=lid_closed,
                 is_locked=locked_now,
                 now=time.time(),
             ) == "lock":
-                log("lid opened while active -> locking screen with swaylock")
+                log("lid opened while active -> locking screen with hyprlock")
                 try:
-                    subprocess.Popen(["swaylock", "-f", "-c", "0b0f14"])
+                    subprocess.Popen(["hyprlock"])
                 except OSError as err:
-                    log(f"swaylock failed: {err}")
+                    log(f"hyprlock failed: {err}")
 
             self.maybe_probe_hotspot(now)
             self.write_waybar_status(lid_closed=lid_closed)
@@ -861,7 +968,7 @@ class CapsomniaDaemon:
                     "helper_connected": st["helper_connected"],
                     "keyd_connected": st["keyd_connected"],
                     "leds": st["leds"],
-                    "sway_socket": find_sway_socket(),
+                    "hyprland_instance": find_hyprland_instance(),
                     "lid_closed": st["lid_closed"],
                     "sleep_inhibited": st["sleep_inhibited"],
                     "status_error": st["status_error"],
@@ -881,8 +988,7 @@ class CapsomniaDaemon:
                 return err_response(self.last_error_msg or "failed to disable")
             sleep_req = False
             if not no_sleep:
-                res = self.helper_call({"cmd": "suspend"}, timeout=5.0)
-                sleep_req = bool(res.get("ok"))
+                sleep_req = self.request_system_sleep(reason="cli_off")
             st = self.status_payload()
             st["sleep_requested"] = sleep_req
             return ok_response(st)
@@ -900,8 +1006,7 @@ class CapsomniaDaemon:
                 return err_response(self.last_error_msg or "failed")
             sleep_req = False
             if not no_sleep:
-                res = self.helper_call({"cmd": "suspend"}, timeout=5.0)
-                sleep_req = bool(res.get("ok"))
+                sleep_req = self.request_system_sleep(reason="cli_toggle")
             st = self.status_payload()
             st["sleep_requested"] = sleep_req
             return ok_response(st)
@@ -979,7 +1084,7 @@ class CapsomniaDaemon:
                         self.applied_xkb_dedicated = None
                         self.apply_awake_state(self.awake_on, reason="settings_dedicated_mode")
                     elif key == "shortcut":
-                        self.sync_sway_shortcut()
+                        self.sync_hypr_shortcut()
                     self.sync_display_for_lid(read_lid_closed())
                     self.write_waybar_status(lid_closed=read_lid_closed(), force_signal=True)
                     return ok_response(dict(self.prefs))
@@ -1050,12 +1155,9 @@ class CapsomniaDaemon:
             self.release_inhibitor()
             self.restore_saved_brightness("shutdown")
             self.keep_display_marker.unlink(missing_ok=True)
-        # Restore XKB caps:none only if quitting cleanly? Wait: keep user's
-        # XKB clean on daemon exit.
-        if self.applied_xkb_dedicated:
-            run_swaymsg("input", "type:keyboard", "xkb_options", "")
+        # Keep user's keybind state clean on daemon exit; preserve caps:none while dedicated mode is active.
         if self.applied_shortcut:
-            run_swaymsg("unbindsym", "--inhibited", "--locked", self.applied_shortcut)
+            run_hypr_eval(f"hl.unbind({json.dumps(self.applied_shortcut)})")
         self.loop.quit()
         return False
 
@@ -1074,7 +1176,7 @@ class CapsomniaDaemon:
         else:
             self.apply_awake_state(False, reason="startup")
 
-        self.sync_sway_shortcut()
+        self.sync_hypr_shortcut()
 
         # First-launch Welcome Guide.
         if not self.prefs.get("did_complete_initial_setup", False):

@@ -57,7 +57,11 @@ let
     pkgs.nix
   ] ../scripts/flake-update-cursor.sh;
   flakeUpdateCheck = wrap "flake-update-check" (
-    netTools ++ [ pkgs.procps ]
+    netTools
+    ++ [
+      pkgs.libnotify
+      pkgs.procps
+    ]
   ) ../scripts/flake-update-check.sh;
   flakeUpdate =
     wrapWithEnv

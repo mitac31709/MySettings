@@ -1,6 +1,6 @@
 # MySettings — NixOS flake（mitac）
 
-ホスト／ユーザー `mitac` 向けの Flakes + Home Manager 構成。ログインは **greetd + ReGreet（Sway 上＋`lan-mouse` 受信）**、デスクトップは **Sway のみ**。**VAIO（Intel 第8世代以降）** と **Chromebook（ASUS CX5500FE / delbin）** の両対応です。
+ホスト／ユーザー `mitac` 向けの Flakes + Home Manager 構成。ログインは **greetd + ReGreet（最小 Hyprland 上＋`lan-mouse` 受信）**、デスクトップは **Hyprland（UWSM）のみ**。**VAIO（Intel 第8世代以降）** と **Chromebook（ASUS CX5500FE / delbin）** の両対応です。
 
 ## ブランチ
 
@@ -11,33 +11,42 @@
 
 ## セッション（greetd + ReGreet）
 
-起動後は最小構成 Sway 上で **ReGreet**（`modules/nixos/greetd.nix`）と受信専用の **Lan Mouse** が起動します（他端末からログイン入力可能、提供セッションは **Sway** のみ）。
+起動後は最小構成 Hyprland 上で **ReGreet**（`modules/nixos/greetd.nix`）と受信専用の **Lan Mouse** が起動します（他端末からログイン入力可能、提供セッションは **Hyprland (UWSM)** のみ）。
 
-起動時から lan-mouse でログイン入力するには Wayland compositor（ここでは greeter 用 Sway）が必須のため、TTY 直の **tuigreet** とは同じ段階では両立できません。純 tuigreet にする場合は greeter 中の lan-mouse を諦める必要があります。
+起動時から lan-mouse でログイン入力するには Wayland compositor（ここでは greeter 用 Hyprland）が必須のため、TTY 直の **tuigreet** とは同じ段階では両立できません。純 tuigreet にする場合は greeter 中の lan-mouse を諦める必要があります。
 
 | セッション | 内容 |
 |------------|------|
-| **Sway** | キーボード中心のタイル WM。waybar / mako / swayidle。ランチャーは **rofi**（Super+D / Alt+Space）。キーボード配列は **jp** |
+| **Hyprland (UWSM)** | キーボード中心のタイル WM（Lua 設定＋**Colorshell** GTK4/Astal デスクトップシェル）。`pywal16` による壁紙連動の動的配色（枠色同期あり）、hyprpaper / hyprsunset / hyprlock / hypridle。ランチャーは **Colorshell Runner**（Super+D / Super+Space / Alt+Space）。キーボード配列は **jp** |
 
 ### 操作感
 
-**Super+Space** は Fcitx5 の IME 有効/無効（グループは Meltype のみ）。
+**Ctrl+Super+Space** は Fcitx5 の IME 有効/無効（グループは Meltype のみ）。
 
 | 操作 | キー | 動作 |
 |------|------|------|
-| 検索／ランチャー | **Super+D** / **Alt+Space** | **rofi** |
+| 検索／ランチャー | **Super+D** / **Super+Space** / **Alt+Space** | **Colorshell Runner**（アプリ検索 / `>` クリップボード / `#` 壁紙 / 計算 / コマンド） |
+| アプリ一覧 | **Super+Shift+D** | **Colorshell Apps Drawer** |
+| 壁紙切替・動的配色 | **Super+W** | **Colorshell Runner** 壁紙ピッカー（`#`、`~/wallpapers`、pywal16 動的配色） |
+| コントロールセンター | **Super+I** | **Colorshell Control Center**（Wi-Fi / Bluetooth / 音量 / ナイトライト） |
+| 通知・カレンダー・メディア | **Super+M** | **Colorshell Center Window** |
+| 電源・ログアウトメニュー | **Super+X** | **Colorshell Logout Menu** |
 | コマンド実行（一時） | **Super+P** | **rofi**（`-show run`：Enter で即実行／Shift+Enter で端末実行） |
 | 端末 | **Ctrl+Alt+T** / **Super+Return** | **Ghostty** |
 | 新規仮想デスクトップ | **Super+N** | 未使用最小番号の空きワークスペースへ移動 |
 | ファイルマネージャ | **Super+E** | **Yazi**（Ghostty 内） |
-| ロック | **Super+L** | swaylock |
-| クリップボード履歴 | **Super+V** | **cliphist** + rofi |
-| スクショ | **Super+Shift+S** / **Shift+Print** / **Print** / **Super+Print** | **wayfreeze**+**grim**+**slurp**+**satty**（画面停止して範囲選択／全画面／ウィンドウ → 注釈・切り抜き・クリップボード・`~/Pictures/Screenshots/` 保存。`screenshot` CLI） |
+| ロック | **Super+L** | **hyprlock**（Colorshell 標準テーマ・pywal16 連動） |
+| クリップボード履歴 | **Super+V** | **cliphist** + rofi（Colorshell Runner の `>` からも検索可） |
+| タブグループ | **Super+G** / **Super+Tab** | ウィンドウのグループ化／タブ切替 |
+| スクラッチパッド | **Super+S** / **Super+Alt+S** | special ワークスペース（`magic`）表示切替／送り込み |
+| スクショ | **Super+Shift+S** / **Shift+Print** / **Print** / **Super+Print** | **hyprshot** + **satty**（画面停止して範囲選択／全画面／ウィンドウ → 注釈・切り抜き・クリップボード・`~/Pictures/Screenshots/` 保存。`screenshot` CLI） |
+| チートシート | **Super+/** | **rofi** 検索・実行メニュー（サービス管理・JQuake・起動音・Capsomnia・NTP 同期等） |
+| マウス／ジェスチャ | **Super+左/右ドラッグ** / **3本指左右スワイプ** | ウィンドウ移動・リサイズ / ワークスペース切替 |
 | タッチパッド | — | 自然スクロール off・タップクリック on・入力中もポインタ有効 |
 
 電源ボタン（`power-chords`）: 短押し=suspend / 長押し≈2.5s=poweroff / **電源+F1（Chromebook は 電源+Back）=強制ログアウト** / **電源+F2（Chromebook は 電源+Refresh）=再起動**。
 
-Polkit / Fcitx5 / cliphist（systemd user）を起動時に起動。音量は PulseAudio（Chromebook）または PipeWire / `pipewire-pulse`（VAIO）経由で `pactl` 操作、輝度は `brightnessctl` 経由。通知は mako、ステータスバーは waybar。
+Colorshell / Polkit（`cmd-polkit` + `rofi-polkit`）/ Fcitx5 / cliphist / hyprpaper / hyprsunset / hypridle（systemd user）を起動時に起動。音量は PulseAudio（Chromebook）または PipeWire / `pipewire-pulse`（VAIO）経由で `pactl` 操作、輝度は `brightnessctl` 経由。バー・通知・OSD・ランチャー・ロック画面は **Colorshell**（`pywal16` 動的配色＋初期壁紙は `lib/theme.nix` の Nocturne Slate を `~/wallpapers/nocturne-slate.png` へ配置）で統一管理。
 
 ## 世代とコミットの対応
 
@@ -61,7 +70,7 @@ NixOS の世代番号はマシン固有です。コミットとの対応はビ�
 
 新しい PC や空の SSD へ NixOS Live USB から導入する手順です。この flake は `systemd-boot`（UEFI 専用、`modules/nixos/common.nix`）と `zramSwap`（RAM 100% / `zstd`、`modules/nixos/laptop/power.nix`）を使うため、**UEFI ブート有効（セキュアブート無効）**・GPT（ESP + root、swap パーティション不要）を前提とします。
 
-> **初回設定は Graphical ISO の日本語 LXQt 環境で行うのがおすすめ**: `ja_JP.UTF-8` と `Asia/Tokyo`・日本語キーボードを選べば日本語表示（フォント）・Firefox・GUI 端末（QTerminal）・クリップボードが初期状態から使えるため、GitHub 認証・Bitwarden（`rbw` + GUI `pinentry-qt`）・Google Drive OAuth の操作や長い文字列の扱いが格段に楽になります（日本語入力 IME の Meltype はこの flake 適用後に有効になります）。Minimal ISO 等の GUI 無しコンソール（TTY）を直接使う場合のみ、コンソールフォントに日本語グリフが無いため ISO 既定の英語（`en_US.UTF-8`）のままで進めてください。なお、この flake は Calamares が生成する `/etc/nixos/configuration.nix`（一時的な **LXQt / LightDM 設定**）を import しないため、設定取得・復元後に `nixos-rebuild switch --flake` と再起動を行えばクリーンに **greetd（ReGreet）+ Sway 専用環境**へ切り替わります。
+> **初回設定は Graphical ISO の日本語 LXQt 環境で行うのがおすすめ**: `ja_JP.UTF-8` と `Asia/Tokyo`・日本語キーボードを選べば日本語表示（フォント）・Firefox・GUI 端末（QTerminal）・クリップボードが初期状態から使えるため、GitHub 認証・Bitwarden（`rbw` + GUI `pinentry-qt`）・Google Drive OAuth の操作や長い文字列の扱いが格段に楽になります（日本語入力 IME の Meltype はこの flake 適用後に有効になります）。Minimal ISO 等の GUI 無しコンソール（TTY）を直接使う場合のみ、コンソールフォントに日本語グリフが無いため ISO 既定の英語（`en_US.UTF-8`）のままで進めてください。なお、この flake は Calamares が生成する `/etc/nixos/configuration.nix`（一時的な **LXQt / LightDM 設定**）を import しないため、設定取得・復元後に `nixos-rebuild switch --flake` と再起動を行えばクリーンに **greetd（ReGreet）+ Hyprland 専用環境**へ切り替わります。
 
 ### 0. USB メディアの作成と起動
 
@@ -79,7 +88,7 @@ NixOS の世代番号はマシン固有です。コミットとの対応はビ�
    - 言語／ロケール（Welcome / Location）: **日本語**（`ja_JP.UTF-8`）、タイムゾーン **Asia/Tokyo**
    - キーボード（Keyboard）: **Japanese** を選択
    - ユーザー名: **`mitac`**（`lib/machine.nix` の `/home/mitac/MySettings`・各種設定と一致させる）＋ 任意のパスワード
-   - デスクトップ環境: **LXQt** を選択（軽量でありながら日本語表示・GUI 端末 QTerminal・Firefox・Qt ベースの `pinentry-qt` が使える。後の flake 適用＋再起動で **greetd + Sway** へ置き換わります）
+   - デスクトップ環境: **LXQt** を選択（軽量でありながら日本語表示・GUI 端末 QTerminal・Firefox・Qt ベースの `pinentry-qt` が使える。後の flake 適用＋再起動で **greetd + Hyprland** へ置き換わります）
    - パーティション: ディスク消去（UEFI / GPT）を選択。swap は **No swap**（`zramSwap` を使用）でも問題ない
 3. 完了後に USB を抜いて再起動し、日本語 **LXQt** デスクトップへ `mitac` でログインする。
 4. 端末（QTerminal 等）を開き、作業コピーを `~/MySettings` へ取得する（初回環境のため `nix-shell` で `git` を一時利用）：
@@ -98,8 +107,8 @@ NixOS の世代番号はマシン固有です。コミットとの対応はビ�
    sudo NIX_CONFIG='experimental-features = nix-command flakes' \
      nixos-rebuild switch --flake .#vaio
    ```
-7. 完了後、カーネル／bootvine／`greetd`／Sway セッションへクリーンに切り替えるため `sudo reboot` する。
-   （※ この flake は一時的な LXQt を含まないため、再起動後は `ReGreet` + Sway のみになります。後で旧世代の LXQt ストアパスを掃除したい場合は `sudo nix-collect-garbage -d` を実行できます）
+7. 完了後、カーネル／bootvine／`greetd`／Hyprland セッションへクリーンに切り替えるため `sudo reboot` する。
+   （※ この flake は一時的な LXQt を含まないため、再起動後は `ReGreet` + Hyprland のみになります。後で旧世代の LXQt ストアパスを掃除したい場合は `sudo nix-collect-garbage -d` を実行できます）
 
 #### パターン B: Live USB（CLI）から `nixos-install --flake` で直接導入
 
@@ -164,7 +173,7 @@ GUI インストーラを経由せず、USB のターミナルから直接この
 
 ### 2. 初回ログイン後の設定チェックリスト
 
-再起動後の `ReGreet` でユーザー `mitac` を選んでログインすると **Sway** が起動します（端末: **Ctrl+Alt+T** / **Super+Return**、IME トグル: **Super+Space**、英数⇔日本語: **半角/全角**、ランチャー: **Super+D** / **Alt+Space**）。秘密情報はこのリポジトリ内の **`secrets/*.age`（agenix）+ Bitwarden（`agenix-master-key`）** で宣言的に管理できます。未展開または未移行の項目のみ実機で設定します。
+再起動後の `ReGreet` でユーザー `mitac` を選んでログインすると **Hyprland (UWSM)** が起動します（端末: **Ctrl+Alt+T** / **Super+Return**、IME トグル: **Ctrl+Super+Space**、英数⇔日本語: **半角/全角**、ランチャー: **Super+D** / **Super+Space** / **Alt+Space**）。秘密情報はこのリポジトリ内の **`secrets/*.age`（agenix）+ Bitwarden（`agenix-master-key`）** で宣言的に管理できます。未展開または未移行の項目のみ実機で設定します。
 
 1. **宣言的シークレットの展開（`secrets/*.age` を利用している場合）**:
    - `/etc/agenix/master.key` をまだ配置していない場合は、まず `secrets bootstrap`（または `cd ~/MySettings && ./scripts/restore-on-nixos.sh --agenix-only`）を実行して Bitwarden の `agenix-master-key` を配置し、`rebuild` を実行します（`/run/agenix/*`・Wi-Fi プロファイル・`gh` 認証・SSH 鍵・backup 鍵・ユーザー環境変数が一括展開されます）。
@@ -268,7 +277,7 @@ Calamares（Graphical ISO）で `btrfs` を選ぶと初回導入時は `compress
 
 #### 再起動後の復元と圧縮確認
 
-1. `ReGreet` で `mitac` にログインする（日本語 Sway 環境が起動します。端末は **Ctrl+Alt+T**）。
+1. `ReGreet` で `mitac` にログインする（日本語 Hyprland 環境が起動します。端末は **Ctrl+Alt+T**）。
 2. `cd ~/MySettings && ./scripts/restore-on-nixos.sh --from <vaio|chromebook|mitac> --new-device` を実行する（VAIO 側の最新環境を戻すなら `--from vaio --new-device`、旧来の単一バックアップから戻すなら `--from mitac --new-device`）。`rbw` の設定・ロック解除・同期を経て Bitwarden の `restic-home` から暗号化パスワードと Google OAuth 情報が自動取得され、Bitwarden に **`agenix-master-key`** がある場合は `/etc/agenix/master.key` も同時に配置されます。
 3. 上記コマンド（`--new-device` 付き）により、新しく生成済みの `~/MySettings`（新しい Btrfs UUID の `hosts/chromebook/hardware-configuration.nix`）や現在の `rbw` / `rclone.conf` を壊さずに `/home/mitac` が復元され、Bluetooth / WARP・P2P 鍵・トークン系認証は他端末と競合しないよう初期状態にリセットされます。その後 `rebuild` を実行すると、`/run/agenix/*` の各種シークレット・`restic`/`rclone` 設定・保存済み Wi-Fi・GitHub CLI 認証・SSH 鍵・Tailscale 鍵が agenix から宣言的に展開されます。
 4. 圧縮率と scrub タイマーを確認する：
@@ -307,13 +316,13 @@ passwd mitac
 
 ## flake の更新
 
-`flake-update`（左 waybar 上端アイコンのクリックでも起動）は端末内のほぼすべてのソフトウェアをまとめて更新します（**JQuake のみ 1.8.4 固定**）。実行すると順番に次を行います。
+`flake-update`（チートシート `Super+/` からも起動）は端末内のほぼすべてのソフトウェアをまとめて更新します（**JQuake のみ 1.8.4 固定**）。実行すると順番に次を行います。
 
 1. `flake.nix` の pinned `.deb` URL 更新（UniClipboard / ChatGPT / Grok Bot）
 2. `pkgs/` の独自パッケージ更新（**Meltype** / **OpenCode** / **Antigravity** / **wol-pc**。`nix store prefetch-file` でハッシュ再計算）
-3. `nix flake update` により `flake.lock` の全入力更新（`nixpkgs` / `nixpkgs-cursor` / `bootvine` / `home-manager` 等）
+3. `nix flake update` により `flake.lock` の全入力更新（`nixpkgs` / `nixpkgs-cursor` / `colorshell` / `bootvine` / `home-manager` 等）
 4. `~/.npm-global` に導入済みの場合、`@deepseek-ai/dsh` / `@deepseek-harness-tui/dsh-tui` の `npm` 更新
-5. waybar 状態表示の即時更新と、`rebuild`（`nixos-rebuild switch`）をそのまま実行するかの対話確認
+5. `rebuild`（`nixos-rebuild switch`）をそのまま実行するかの対話確認
 
 Cursor（`code-cursor` / `cursor-cli`）だけ先行更新したいときは `flake-update-cursor`（または `nix flake update nixpkgs-cursor`）も引き続き使えます。
 
@@ -340,14 +349,16 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **Parsec** — `parsec-bin`（Intel VA-API / `intel-media-driver` でハードウェアエンコード）。ホテル等で `-6023/-11010` になるときは Tailscale 経由（下記）
 - **Steam** — `programs.steam.enable`
 - **VirtualBox** — `virtualisation.virtualbox.host.enable`（Extension Pack 有効、`mitac` を `vboxusers` グループへ追加）
-- **ActivityWatch** — `home/activitywatch.nix` で `aw-server`（Web UI: `http://127.0.0.1:5600`）と Sway 向け Wayland watcher（`awatcher`、`graphical-session.target` 起動）を常駐
+- **ActivityWatch** — `home/activitywatch.nix` で `aw-server`（Web UI: `http://127.0.0.1:5600`）と Hyprland 向け Wayland watcher（`awatcher`、`graphical-session.target` 起動）を常駐
 - **WhatPulse** — `pkgs/whatpulse`（7.0.1 AppImage ラッパー）＋ `pkgs/whatpulse-pcap-service`（通信量計測用 systemd サービス）。打鍵・マウス計測のため `mitac` を `input` グループへ追加済み
 - **Screenpipe** — `pkgs/screenpipe`（2.7.145 AppImage ラッパー）。画面キャプチャ + OCR + 音声文字起こしのローカル検索タイムライン
 - **Bottles** — Wine プレフィックス管理（一般の Windows アプリ用）。`home.packages`
 - **Vivaldi** — `vivaldi`
 - **Firefox** — `firefox`
 - **Tor Browser** — `tor-browser`
-- **JQuake** — `JQuake` / `jquake`（1.8.4 + `pkgs/jquake` ラッパー。Sway AWT 修正・更新ダイアログ無効化）。ログイン時に `jquake.service` で常駐し、Sway では offscreen `stalonetray` にトレイを保持しつつ左 waybar の専用枠（`custom/jquake`）を表示（左クリックでウィンドウを開く／右クリックでメニュー）。表示時・警報時は Waybar を残したままワークスペース領域いっぱいに最大化（`sticky`）＋警報時は `swaylock` 解除（`home/jquake.nix` / `home/sway.nix`）
+- **Tilion Fortress** — ローカル版ステルス Chromium エンジン + CLI / MCP（`pkgs/tilion-fortress`：`tilion` / `tilion-mcp` / `tilion-fortress` / `fortress-browser`）。v3 機能を有効化する場合は `tilion activate` でライセンスを取得
+- **Qalculate!** — 高機能関数電卓（Qt GUI `qalculate-qt` + CLI `qalc` / `libqalculate`）
+- **JQuake** — `JQuake` / `jquake`（1.8.4 + `pkgs/jquake` ラッパー。Hyprland/XWayland AWT 修正・更新ダイアログ無効化）。ログイン時に `jquake.service` で常駐し、Hyprland では offscreen `stalonetray` にトレイを保持しつつ `jquake-open` / `jquake-menu`（チートシート `Super+/` やランナーから起動可）で表示・管理。表示時・警報時はトップバーを残したままワークスペース領域いっぱいに最大化＋警報時は `hyprlock` 解除（`home/jquake.nix` / `home/hyprland.nix`）
 - **ONLYOFFICE** — `onlyoffice-desktopeditors`（文書・表計算・プレゼン）
 - **Affinity** — 未導入（`affinity-v3` なし。flake 入力も overlay も外してある）。戻すときは次の 3 箇所です。
   1. `flake.nix` の `inputs` に `affinity-nix.url = "github:mrshmllow/affinity-nix";` を足し、`nixpkgs.overlays` の先頭に `inputs.affinity-nix.overlays.default` を戻す
@@ -360,20 +371,20 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **7-Zip** — `_7zip-zstd`（コマンド `7z` / `7zz`、Zstd ほか対応）+ GUI `peazip`（PeaZip）
 - **tmux** — `runbtop <cmd>` で上部に実行出力（約 10 行）、下部に `btop`
 - **Meltype** — Fcitx5 エンジン（日本語／英語の自動打ち分け。縦型候補・意味/翻訳ペイン付き。IME は Meltype のみ）
-- **フォント** — JetBrainsMono Nerd Font（ターミナル／等幅の既定）
+- **フォント** — JetBrainsMono Nerd Font（ターミナル／等幅の既定）、Adwaita Sans / Mono（Colorshell・Hyprlock 用）
 - **シークレット管理（agenix × Bitwarden）** — `secrets/*.age` を NixOS（`modules/nixos/secrets.nix`）で `/run/agenix/*` へ復号し、共通マスター鍵 `agenix-master-key` のみを Bitwarden（`rbw`）で保持。`secrets` コマンド（`scripts/secrets-tool.sh`）で管理
 - **暗号化バックアップ** — `restic` + `rclone` で `/home` を Google Drive へ。`agenix` 移行時は `/run/agenix/` 経由で自動無監視実行（未移行時・他端末リカバリ時は Bitwarden `rbw`）。詳細は下記。
-- **デスクトップ** — greetd + ReGreet（Sway のみ。ログイン画面も受信専用 Lan Mouse 待機）
+- **デスクトップ** — greetd + ReGreet（Hyprland (UWSM) + **Colorshell**。ログイン画面も受信専用 Lan Mouse 待機）
 - **bootvine** — 起動コンソールに systemd ジョブの依存ツリーを表示（[bootvine](https://codeberg.org/wvhulle/bootvine)、`services.bootvine.enable`）。反映には `rebuild` のあと再起動が必要
-- **起動音（`startup-sound`）** — ログイン時に `startup-sound.service` が歴代 Windows（3.1 / 95 / 98 / 2000 / XP / 7 / 11）・Mac・GameCube・Nintendo Wii・Wii Sports・ブルーアーカイブ・マリオカート8 と `~/.local/share/startup-sounds/`（または `home/startup-sounds/`）の音声からランダム再生（`home/startup-sound.nix`）。左 Waybar の `♪` アイコンから一覧・編集・ON/OFF・再生でき、CLI でも `startup-sound --list` / `--menu` / `--toggle` が利用可能
+- **起動音（`startup-sound`）** — ログイン時に `startup-sound.service` が歴代 Windows（3.1 / 95 / 98 / 2000 / XP / 7 / 11）・Mac・GameCube・Nintendo Wii・Wii Sports・ブルーアーカイブ・マリオカート8 と `~/.local/share/startup-sounds/`（または `home/startup-sounds/`）の音声からランダム再生（`home/startup-sound.nix`）。チートシート `Super+/` や CLI から `startup-sound --list` / `--menu` / `--toggle` が利用可能
 - **gui** — ディスプレイ無し時は `cage` で単一 GUI アプリを起動（`gui firefox` など）。引数なしは `apps` を起動
-- **apps** — `fzf` アプリ一覧（`gui` 経由起動）。TTY やシェルから利用可。Sway の Super+D は rofi
+- **apps** — `fzf` アプリ一覧（`gui` 経由起動）。TTY やシェルから利用可。Hyprland の Super+D は Colorshell Runner
 
 ## 日本語入力（Meltype / Fcitx5）
 
-[Meltype](https://github.com/yksr-melt/Meltype)（Linux プレビュー）を **Fcitx5** アドオンとして入れています（Sway Wayland 向け）。IME グループは **Meltype のみ**（`fcitx5-mozc` / `keyboard-jp` は入れない）。ローマ字の日本語と英語を自動で打ち分けます。
+[Meltype](https://github.com/yksr-melt/Meltype)（Linux プレビュー）を **Fcitx5** アドオンとして入れています（Hyprland Wayland 向け）。IME グループは **Meltype のみ**（`fcitx5-mozc` / `keyboard-jp` は入れない）。ローマ字の日本語と英語を自動で打ち分けます。
 
-- **Super+Space**: Fcitx Trigger（IME 有効 ⇔ 無効）。グループが Meltype だけなので、どちらもエンジンは Meltype のまま
+- **Ctrl+Super+Space**: Fcitx Trigger（IME 有効 ⇔ 無効。**Super+Space** は Hyprland の Colorshell Runner 用）。グループが Meltype だけなので、どちらもエンジンは Meltype のまま
 - Meltype 内の英数 ⇔ 日本語: **半角/全角**（Fcitx の Trigger には割り当てない。ChatGPT 等 Electron で直接入力に落ちて戻せなくなるのを防ぐ）
 - **z + 記号 / hjkl**: `zl`→`→`、`zh`→`←`、`zj`→`↓`、`zk`→`↑`、`z/`→`・`、`z.`→`…` など（Meltype 1.4+、既定 ON）
 - 学習・設定: `~/.local/share/Meltype`（`home/meltype.nix` が **AppRules** を upsert。エンジンパッチではなくアプリ別設定で制御）
@@ -415,7 +426,7 @@ Nerd Font のアイコンが空白に見える場合: `fc-cache -rf` を実行�
 
 ## タッチパッド
 
-ナチュラルスクロールはオフ（従来型: 指を上 → 内容が上）。キーボード入力中もタッチパッドは有効（`dwt = disabled`）。右クリックは **2本指タップ／2本指押し**（`tap` + `click_method = clickfinger`）。端を押すソフトボタン領域は使わない。VAIO（`.#vaio`）のみ `scroll_factor = 0.6` でスクロール速度をやや抑えている。Sway の `input type:touchpad`（`home/sway.nix`）。
+ナチュラルスクロールはオフ（従来型: 指を上 → 内容が上）。キーボード入力中もタッチパッドは有効（`disable_while_typing = false`）。右クリックは **2本指タップ／2本指押し**（`tap_to_click = true` + `clickfinger_behavior = true`）。端を押すソフトボタン領域は使わない。3本指左右スワイプでワークスペースを切り替えられる。VAIO（`.#vaio`）のみ `scroll_factor = 0.6` でスクロール速度をやや抑えている。Hyprland の `input.touchpad`（`home/hyprland.nix`）。
 
 ## クリップボード履歴
 
@@ -488,7 +499,7 @@ rebuild
 - **rclone** — Google Drive バックエンド（ホスト別 restic リポジトリ: `rclone:gdrive:restic/<host>-home` — `.#chromebook` は `chromebook-home`、`.#vaio` は `vaio-home`。旧単一構成の移行前バックアップは `mitac-home` に残ります）。各端末は共通の `gdrive:` リモートと暗号化鍵を agenix 経由で共有しつつリポジトリ自体が分かれているため、複数端末を同時起動してもロック競合や世代削除（`forget`）の干渉は起きません。
 - **agenix 一元管理** — `services.restic.backups.home` と `backup` CLI は `/run/agenix/restic-home-password` と `/run/agenix/rclone-conf` のみを参照して動作するため、**タイマー実行・CLI ともに `rbw` 解錠や `~/.config/rclone/rclone.conf` の平文保存を要しません**（平文は `/run` のみで、`rclone.conf` は OAuth リフレッシュ対応のため実行時一時ファイルへコピーして使用）。`backup reconnect` で OAuth 再認証した場合も自動で `secrets import-rclone` 経由で `secrets/rclone-conf.age` を更新します。
 
-日次の `systemd` タイマー（`restic-backups-home.timer`）がバックアップを実行し、古いスナップショットを整理します（`--keep-daily 7 --keep-weekly 5 --keep-monthly 12`）。グラフィカルセッションへのログイン中は **Sway の waybar** に進捗（`バックアップ N%`、`$XDG_RUNTIME_DIR/restic-home-status` 経由）が表示され、開始・完了（または失敗）が mako 通知で知らされます。
+日次の `systemd` タイマー（`restic-backups-home.timer`）がバックアップを実行し、古いスナップショットを整理します（`--keep-daily 7 --keep-weekly 5 --keep-monthly 12`）。グラフィカルセッションへのログイン中は **Hyprland の waybar** に進捗（`バックアップ N%`、`$XDG_RUNTIME_DIR/restic-home-status` 経由）が表示され、開始・完了（または失敗）が mako 通知で知らされます。
 
 ### 初回セットアップ（秘密情報は平文で git / Nix ストアに含めない）
 
@@ -580,7 +591,7 @@ rebuild
 
 `RCLONE_CONFIG`（または既存の `~/.config/rclone/rclone.conf` / `~/.rclone.conf`）に有効な `gdrive:` がある場合や、`RESTIC_PASSWORD` / `RESTIC_PASSWORD_FILE` / `RESTIC_PASSWORD_COMMAND` が設定済みの場合はそちらを優先してプロンプトを省略します。復元には**元の暗号化パスワード**が必要です。新しい鍵の生成や `backup setup` は行わないでください。
 
-メッセージ・プロンプトは日本語で表示されます（GUI 端末・LXQt・Sway 上での利用を想定。非 CJK TTY コンソールでは表示できない文字があります）。最新スナップショットを固定し、必要容量と空き容量を確認してから、`restic restore --verify` で検証後に次のとおり復元します（検証が失敗した場合は元のファイルを変更せず一時展開先を保持して終了します）。
+メッセージ・プロンプトは日本語で表示されます（GUI 端末・LXQt・Hyprland 上での利用を想定。非 CJK TTY コンソールでは表示できない文字があります）。最新スナップショットを固定し、必要容量と空き容量を確認してから、`restic restore --verify` で検証後に次のとおり復元します（検証が失敗した場合は元のファイルを変更せず一時展開先を保持して終了します）。
 
 - **既定（`EXTRACT_DIR` なし）**: `/home/mitac` と同一ファイルシステム上の一時領域（`/var/tmp` が同一 FS なら `/var/tmp/restore-mitac-XXXXXXXX`、`/home/mitac` が別パーティションまたは Btrfs 別サブボリュームなら `/home/mitac/.restore-mitac-XXXXXXXX`）で検証後、進捗を表示しながら**元の位置へ高速に反映**し、成功時に一時ディレクトリを削除します（`復元と検証が完了しました。` を表示）。
   - ホーム: `/home/mitac/`（`~/MySettings`・`/home/mitac/Documents/hiragino-otf/` を含む。今回の実行中に Bitwarden 反映・手動入力・OAuth 再接続で新規取得／更新した `$RCLONE_CONFIG` は保持）
@@ -771,16 +782,17 @@ ts-home-routes off        # 帰宅後は必ず off（オンのまま自宅 Wi-Fi
 flake.nix
 lib/machine.nix                   # 作業コピー・フォールバックホスト・ヒラギノパス設定
 lib/lan-mouse.nix                 # Lan Mouse 公開指紋・端末間クライアント配置（vaio → chromebook）
+lib/theme.nix                     # Nocturne Slate 統一デザインシステム（配色・フォント・角丸・決定論的壁紙生成）
 secrets/                          # agenix 暗号化ファイル（*.age）、公開鍵（*.pub / master-pubkey.txt）、agenix-rules.nix
 hosts/chromebook/                 # delbin Chromebook エントリ + hardware-configuration.nix
 hosts/vaio/                       # VAIO エントリ + hardware-configuration.nix（要実機生成）
 modules/nixos/common.nix          # locale、ユーザー、Meltype/Fcitx5、フォント
 modules/nixos/secrets.nix         # agenix 複号設定、nm-agenix-profiles、Tailscale authKeyFile
 modules/nixos/remote-builder.nix  # wsl-builder リモートビルダー設定（agenix 経由）
-modules/nixos/desktop.nix         # sway + greetd + console-gui + portals + XKB/印刷
-modules/nixos/sway.nix            # Sway システム側（greetd 既定セッション等）
-modules/nixos/greetd.nix          # ReGreet + 受信専用 Lan Mouse（Sway 上）
-modules/nixos/console-gui.nix     # gui / apps（Sway ランチャー等）
+modules/nixos/desktop.nix         # hyprland + greetd + console-gui + portals + XKB/印刷
+modules/nixos/hyprland.nix        # Hyprland (UWSM) システム側（セッション変数・hyprlock・greetd 既定セッション等）
+modules/nixos/greetd.nix          # ReGreet + 受信専用 Lan Mouse（最小 Hyprland 上）
+modules/nixos/console-gui.nix     # gui / apps（cage 単一アプリ起動・CLI ランチャー等）
 modules/nixos/laptop.nix          # ノート PC 共通ハードウェア集約（./laptop/*）
 modules/nixos/laptop/             # graphics（Intel iHD + SOF + i915.enable_psr=0/dc=0）/ input（keyd OOM）/ power（zram + thermald + auto-cpufreq + power-chords）
 modules/nixos/vaio.nix            # VAIO 固有集約（./vaio/*）
@@ -795,12 +807,13 @@ home/hermes.nix                   # Hermes Agent CLI + ACP（flake 入力 hermes
 home/secrets.nix                  # agenix ユーザーシークレット連携（~/.ssh / ~/.config/gh / user-env）
 home/flake-tools.nix              # repoPath / flakeHost / scripts（secrets・flake-update・waybar 等）
 home/shell.nix                    # bash エイリアス / rebuild / audio-panic / runbtop
-home/programs.nix                 # git / rbw / neovim / mime / 共通パッケージ（T3 Code 含む）
+home/programs.nix                 # git / rbw / neovim / rofi / ghostty / mime / 共通パッケージ（T3 Code 含む）
 home/startup-sound.nix            # ランダム起動音（startup-sound.service / Waybar トレイ管理 / プリセット・同梱音源）
 home/startup-sounds/              # 起動音の宣言的ローカル追加置き場（ブルアカ・マリオカート8 等、README 参照）
+home/capsomnia.nix                # Capsomnia ユーザー常駐デーモン（capsomniad.service）
 home/lazy-plugins.nix             # nixpkgs 由来 LazyVim プラグイン + treesitter パーサ
 home/clipboard.nix                # cliphist + clipboard-history
-home/sway.nix                     # Sway（waybar/mako/swayidle・rofi・jp・チートシート）
+home/hyprland.nix                 # Hyprland Lua 設定（waybar/mako/hyprpaper/hyprlock/hypridle・polkit・チートシート）
 home/nvim/
 scripts/local-llm.py              # local-llm CLI / オンデマンド llama-server マネージャ・T3 Code ACP
 scripts/secrets-tool.sh           # secrets CLI（init / bootstrap / import / edit / rekey / check）

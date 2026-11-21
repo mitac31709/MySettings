@@ -2,7 +2,7 @@
 
 ## Cursor Cloud specific instructions
 
-This repo is a **NixOS system-configuration flake** (user `mitac`, greetd + Sway
+This repo is a **NixOS system-configuration flake** (user `mitac`, greetd + Hyprland (UWSM)
 desktop, supporting ASUS CX5500FE "delbin" Chromebook as `.#chromebook` and Intel
 8th+ gen VAIO laptops as `.#vaio` on `main`; `.#mitac` is kept as a legacy alias
 for `.#chromebook`). It is **not** a long-running app/server: "running" it means
@@ -74,7 +74,7 @@ when editing matching files):
 - `avoid-premature-workarounds.mdc` — investigate root causes instead of switching to workarounds
 - `backup-staging.mdc` — prefer declarative Nix config; stage only machine-specific state in `backup.nix` + `README.md`
 - `branch-workflow.mdc` — develop and commit only on `main`, never `chromebook`
-- `cheatsheet-expand.mdc` — also update `cheatsheetEntries` in `home/sway.nix` for reusable answers
+- `cheatsheet-expand.mdc` — also update `cheatsheetEntries` in `home/hyprland.nix` for reusable answers
 - `commit-before-next-unit.mdc` — commit your own finished changes and before starting the next unit
 - `committing-changes-with-git.mdc` — git safety protocol, HEREDOC commit messages, push boundaries
 - `communication-style.mdc` — concise, direct responses with minimal bolding

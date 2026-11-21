@@ -24,7 +24,7 @@
     ./jquake.nix
     ./capsomnia.nix
     ./activitywatch.nix
-    ./sway.nix
+    ./hyprland.nix
   ];
 
   home.username = "mitac";

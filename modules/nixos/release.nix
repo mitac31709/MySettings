@@ -2,11 +2,12 @@
 # Appears in the systemd-boot menu and in `nixos-rebuild list-generations`
 # as part of system.nixos.label (e.g. rofi-cheatsheet-26.11....).
 #
+# Empty (the NixOS default) keeps the plain version label.
 # Bump `system.nixos.tags` when you want a readable label on the next rebuild.
 # Letters/digits/-/_/./: only. No Git tagging required.
 
 { ... }:
 
 {
-  system.nixos.tags = [ "activity-trackers" ];
+  system.nixos.tags = [ "hypr-colorshell-osd-gauge" ];
 }

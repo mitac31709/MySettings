@@ -216,8 +216,8 @@ stdenv.mkDerivation {
     chmod +x $out/lib/chatgpt/prepare-bundled-plugins
 
     # ChatGPT's Electron defaults to X11 even with ozone-platform-hint=auto
-    # (NIXOS_OZONE_WL). On Sway that means XWayland + XIM, where Meltype
-    # composition is flaky. Force Wayland + text-input-v3 like Cursor.
+    # (NIXOS_OZONE_WL). Under XWayland + XIM, Meltype composition is flaky.
+    # Force native Wayland + text-input-v3 like Cursor.
     makeWrapper $out/lib/chatgpt/ChatGPT $out/bin/chatgpt \
       --prefix LD_LIBRARY_PATH : "$out/lib/chatgpt" \
       --run "source '$out/lib/chatgpt/prepare-bundled-plugins'" \

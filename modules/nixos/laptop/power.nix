@@ -22,6 +22,10 @@
   # Sustained performance under Intel laptop thermal limits.
   services.thermald.enable = true;
 
+  # Expose battery / power-supply state over org.freedesktop.UPower for
+  # WirePlumber, Bluetooth battery reporting, and desktop portals.
+  services.upower.enable = true;
+
   # auto-cpufreq manages governors/turbo; conflicts with power-profiles-daemon.
   services.power-profiles-daemon.enable = false;
   services.auto-cpufreq = {

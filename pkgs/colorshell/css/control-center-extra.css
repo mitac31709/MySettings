@@ -1,0 +1,131 @@
+/* MySettings: Battery telemetry card, KeepAwake tile/page, and Services page in Control Center */
+.control-center-container .battery-info-card {
+  background: var(--bg-primary);
+  border-radius: 16px;
+  padding: 10px 12px;
+}
+.control-center-container .battery-info-card image {
+  -gtk-icon-size: 15px;
+}
+.control-center-container .battery-info-card .headline {
+  font-size: 12px;
+  font-weight: 700;
+}
+.control-center-container .battery-info-card .detail {
+  font-size: 11px;
+  color: var(--fg-disabled);
+}
+.control-center-container .battery-info-card .note {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #f0b866;
+}
+.control-center-container .battery-info-card.warning .headline,
+.control-center-container .battery-info-card.anomaly .headline {
+  color: #f0b866;
+}
+.control-center-container .battery-info-card.critical .headline {
+  color: #f06d7d;
+}
+
+/* KeepAwake sub-page */
+controlcenter .top-container page.keep-awake .ka-hero,
+controlcenter .top-container page.keep-awake .ka-section {
+  background: var(--bg-primary);
+  border-radius: 14px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+controlcenter .top-container page.keep-awake .led-dot {
+  min-width: 12px;
+  min-height: 12px;
+  border-radius: 999px;
+}
+controlcenter .top-container page.keep-awake .led-dot.off {
+  background: var(--fg-disabled);
+  opacity: 0.45;
+}
+controlcenter .top-container page.keep-awake .led-dot.on {
+  background: #34c759;
+  box-shadow: 0 0 8px #34c759;
+}
+controlcenter .top-container page.keep-awake .led-dot.error {
+  background: #f06d7d;
+  box-shadow: 0 0 8px #f06d7d;
+}
+controlcenter .top-container page.keep-awake .ka-headline {
+  font-size: 13px;
+  font-weight: 700;
+}
+controlcenter .top-container page.keep-awake .ka-meta {
+  font-size: 11px;
+  color: var(--fg-disabled);
+}
+controlcenter .top-container page.keep-awake .ka-row-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+controlcenter .top-container page.keep-awake .ka-row-sub {
+  font-size: 10.5px;
+  color: var(--fg-disabled);
+}
+controlcenter .top-container page.keep-awake .ka-action,
+controlcenter .top-container page.keep-awake .ka-chip {
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  padding: 6px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+controlcenter .top-container page.keep-awake .ka-action:hover,
+controlcenter .top-container page.keep-awake .ka-chip:hover {
+  background: var(--bg-tertiary);
+}
+controlcenter .top-container page.keep-awake .ka-action.active,
+controlcenter .top-container page.keep-awake .ka-chip.selected {
+  background: var(--bg-tertiary);
+  color: #52d699;
+}
+
+/* Services sub-page */
+controlcenter .top-container page.services .svc-card {
+  background: var(--bg-primary);
+  border-radius: 14px;
+  padding: 9px 11px;
+}
+controlcenter .top-container page.services .svc-dot {
+  min-width: 8px;
+  min-height: 8px;
+  border-radius: 999px;
+}
+controlcenter .top-container page.services .svc-dot.active {
+  background: #52d699;
+}
+controlcenter .top-container page.services .svc-dot.running {
+  background: #38bdf8;
+}
+controlcenter .top-container page.services .svc-dot.warn {
+  background: #f0b866;
+}
+controlcenter .top-container page.services .svc-dot.failed {
+  background: #f06d7d;
+}
+controlcenter .top-container page.services .svc-name {
+  font-size: 12.5px;
+  font-weight: 700;
+}
+controlcenter .top-container page.services .svc-status {
+  font-size: 10.5px;
+  color: var(--fg-disabled);
+}
+controlcenter .top-container page.services .svc-btn {
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 600;
+}
+controlcenter .top-container page.services .svc-btn:hover {
+  background: var(--bg-tertiary);
+}

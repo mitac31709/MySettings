@@ -1,4 +1,4 @@
-# Shared user programs and packages (Sway session).
+# Shared user programs and packages (Hyprland session).
 {
   lib,
   pkgs,
@@ -9,6 +9,8 @@
 
 let
   email = "mitac31709@gmail.com";
+  theme = import ../lib/theme.nix;
+  p = theme.palette;
   # Rasi unquoted value (same shape as config.lib.formats.rasi.mkLiteral).
   mkLiteral = value: {
     _type = "literal";
@@ -19,6 +21,18 @@ let
   yazi = "${pkgs.yazi}/bin/yazi";
   lazyPlugins = import ./lazy-plugins.nix { inherit pkgs lib; };
   agentDesktop = pkgs.callPackage ../pkgs/agent-desktop { };
+
+  cursorPkg = theme.cursor.package pkgs;
+  repoCursorsDir = ./cursors;
+  localCursorPackages =
+    if builtins.pathExists repoCursorsDir then
+      lib.mapAttrsToList (name: _: theme.mkLocalCursor pkgs name) (
+        lib.filterAttrs (name: type: type == "directory" && name != theme.cursor.name) (
+          builtins.readDir repoCursorsDir
+        )
+      )
+    else
+      [ ];
 in
 {
   # User identity. The system profile also ships git, without this
@@ -44,14 +58,14 @@ in
     };
   };
 
-  # App launcher / dmenu: TUI look matching Sway (dark + cyan, monospace).
+  # App launcher / dmenu: Nocturne Slate frosted-glass theme matching Hyprland.
   programs.rofi = {
     enable = true;
     package = pkgs.rofi;
     settings = {
       terminal = "${pkgs.ghostty}/bin/ghostty";
       modes = "drun,run";
-      font = "JetBrainsMono Nerd Font 12";
+      font = "${theme.font.mono} 12";
       show-icons = true;
       disable-history = false;
       sort = true;
@@ -60,11 +74,11 @@ in
       cycle = true;
       # comment must be listed here to appear in drun-display-format.
       drun-match-fields = "name,generic,exec,categories,keywords,comment";
-      drun-display-format = "{name} <span weight='light' size='small' foreground='#6b7785'><i>{generic}</i>  {comment}</span>";
+      drun-display-format = "{name} <span weight='light' size='small' foreground='${p.fgMuted}'><i>{generic}</i>  {comment}</span>";
       drun-show-actions = true;
-      display-drun = ">";
-      display-run = "$";
-      display-dmenu = ">";
+      display-drun = "󰀻";
+      display-run = "󰆍";
+      display-dmenu = "󰍉";
       location = 0;
       # overlay sits above Fcitx5 ClassicUI, so Meltype candidates never appear.
       # top keeps the launcher above windows but below the IME panel.
@@ -74,23 +88,25 @@ in
     };
     theme = {
       "*" = {
-        bg = mkLiteral "#0b0f14";
-        bg-alt = mkLiteral "#15383a";
-        fg = mkLiteral "#e6edf3";
-        fg-dim = mkLiteral "#6b7785";
-        accent = mkLiteral "#33c5c5";
-        urgent = mkLiteral "#e06c75";
+        bg = mkLiteral "${p.surface}e8";
+        bg-card = mkLiteral "${p.surfaceAlt}f0";
+        bg-sel = mkLiteral "${p.accentSoft}f5";
+        border-col = mkLiteral p.border;
+        fg = mkLiteral p.fg;
+        fg-dim = mkLiteral p.fgMuted;
+        accent = mkLiteral p.accent;
+        urgent = mkLiteral p.danger;
         background-color = mkLiteral "transparent";
         text-color = mkLiteral "@fg";
       };
 
       "window" = {
         background-color = mkLiteral "@bg";
-        border = mkLiteral "1px";
+        border = mkLiteral "1.5px";
         border-color = mkLiteral "@accent";
-        border-radius = mkLiteral "0";
-        width = mkLiteral "56em";
-        padding = mkLiteral "0.6em";
+        border-radius = mkLiteral "${toString theme.radius.popup}px";
+        width = mkLiteral "54em";
+        padding = mkLiteral "16px";
       };
 
       "mainbox" = {
@@ -99,7 +115,7 @@ in
           "message"
           "listview"
         ];
-        spacing = mkLiteral "0.5em";
+        spacing = mkLiteral "12px";
       };
 
       "inputbar" = {
@@ -107,46 +123,53 @@ in
           "prompt"
           "entry"
         ];
-        spacing = mkLiteral "0.5em";
-        background-color = mkLiteral "@bg";
+        spacing = mkLiteral "10px";
+        padding = mkLiteral "10px 14px";
+        border = mkLiteral "1px";
+        border-color = mkLiteral "@border-col";
+        border-radius = mkLiteral "${toString theme.radius.control}px";
+        background-color = mkLiteral "@bg-card";
         text-color = mkLiteral "@accent";
       };
 
       "prompt" = {
         text-color = mkLiteral "@accent";
-        background-color = mkLiteral "@bg";
+        background-color = mkLiteral "transparent";
       };
 
       "entry" = {
-        placeholder = "run…";
+        placeholder = "検索・起動…";
         placeholder-color = mkLiteral "@fg-dim";
         text-color = mkLiteral "@fg";
-        background-color = mkLiteral "@bg";
+        background-color = mkLiteral "transparent";
         cursor = mkLiteral "text";
       };
 
       "listview" = {
-        lines = 12;
+        lines = 11;
         columns = 1;
         fixed-height = true;
         dynamic = true;
         scrollbar = true;
-        spacing = mkLiteral "0.1em";
-        background-color = mkLiteral "@bg";
+        spacing = mkLiteral "4px";
+        background-color = mkLiteral "transparent";
       };
 
       "scrollbar" = {
-        width = mkLiteral "0.3em";
+        width = mkLiteral "4px";
         handle-color = mkLiteral "@accent";
-        handle-width = mkLiteral "0.3em";
-        background-color = mkLiteral "@bg";
+        handle-width = mkLiteral "4px";
+        border-radius = mkLiteral "4px";
+        background-color = mkLiteral "transparent";
       };
 
       "element" = {
-        padding = mkLiteral "0.3em 0.4em";
-        spacing = mkLiteral "0.6em";
-        border-radius = mkLiteral "0";
-        background-color = mkLiteral "@bg";
+        padding = mkLiteral "7px 12px";
+        spacing = mkLiteral "12px";
+        border = mkLiteral "1px";
+        border-color = mkLiteral "transparent";
+        border-radius = mkLiteral "${toString theme.radius.control}px";
+        background-color = mkLiteral "transparent";
         text-color = mkLiteral "@fg";
         children = map mkLiteral [
           "element-icon"
@@ -155,7 +178,7 @@ in
       };
 
       "element-icon" = {
-        size = mkLiteral "1.5em";
+        size = mkLiteral "1.45em";
         background-color = mkLiteral "inherit";
         text-color = mkLiteral "inherit";
       };
@@ -168,12 +191,13 @@ in
       };
 
       "element selected" = {
-        background-color = mkLiteral "@bg-alt";
+        background-color = mkLiteral "@bg-sel";
+        border-color = mkLiteral "@accent";
         text-color = mkLiteral "@accent";
       };
 
       "element alternate" = {
-        background-color = mkLiteral "@bg";
+        background-color = mkLiteral "transparent";
         text-color = mkLiteral "@fg";
       };
 
@@ -182,13 +206,15 @@ in
       };
 
       "message" = {
-        background-color = mkLiteral "@bg";
-        border = mkLiteral "0";
-        padding = mkLiteral "0";
+        background-color = mkLiteral "@bg-card";
+        border = mkLiteral "1px";
+        border-color = mkLiteral "@border-col";
+        border-radius = mkLiteral "${toString theme.radius.control}px";
+        padding = mkLiteral "8px 12px";
       };
 
       "textbox" = {
-        background-color = mkLiteral "@bg";
+        background-color = mkLiteral "transparent";
         text-color = mkLiteral "@fg-dim";
       };
     };
@@ -202,11 +228,36 @@ in
     settings.git_protocol = "https";
   };
 
-  # prefer-dark so waybar does not treat the session as light (white modules).
-  dconf.settings = {
-    "org/gnome/desktop/interface" = {
-      color-scheme = "prefer-dark";
+  # Clean GTK 2/3/4 + Adwaita icon/cursor config (replaces legacy KDE settings.ini
+  # with missing colorreload-gtk-module / breeze_cursors). Keep gtk.colorScheme null
+  # so gtk-4.0/settings.ini uses gtk-interface-color-scheme instead of deprecated
+  # gtk-application-prefer-dark-theme (which triggers libadwaita warnings).
+  gtk = {
+    enable = true;
+    colorScheme = null;
+    iconTheme = {
+      package = pkgs.adwaita-icon-theme;
+      name = "Adwaita";
     };
+    gtk2.force = true;
+    gtk3 = {
+      colorScheme = "dark";
+      extraConfig.gtk-application-prefer-dark-theme = true;
+    };
+    gtk4.extraConfig.gtk-interface-color-scheme = "dark";
+  };
+
+  home.pointerCursor = {
+    enable = true;
+    package = cursorPkg;
+    name = theme.cursor.name;
+    size = theme.cursor.size;
+    gtk.enable = true;
+    x11.enable = true;
+    hyprcursor.enable = theme.cursor.hyprcursor;
+  };
+
+  dconf.settings = {
     # Keystroke overlay preferences (JP keyboard layout, interactive mode).
     "one/alynx/showmethekey" = {
       clickable = true;
@@ -215,14 +266,16 @@ in
     };
   };
 
-  # Stub: leftover light colors.css @import breaks waybar module chrome.
+  # Stub: prevent stale light colors.css @import from overriding GTK / Colorshell theme.
   xdg.configFile = lib.mkMerge [
     {
+      "gtk-3.0/settings.ini".force = true;
+      "gtk-4.0/settings.ini".force = true;
       "gtk-3.0/gtk.css".text = ''
-        /* keep empty — light GTK sync breaks waybar module backgrounds */
+        /* keep empty — avoid stale light GTK CSS overrides */
       '';
       "gtk-4.0/gtk.css".text = ''
-        /* keep empty — light GTK sync breaks waybar module backgrounds */
+        /* keep empty — avoid stale light GTK CSS overrides */
       '';
       "nvim".source = ./nvim;
     }
@@ -289,19 +342,46 @@ in
     ];
   };
 
-  # Default terminal (Ctrl+Alt+T / Super+Return).
+  # Default terminal (Ctrl+Alt+T / Super+Return) — Nocturne Slate translucent theme.
   programs.ghostty = {
     enable = true;
     settings = {
-      font-family = "JetBrainsMono Nerd Font";
+      font-family = theme.font.mono;
       font-size = 12;
       gtk-single-instance = true;
+      window-padding-x = 12;
+      window-padding-y = 10;
+      window-decoration = false;
+      background = p.bg;
+      foreground = p.fg;
+      cursor-color = p.accent;
+      selection-background = p.accentSoft;
+      selection-foreground = p.fg;
+      background-opacity = 0.90;
+      palette = [
+        "0=#131922"
+        "1=#f07178"
+        "2=#6ee7b7"
+        "3=#f2b866"
+        "4=#4ea8de"
+        "5=#b794f4"
+        "6=#56d4c8"
+        "7=#c7d3e0"
+        "8=#4b596b"
+        "9=#ff8a92"
+        "10=#8cf2ca"
+        "11=#ffd08a"
+        "12=#73c0f0"
+        "13=#cdb4fa"
+        "14=#7ae6dc"
+        "15=#f0f5fa"
+      ];
     };
   };
 
   home.sessionVariables = {
     TERMINAL = "ghostty";
-    # Java AWT on Sway/i3: without this, frames often paint solid black.
+    # Java AWT on tiling Wayland/XWayland compositors: prevents solid black frames.
     _JAVA_AWT_WM_NONREPARENTING = "1";
     # Expose Qt widget trees over AT-SPI2 for agent-desktop.
     QT_ACCESSIBILITY = "1";
@@ -384,7 +464,7 @@ in
   xdg.dataFile."nvim/nix/plugins".source = lazyPlugins.plugins;
   xdg.dataFile."nvim/nix/treesitter".source = lazyPlugins.treesitter;
 
-  # Terminal file manager (Sway: Super+e → Ghostty -e yazi).
+  # Terminal file manager (Hyprland: Super+e → Ghostty -e yazi).
   # Bash wrapper `y` cds into the last dir on quit.
   programs.yazi = {
     enable = true;
@@ -417,95 +497,105 @@ in
     };
   };
 
-  home.packages = with pkgs; [
-    nix-output-monitor
-    # Cat clone with syntax highlighting (`bat`; Debian package name is batcat).
-    bat
-    # Steam Locomotive — joke for mistyping `ls`.
-    sl
-    # Download utility (command: aria2c).
-    aria2
-    # YouTube / media downloader.
-    yt-dlp
-    # Media file technical metadata.
-    mediainfo
-    # RTSP / local video player (`mpv`).
-    mpv
-    # ffmpeg + ffplay (RTSP probe / playback).
-    ffmpeg
-    # 7-Zip with Zstd/Brotli/LZ4/etc. (`7z` / `7zz`). Attribute starts with `_` (digit).
-    _7zip-zstd
-    # Archive manager GUI (7z / Zstd / zip / tar / …). Desktop: PeaZip.
-    peazip
-    code-cursor
-    # Zed code editor (CLI: zeditor).
-    zed-editor
-    # Terminal Agent CLI (`cursor-agent`; also aliased as `agent`).
-    cursor-cli
-    # OpenCode 2 terminal agent (`opencode`; pkgs/opencode overrides nixpkgs 1.x).
-    opencode
-    # Anthropic Claude Code CLI (`claude`).
-    claude-code
-    # Computer use CLI for AI agents (`agent-desktop`; pkgs/agent-desktop).
-    agentDesktop
-    # T3 Code: desktop + `t3` CLI; PATH wraps already-installed agents.
-    (t3code.override {
-      enableClaude = true;
-      enableCursor = true;
-      enableCursorCli = true;
-      enableOpencode = true;
-    })
-    # Google Antigravity CLI (`agy` / `antigravity`; pkgs/antigravity) is installed
-    # via home/antigravity-translate.nix (wrapping `agy` with PLaMo 2-pane watch).
-    # ChatGPT desktop (Codex included). App menu: ChatGPT.
-    chatgpt
-    # Grok Bot desktop agent. App menu: Grok Bot (`grok-bot`).
-    grok-bot
-    # Earthquake map (pkgs/jquake: Sway AWT fix + sounds cwd + http.agent).
-    jquake
-    onlyoffice-desktopeditors
-    # 3D printer slicer (Bambu/Prusa fork). App menu: OrcaSlicer (`orca-slicer`).
-    orca-slicer
-    # Affinity v3 is not installed. The affinity-nix input and overlay were
-    # removed. Re-add steps are in the README (Affinity). Wine builds often
-    # take hours when cache.forall.systems misses.
-    parsec-bin
-    # Wineprefix manager for Windows apps/games (FHS-wrapped).
-    (bottles.override { removeWarningPopup = true; })
-    # wol-pc (Wake-on-LAN client): packaged via pkgs/wol-pc; reads agenix
-    # (/run/agenix/wol-pc-env) or $WOL_PC_CONFIG.
-    wol-pc
-    sshpass
-    rofi-prompt
-    tmux
-    trayscale
-    vivaldi
-    firefox
-    # Tor Browser Bundle (not the tor daemon alone).
-    tor-browser
-    # On-screen keystroke overlay (useful for demos / Chromebook Fn keys).
-    showmethekey
-    # Activity / work history trackers (ActivityWatch is in home/activitywatch.nix).
-    whatpulse
-    screenpipe
-    # Google Quick Share / Nearby Share client for Linux.
-    rquickshare
-    discord
-    # ESP32 / Arduino CLI flash & board package manager.
-    arduino-cli
-    # Espressif ROM / flash probe (chip-id, flash-id, …).
-    esptool
-    # Android screen mirror / control (GUI; wraps adb + scrcpy-server).
-    qtscrcpy
-    # adb / fastboot on PATH. QtScrcpy embeds its own adb, but the cheatsheet
-    # runs `adb devices` as a separate command, so this package stays.
-    android-tools
-    # Node.js (`node` / `npm`) and pnpm (standalone binary; uses `node` on PATH).
-    nodejs
-    pnpm
-    # Typst typesetting (CLI). Cursor uses the Tinymist extension for LSP/preview.
-    typst
-    tinymist
-    typstyle
-  ];
+  home.packages =
+    with pkgs;
+    [
+      nix-output-monitor
+      # Cat clone with syntax highlighting (`bat`; Debian package name is batcat).
+      bat
+      # Steam Locomotive — joke for mistyping `ls`.
+      sl
+      # Download utility (command: aria2c).
+      aria2
+      # YouTube / media downloader.
+      yt-dlp
+      # Media file technical metadata.
+      mediainfo
+      # RTSP / local video player (`mpv`).
+      mpv
+      # ffmpeg + ffplay (RTSP probe / playback).
+      ffmpeg
+      # 7-Zip with Zstd/Brotli/LZ4/etc. (`7z` / `7zz`). Attribute starts with `_` (digit).
+      _7zip-zstd
+      # Archive manager GUI (7z / Zstd / zip / tar / …). Desktop: PeaZip.
+      peazip
+      code-cursor
+      # Zed code editor (CLI: zeditor).
+      zed-editor
+      # Terminal Agent CLI (`cursor-agent`; also aliased as `agent`).
+      cursor-cli
+      # OpenCode 2 terminal agent (`opencode`; pkgs/opencode overrides nixpkgs 1.x).
+      opencode
+      # Anthropic Claude Code CLI (`claude`).
+      claude-code
+      # Computer use CLI for AI agents (`agent-desktop`; pkgs/agent-desktop).
+      agentDesktop
+      # T3 Code: desktop + `t3` CLI; PATH wraps already-installed agents.
+      (t3code.override {
+        enableClaude = true;
+        enableCursor = true;
+        enableCursorCli = true;
+        enableOpencode = true;
+      })
+      # Google Antigravity CLI (`agy` / `antigravity`; pkgs/antigravity) is installed
+      # via home/antigravity-translate.nix (wrapping `agy` with PLaMo 2-pane watch).
+      # ChatGPT desktop (Codex included). App menu: ChatGPT.
+      chatgpt
+      # Grok Bot desktop agent. App menu: Grok Bot (`grok-bot`).
+      grok-bot
+      # Earthquake map (pkgs/jquake: Hyprland/XWayland AWT fix + sounds cwd + http.agent).
+      jquake
+      onlyoffice-desktopeditors
+      # 3D printer slicer (Bambu/Prusa fork). App menu: OrcaSlicer (`orca-slicer`).
+      orca-slicer
+      # Affinity v3 is not installed. The affinity-nix input and overlay were
+      # removed. Re-add steps are in the README (Affinity). Wine builds often
+      # take hours when cache.forall.systems misses.
+      parsec-bin
+      # Wineprefix manager for Windows apps/games (FHS-wrapped).
+      (bottles.override { removeWarningPopup = true; })
+      # wol-pc (Wake-on-LAN client): packaged via pkgs/wol-pc; reads agenix
+      # (/run/agenix/wol-pc-env) or $WOL_PC_CONFIG.
+      wol-pc
+      sshpass
+      rofi-prompt
+      tmux
+      trayscale
+      vivaldi
+      firefox
+      # Tor Browser Bundle (not the tor daemon alone).
+      tor-browser
+      # Terminal web browser (`cha`) and man-page viewer (`mancha`).
+      chawan
+      # On-screen keystroke overlay (useful for demos / Chromebook Fn keys).
+      showmethekey
+      # Activity / work history trackers (ActivityWatch is in home/activitywatch.nix).
+      whatpulse
+      screenpipe
+      # Google Quick Share / Nearby Share client for Linux.
+      rquickshare
+      discord
+      # ESP32 / Arduino CLI flash & board package manager.
+      arduino-cli
+      # Espressif ROM / flash probe (chip-id, flash-id, …).
+      esptool
+      # Android screen mirror / control (GUI; wraps adb + scrcpy-server).
+      qtscrcpy
+      # adb / fastboot on PATH. QtScrcpy embeds its own adb, but the cheatsheet
+      # runs `adb devices` as a separate command, so this package stays.
+      android-tools
+      # Node.js (`node` / `npm`) and pnpm (standalone binary; uses `node` on PATH).
+      nodejs
+      pnpm
+      # Typst typesetting (CLI). Cursor uses the Tinymist extension for LSP/preview.
+      typst
+      tinymist
+      typstyle
+      # Qalculate! scientific calculator (Qt GUI `qalculate-qt` + CLI `qalc`).
+      qalculate-qt
+      libqalculate
+      # Tilion Fortress: local stealth Chromium engine + `tilion` / `tilion-mcp` CLI (pkgs/tilion-fortress).
+      tilion-fortress
+    ]
+    ++ localCursorPackages;
 }

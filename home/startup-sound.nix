@@ -144,7 +144,7 @@ let
       pkgs.libnotify
       pkgs.mpv
       pkgs.pulseaudio
-      pkgs.sway
+      pkgs.hyprland
       pkgs.systemd
     ];
     text = ''
@@ -477,14 +477,15 @@ let
           '{text: $text, tooltip: $tooltip, class: $class}'
       }
 
-      launch_in_sway() {
-        if [ -n "''${SWAYSOCK:-}" ] && swaymsg -t get_version >/dev/null 2>&1; then
+      launch_in_session() {
+        if [ -n "''${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && ${pkgs.hyprland}/bin/hyprctl version >/dev/null 2>&1; then
           local cmd=""
-          local arg
+          local arg lua_expr
           for arg in "$@"; do
             cmd+="''${cmd:+ }$(printf '%q' "$arg")"
           done
-          swaymsg exec -- "$cmd" >/dev/null
+          lua_expr="$(jq -Rn --arg c "$cmd" '"hl.dsp.exec_cmd(" + ($c | tojson) + ")"')"
+          ${pkgs.hyprland}/bin/hyprctl dispatch "$lua_expr" >/dev/null
         else
           "$@" </dev/null >/dev/null 2>&1 &
         fi
@@ -697,11 +698,11 @@ let
               ;;
             yazi)
               mkdir -p "$local_dir"
-              launch_in_sway "$ghosttyBin" -e "$yaziBin" "$file"
+              launch_in_session "$ghosttyBin" -e "$yaziBin" "$file"
               exit 0
               ;;
             edit_nix)
-              launch_in_sway "$ghosttyBin" -e "$nvimBin" "$repo_cfg"
+              launch_in_session "$ghosttyBin" -e "$nvimBin" "$repo_cfg"
               exit 0
               ;;
             delete)
@@ -818,11 +819,11 @@ let
               ;;
             open_yazi)
               mkdir -p "$local_dir"
-              launch_in_sway "$ghosttyBin" -e "$yaziBin" "$local_dir"
+              launch_in_session "$ghosttyBin" -e "$yaziBin" "$local_dir"
               exit 0
               ;;
             edit_nix)
-              launch_in_sway "$ghosttyBin" -e "$nvimBin" "$repo_cfg"
+              launch_in_session "$ghosttyBin" -e "$nvimBin" "$repo_cfg"
               exit 0
               ;;
             item)

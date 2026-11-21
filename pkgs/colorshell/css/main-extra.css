@@ -1,0 +1,10 @@
+/* MySettings: Legible slider troughs and filled highlights on dark pywal16 palettes
+ * where --bg-primary / --bg-secondary collapse near black. */
+scale trough {
+  background: oklch(from var(--fg-primary) l c h / .18);
+  border-radius: 8px;
+}
+scale trough highlight {
+  background: oklch(from var(--fg-primary) l c h / .72);
+  border-radius: 8px;
+}

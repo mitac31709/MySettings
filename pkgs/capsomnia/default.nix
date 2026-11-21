@@ -1,4 +1,4 @@
-# Capsomnia reproduction for NixOS/Sway: Caps Lock physical keep-awake switch,
+# Capsomnia reproduction for NixOS/Hyprland: Caps Lock physical keep-awake switch,
 # closed-lid display dimming/sleep, auto-off timer, hotspot keepalive, GTK4 settings,
 # Rofi menu, and cpsm CLI.
 {
@@ -13,8 +13,8 @@
   harfbuzz,
   graphene,
   gdk-pixbuf,
-  sway,
-  swaylock,
+  hyprland,
+  hyprlock,
   brightnessctl,
   rofi,
   libnotify,
@@ -101,8 +101,8 @@ stdenvNoCC.mkDerivation {
           --prefix GI_TYPELIB_PATH : "${giTypelibPath}" \
           --prefix PATH : "$out/bin:${
             lib.makeBinPath [
-              sway
-              swaylock
+              hyprland
+              hyprlock
               brightnessctl
               iproute2
               iputils
@@ -159,7 +159,7 @@ stdenvNoCC.mkDerivation {
   '';
 
   meta = {
-    description = "Caps Lock physical keep-awake switch for closed-lid Linux/Sway laptops (Capsomnia clone)";
+    description = "Caps Lock physical keep-awake switch for closed-lid Linux/Hyprland laptops (Capsomnia clone)";
     platforms = lib.platforms.linux;
     mainProgram = "cpsm";
   };

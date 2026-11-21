@@ -46,6 +46,8 @@ in
     ];
     extraConfig = ''
       [main]
+      capslock = macro
+
       f1 = back
       f2 = refresh
       f3 = f11

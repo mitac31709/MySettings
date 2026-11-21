@@ -8,7 +8,7 @@
 
 let
   # keyd command(): invoke kernel OOM killer (SysRq-f). Prefer this over a
-  # Sway bind — compositor may be wedged.
+  # Hyprland bind — compositor may be wedged.
   sysrqOom = pkgs.writeShellScript "sysrq-oom" ''
     ${pkgs.coreutils}/bin/printf f > /proc/sysrq-trigger
   '';
@@ -25,6 +25,8 @@ in
   # ("setgid: Operation not permitted"); ProcSubset=pid and
   # ProtectKernelTunables hide/RO-mount /proc/sysrq-trigger (sysrqOom).
   systemd.services.keyd.serviceConfig = {
+    # keyd 2.6.0 exits 15 on SIGTERM instead of returning 0.
+    SuccessExitStatus = [ 15 ];
     CapabilityBoundingSet = lib.mkForce [
       "CAP_SYS_NICE"
       "CAP_IPC_LOCK"
@@ -41,8 +43,19 @@ in
       # Matches all keyboards (VAIO internal + external USB/BT keyboards) unless
       # a more specific host id block (e.g. chromebook/input.nix cros) matches.
       ctrl-alt-del-oom = {
-        ids = [ "*" ];
+        ids = [
+          "*"
+          # Exclude capsomnia-helperd's synthetic toggle UInput device so
+          # non-dedicated fallback toggles are not remapped back to KEY_MACRO.
+          "-k:1209:ca95"
+        ];
         extraConfig = ''
+          [main]
+          # Remap physical Caps Lock to KEY_MACRO (XKB <I120> = NoSymbol) so it
+          # never triggers Eisu_toggle / Caps_Lock in Hyprland, fcitx5/Meltype,
+          # or TTY; capsomnia-helperd watches KEY_MACRO to toggle Keep Awake.
+          capslock = macro
+
           [control+alt]
           delete = command(${sysrqOom})
           backspace = command(${sysrqOom})

@@ -153,40 +153,21 @@ class CapsomniaCoreTests(unittest.TestCase):
         norm = normalize_prefs({"language": "invalid"})
         self.assertEqual(norm["language"], "auto")
 
-    def test_swaymsg_argv_separator(self) -> None:
-        from capsomniad import build_swaymsg_argv
+    def test_hyprctl_argv_and_shortcut_normalization(self) -> None:
+        from capsomniad import build_hyprctl_argv, normalize_hyprland_shortcut
 
         self.assertEqual(
-            build_swaymsg_argv("/tmp/sway.sock", "-t", "get_outputs"),
-            ["swaymsg", "-s", "/tmp/sway.sock", "-t", "get_outputs"],
+            build_hyprctl_argv("sig123", "-j", "monitors", "all"),
+            ["hyprctl", "-i", "sig123", "-j", "monitors", "all"],
         )
         self.assertEqual(
-            build_swaymsg_argv(
-                "/tmp/sway.sock",
-                "bindsym",
-                "--inhibited",
-                "--locked",
-                "Mod4+Mod1+c",
-                "exec",
-                "cpsm",
-                "toggle",
-                "--no-sleep",
-            ),
-            [
-                "swaymsg",
-                "-s",
-                "/tmp/sway.sock",
-                "--",
-                "bindsym",
-                "--inhibited",
-                "--locked",
-                "Mod4+Mod1+c",
-                "exec",
-                "cpsm",
-                "toggle",
-                "--no-sleep",
-            ],
+            build_hyprctl_argv("sig123", "eval", 'hl.unbind("SUPER + ALT + C")'),
+            ["hyprctl", "-i", "sig123", "eval", 'hl.unbind("SUPER + ALT + C")'],
         )
+        self.assertEqual(normalize_hyprland_shortcut("Mod4+Mod1+c"), "SUPER + ALT + C")
+        self.assertEqual(normalize_hyprland_shortcut("SUPER + ALT + C"), "SUPER + ALT + C")
+        self.assertEqual(normalize_hyprland_shortcut("Ctrl+Shift+F9"), "CTRL + SHIFT + F9")
+        self.assertEqual(normalize_hyprland_shortcut("  "), "")
 
     def test_inhibitor_steal_fds_and_release_closes_fd(self) -> None:
         import os
@@ -217,6 +198,205 @@ class CapsomniaCoreTests(unittest.TestCase):
             self.assertEqual(os.read(r_fd, 1), b"")
         finally:
             os.close(r_fd)
+
+    def test_sleep_request_skips_when_logind_already_preparing(self) -> None:
+        from unittest.mock import MagicMock, patch
+        from gi.repository import GLib
+        from capsomniad import CapsomniaDaemon
+
+        daemon = CapsomniaDaemon.__new__(CapsomniaDaemon)
+        fake_bus = MagicMock()
+        fake_bus.call_sync.return_value = GLib.Variant("(v)", (GLib.Variant("b", True),))
+        daemon.bus = fake_bus
+        daemon.helper_call = MagicMock(return_value={"ok": True})
+
+        with patch("capsomniad.read_lid_closed", return_value=True):
+            self.assertTrue(daemon.request_system_sleep_if_closed())
+        daemon.helper_call.assert_not_called()
+
+        fake_bus.call_sync.return_value = GLib.Variant("(v)", (GLib.Variant("b", False),))
+        with patch("capsomniad.read_lid_closed", return_value=True):
+            self.assertTrue(daemon.request_system_sleep_if_closed())
+        daemon.helper_call.assert_called_once_with({"cmd": "suspend"}, timeout=5.0)
+
+    def test_notify_waybar_skips_subprocess_when_waybar_absent(self) -> None:
+        from unittest.mock import patch
+        from capsomniad import notify_waybar
+
+        with patch("capsomniad.is_waybar_running", return_value=False), patch(
+            "capsomniad.subprocess.run"
+        ) as mock_run:
+            notify_waybar()
+        mock_run.assert_not_called()
+
+    def test_sync_keep_display_marker_tracks_awake_on(self) -> None:
+        from capsomniad import CapsomniaDaemon
+
+        with tempfile.TemporaryDirectory() as tmp:
+            daemon = CapsomniaDaemon.__new__(CapsomniaDaemon)
+            daemon.rt_dir = Path(tmp)
+            daemon.keep_display_marker = Path(tmp) / "keep-display-awake"
+            daemon.prefs = {"keep_display_awake": False}
+
+            daemon.awake_on = True
+            daemon.sync_keep_display_marker()
+            self.assertTrue(daemon.keep_display_marker.exists())
+
+            daemon.awake_on = False
+            daemon.sync_keep_display_marker()
+            self.assertFalse(daemon.keep_display_marker.exists())
+
+
+class CapsomniaHelperTests(unittest.TestCase):
+    class _FakeDev:
+        def __init__(self) -> None:
+            self.writes: list[tuple[int, int, int]] = []
+
+        def write(self, etype: int, code: int, value: int) -> None:
+            self.writes.append((etype, code, value))
+
+    @staticmethod
+    def _make_led_dir(root: Path, name: str, device_name: str, brightness: int, trigger: str) -> Path:
+        led = root / name
+        (led / "device").mkdir(parents=True)
+        (led / "device" / "name").write_text(f"{device_name}\n", encoding="utf-8")
+        (led / "brightness").write_text(f"{brightness}\n", encoding="utf-8")
+        (led / "trigger").write_text(f"none [{trigger}] kbd-scrolllock\n", encoding="utf-8")
+        return led
+
+    def test_write_keyd_led_emits_syn_report(self) -> None:
+        from evdev import ecodes
+        from capsomnia_helperd import write_keyd_led
+
+        dev = self._FakeDev()
+        write_keyd_led(dev, True, force_pulse=False)
+        self.assertEqual(
+            dev.writes,
+            [
+                (ecodes.EV_LED, ecodes.LED_CAPSL, 1),
+                (ecodes.EV_SYN, ecodes.SYN_REPORT, 0),
+            ],
+        )
+
+        dev.writes.clear()
+        write_keyd_led(dev, True, force_pulse=True)
+        self.assertEqual(
+            dev.writes,
+            [
+                (ecodes.EV_LED, ecodes.LED_CAPSL, 0),
+                (ecodes.EV_SYN, ecodes.SYN_REPORT, 0),
+                (ecodes.EV_LED, ecodes.LED_CAPSL, 1),
+                (ecodes.EV_SYN, ecodes.SYN_REPORT, 0),
+            ],
+        )
+
+    def test_apply_led_state_drives_keyd_and_pulses_on_phys_desync(self) -> None:
+        from evdev import ecodes
+        from capsomnia_helperd import KEYD_NAME, apply_led_state
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            phys = self._make_led_dir(root, "input0::capslock", "AT Translated Set 2 keyboard", 0, "kbd-capslock")
+            virt = self._make_led_dir(root, "input23::capslock", KEYD_NAME, 0, "kbd-capslock")
+            dev = self._FakeDev()
+
+            # Normal transition 0 -> 1: write EV_LED(1) + SYN_REPORT without pulse; do not touch virt sysfs brightness.
+            res = apply_led_state(True, True, keyd_dev=dev, leds=[phys, virt])
+            self.assertEqual(res["errors"], [])
+            self.assertFalse(res["used_pulse"])
+            self.assertEqual((phys / "trigger").read_text(encoding="utf-8"), "none")
+            self.assertEqual((virt / "trigger").read_text(encoding="utf-8"), "none")
+            self.assertEqual((virt / "brightness").read_text(encoding="utf-8").strip(), "0")
+            self.assertEqual(
+                dev.writes,
+                [
+                    (ecodes.EV_LED, ecodes.LED_CAPSL, 1),
+                    (ecodes.EV_SYN, ecodes.SYN_REPORT, 0),
+                ],
+            )
+
+            # Virtual LED already 1 while physical LED is still 0: force a 0 -> 1 pulse.
+            dev.writes.clear()
+            (virt / "brightness").write_text("1\n", encoding="utf-8")
+            (phys / "brightness").write_text("0\n", encoding="utf-8")
+            (phys / "trigger").write_text("[none]\n", encoding="utf-8")
+            (virt / "trigger").write_text("[none]\n", encoding="utf-8")
+            res = apply_led_state(True, True, keyd_dev=dev, leds=[phys, virt])
+            self.assertTrue(res["used_pulse"])
+            self.assertEqual(
+                dev.writes,
+                [
+                    (ecodes.EV_LED, ecodes.LED_CAPSL, 0),
+                    (ecodes.EV_SYN, ecodes.SYN_REPORT, 0),
+                    (ecodes.EV_LED, ecodes.LED_CAPSL, 1),
+                    (ecodes.EV_SYN, ecodes.SYN_REPORT, 0),
+                ],
+            )
+
+            # Both LEDs match desired state: no redundant keyd writes.
+            dev.writes.clear()
+            (phys / "brightness").write_text("1\n", encoding="utf-8")
+            res = apply_led_state(True, True, keyd_dev=dev, leds=[phys, virt])
+            self.assertFalse(res["used_pulse"])
+            self.assertEqual(dev.writes, [])
+
+            # Shutdown / non-dedicated restore: restore trigger and clear LED via keyd.
+            res = apply_led_state(False, False, keyd_dev=dev, leds=[phys, virt])
+            self.assertEqual((phys / "trigger").read_text(encoding="utf-8"), "kbd-capslock")
+            self.assertEqual((virt / "trigger").read_text(encoding="utf-8"), "kbd-capslock")
+            self.assertEqual(
+                dev.writes,
+                [
+                    (ecodes.EV_LED, ecodes.LED_CAPSL, 0),
+                    (ecodes.EV_SYN, ecodes.SYN_REPORT, 0),
+                ],
+            )
+
+    def test_handle_keyd_event_triggers_and_reasserts_led(self) -> None:
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock, patch
+        from evdev import ecodes
+        from capsomnia_helperd import HelperServer
+
+        srv = HelperServer("/tmp/unused.sock", "wheel")
+        dev = self._FakeDev()
+        srv.keyd_dev = dev  # type: ignore[assignment]
+        srv.dedicated = True
+        srv.led_on = True
+        srv.broadcast_event = MagicMock()  # type: ignore[method-assign]
+
+        # KEY_MACRO and KEY_CAPSLOCK down both broadcast capslock_key_down in dedicated mode.
+        srv.handle_keyd_event(SimpleNamespace(type=ecodes.EV_KEY, code=ecodes.KEY_MACRO, value=1), 10.0)
+        srv.handle_keyd_event(SimpleNamespace(type=ecodes.EV_KEY, code=ecodes.KEY_CAPSLOCK, value=1), 10.1)
+        self.assertEqual(srv.broadcast_event.call_count, 2)
+
+        # Conflicting EV_LED(0) from compositor immediately reasserts EV_LED(1) + SYN_REPORT.
+        srv.handle_keyd_event(SimpleNamespace(type=ecodes.EV_LED, code=ecodes.LED_CAPSL, value=0), 10.2)
+        self.assertEqual(
+            dev.writes,
+            [
+                (ecodes.EV_LED, ecodes.LED_CAPSL, 1),
+                (ecodes.EV_SYN, ecodes.SYN_REPORT, 0),
+            ],
+        )
+
+        # Matching EV_LED(1) does not reassert (no feedback loop).
+        dev.writes.clear()
+        srv.handle_keyd_event(SimpleNamespace(type=ecodes.EV_LED, code=ecodes.LED_CAPSL, value=1), 10.3)
+        self.assertEqual(dev.writes, [])
+
+        # Echo guard suppresses reassertion immediately after a forced pulse.
+        srv.ignore_led_echo_until = 11.0
+        srv.handle_keyd_event(SimpleNamespace(type=ecodes.EV_LED, code=ecodes.LED_CAPSL, value=0), 10.5)
+        self.assertEqual(dev.writes, [])
+
+        # Non-dedicated mode forwards KEY_MACRO once within guard window.
+        srv.dedicated = False
+        with patch("capsomnia_helperd.inject_capslock_toggle") as mock_toggle:
+            srv.handle_keyd_event(SimpleNamespace(type=ecodes.EV_KEY, code=ecodes.KEY_MACRO, value=1), 20.0)
+            srv.handle_keyd_event(SimpleNamespace(type=ecodes.EV_KEY, code=ecodes.KEY_MACRO, value=1), 20.1)
+            srv.handle_keyd_event(SimpleNamespace(type=ecodes.EV_KEY, code=ecodes.KEY_MACRO, value=1), 20.5)
+        self.assertEqual(mock_toggle.call_count, 2)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""cpsm — Capsomnia CLI for NixOS/Sway."""
+"""cpsm — Capsomnia CLI for NixOS/Hyprland."""
 
 from __future__ import annotations
 
@@ -86,7 +86,7 @@ Usage:
 
 Commands:
   status                    Show awake, lid, LED, inhibitor, and timer state
-  doctor                    Show daemon, helper, keyd, Sway, and LED diagnostics
+  doctor                    Show daemon, helper, keyd, Hyprland, and LED diagnostics
   on                        Enable keep-awake mode
   off [--no-sleep]          Disable keep-awake mode (requests sleep unless --no-sleep)
   toggle [--no-sleep]       Toggle keep-awake mode (off requests sleep unless --no-sleep)

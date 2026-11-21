@@ -1,0 +1,226 @@
+/* MySettings: Top-bar native widgets & status highlights */
+
+/* Cheatsheet (?) button */
+.bar-container .cheatsheet {
+  min-width: 24px;
+  padding: 0 6px;
+}
+.bar-container .cheatsheet image {
+  -gtk-icon-size: 14px;
+  color: var(--fg-disabled);
+}
+.bar-container .cheatsheet:hover image {
+  color: var(--fg-primary);
+}
+
+/* Restic live backup progress pill (hidden when idle) */
+.bar-container .restic-backup {
+  background: var(--bg-secondary);
+}
+.bar-container .restic-backup image {
+  -gtk-icon-size: 14px;
+  color: #38bdf8;
+}
+.bar-container .restic-backup label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #38bdf8;
+}
+.bar-container .restic-backup.done image,
+.bar-container .restic-backup.done label {
+  color: #52d699;
+}
+.bar-container .restic-backup.failed image,
+.bar-container .restic-backup.failed label {
+  color: #f06d7d;
+}
+
+/* CPU / Memory stats pill -> click launches btop */
+.bar-container .sysstats {
+  padding: 0 7px;
+}
+.bar-container .sysstats image {
+  -gtk-icon-size: 13px;
+  color: var(--fg-disabled);
+}
+.bar-container .sysstats .stats-label {
+  font-size: 11px;
+  font-weight: 600;
+}
+.bar-container .sysstats.warning image,
+.bar-container .sysstats.warning .stats-label {
+  color: #f0b866;
+}
+.bar-container .sysstats.critical image,
+.bar-container .sysstats.critical .stats-label {
+  color: #f06d7d;
+}
+
+/* Unified Keep Screen On (画面常時オン + Capsomnia) */
+.bar-container .keep-awake {
+  padding: 0 7px;
+}
+.bar-container .keep-awake image {
+  -gtk-icon-size: 14px;
+}
+.bar-container .keep-awake.off image {
+  color: var(--fg-disabled);
+}
+.bar-container .keep-awake.on {
+  background: var(--bg-secondary);
+}
+.bar-container .keep-awake.on image,
+.bar-container .keep-awake.on .ka-label {
+  color: #52d699;
+}
+.bar-container .keep-awake.error {
+  background: var(--bg-secondary);
+}
+.bar-container .keep-awake.error image,
+.bar-container .keep-awake.error .ka-label {
+  color: #f06d7d;
+}
+.bar-container .keep-awake .ka-label {
+  font-size: 11px;
+  font-weight: 700;
+}
+.bar-container .keep-awake .led-dot {
+  min-width: 7px;
+  min-height: 7px;
+  border-radius: 999px;
+}
+.bar-container .keep-awake .led-dot.off {
+  background: var(--fg-disabled);
+  opacity: 0.45;
+}
+.bar-container .keep-awake .led-dot.on {
+  background: #34c759;
+  box-shadow: 0 0 6px #34c759;
+}
+.bar-container .keep-awake .led-dot.error {
+  background: #f06d7d;
+  box-shadow: 0 0 6px #f06d7d;
+}
+
+/* Background 6-daemon status pill */
+.bar-container .services {
+  padding: 0 7px;
+}
+.bar-container .services image {
+  -gtk-icon-size: 13px;
+  color: var(--fg-disabled);
+}
+.bar-container .services.ok image {
+  color: var(--fg-primary);
+}
+.bar-container .services.degraded image {
+  color: #f0b866;
+}
+.bar-container .services.failed image {
+  color: #f06d7d;
+}
+.bar-container .services .svc-dot {
+  min-width: 4px;
+  min-height: 4px;
+  border-radius: 999px;
+}
+.bar-container .services .svc-dot.active {
+  background: #52d699;
+}
+.bar-container .services .svc-dot.running {
+  background: #38bdf8;
+}
+.bar-container .services .svc-dot.warn {
+  background: #f0b866;
+}
+.bar-container .services .svc-dot.failed {
+  background: #f06d7d;
+}
+
+/* JQuake status pill */
+.bar-container .jquake {
+  min-width: 24px;
+  padding: 0 6px;
+}
+.bar-container .jquake image {
+  -gtk-icon-size: 14px;
+}
+.bar-container .jquake.active image {
+  color: #38bdf8;
+}
+.bar-container .jquake.open {
+  background: var(--bg-secondary);
+}
+.bar-container .jquake.open image {
+  color: #52d699;
+}
+.bar-container .jquake.degraded image {
+  color: #f0b866;
+}
+.bar-container .jquake.failed image {
+  color: #f06d7d;
+}
+
+/* Startup sound pill */
+.bar-container .startup-sound {
+  min-width: 24px;
+  padding: 0 6px;
+}
+.bar-container .startup-sound image {
+  -gtk-icon-size: 14px;
+}
+.bar-container .startup-sound.enabled image {
+  color: var(--fg-primary);
+}
+.bar-container .startup-sound.empty image {
+  color: #f0b866;
+}
+.bar-container .startup-sound.disabled image {
+  color: var(--fg-disabled);
+  opacity: 0.65;
+}
+
+/* Flake updates pill */
+.bar-container .updates {
+  min-width: 24px;
+  padding: 0 6px;
+}
+.bar-container .updates image {
+  -gtk-icon-size: 14px;
+}
+.bar-container .updates.idle image {
+  color: var(--fg-disabled);
+}
+.bar-container .updates.checking image,
+.bar-container .updates.checking label {
+  color: var(--fg-primary);
+}
+.bar-container .updates.available {
+  background: var(--bg-secondary);
+}
+.bar-container .updates.available image,
+.bar-container .updates.available label {
+  color: #38bdf8;
+}
+.bar-container .updates .count {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* Sysfs battery state highlights */
+.bar-container .status .battery.warning image,
+.bar-container .status .battery.warning label {
+  color: #f0b866;
+}
+.bar-container .status .battery.critical image,
+.bar-container .status .battery.critical label {
+  color: #f06d7d;
+}
+.bar-container .status .battery.anomaly image,
+.bar-container .status .battery.anomaly label {
+  color: #f0b866;
+}
+.bar-container .status .battery.charging image,
+.bar-container .status .battery.charging label {
+  color: #52d699;
+}

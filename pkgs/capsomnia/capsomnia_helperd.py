@@ -23,6 +23,12 @@ DEFAULT_SOCKET_PATH = "/run/capsomnia/helper.sock"
 LED_GLOB = "/sys/class/leds/*::capslock"
 REOPEN_INTERVAL_SEC = 1.0
 LED_SYNC_INTERVAL_SEC = 1.5
+TRIGGER_KEYCODES = (ecodes.KEY_MACRO, ecodes.KEY_CAPSLOCK)
+LED_PULSE_ECHO_GUARD_SEC = 0.12
+MACRO_INJECT_GUARD_SEC = 0.3
+MAX_REASSERTS_PER_SEC = 10
+UINPUT_VENDOR = 0x1209
+UINPUT_PRODUCT = 0xCA95
 
 
 def log(msg: str) -> None:
@@ -40,6 +46,13 @@ def read_led_brightness(led_dir: Path) -> int | None:
         return None
 
 
+def read_led_device_name(led_dir: Path) -> str | None:
+    try:
+        return (led_dir / "device" / "name").read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+
+
 def read_active_trigger(led_dir: Path) -> str | None:
     try:
         raw = (led_dir / "trigger").read_text(encoding="utf-8")
@@ -51,30 +64,83 @@ def read_active_trigger(led_dir: Path) -> str | None:
     return None
 
 
-def apply_led_state(dedicated: bool, led_on: bool) -> dict[str, Any]:
-    leds = list_capslock_leds()
+def write_keyd_led(dev: Any, led_on: bool, *, force_pulse: bool = False) -> None:
+    """Write EV_LED + SYN_REPORT to keyd virtual keyboard so keyd wakes up
+    immediately and forwards the LED state to its grabbed physical keyboards."""
+    val = 1 if led_on else 0
+    if force_pulse:
+        dev.write(ecodes.EV_LED, ecodes.LED_CAPSL, 1 - val)
+        dev.write(ecodes.EV_SYN, ecodes.SYN_REPORT, 0)
+    dev.write(ecodes.EV_LED, ecodes.LED_CAPSL, val)
+    dev.write(ecodes.EV_SYN, ecodes.SYN_REPORT, 0)
+
+
+def apply_led_state(
+    dedicated: bool,
+    led_on: bool,
+    *,
+    keyd_dev: Any | None = None,
+    leds: list[Path] | None = None,
+) -> dict[str, Any]:
+    leds = list_capslock_leds() if leds is None else leds
     updated = 0
     errors: list[str] = []
+    used_pulse = False
+    desired_trig = "none" if dedicated else "kbd-capslock"
+    desired_int = 1 if led_on else 0
+
+    keyd_led: Path | None = None
+    phys_leds: list[Path] = []
     for led in leds:
+        if read_led_device_name(led) == KEYD_NAME:
+            keyd_led = led
+        else:
+            phys_leds.append(led)
         try:
             trig_path = led / "trigger"
-            bright_path = led / "brightness"
-            desired_trig = "none" if dedicated else "kbd-capslock"
             current_trig = read_active_trigger(led)
             if current_trig != desired_trig:
                 trig_path.write_text(desired_trig, encoding="utf-8")
-            if dedicated:
-                desired_b = "1" if led_on else "0"
-                current_b = read_led_brightness(led)
-                if str(current_b) != desired_b:
-                    bright_path.write_text(desired_b, encoding="utf-8")
             updated += 1
         except OSError as err:
             errors.append(f"{led.name}: {err}")
+
+    if dedicated:
+        if keyd_dev is not None:
+            virtual_b = read_led_brightness(keyd_led) if keyd_led is not None else None
+            phys_mismatch = any(
+                read_led_brightness(led) != desired_int for led in phys_leds
+            )
+            if virtual_b != desired_int or phys_mismatch:
+                force_pulse = virtual_b == desired_int and phys_mismatch
+                try:
+                    write_keyd_led(keyd_dev, led_on, force_pulse=force_pulse)
+                    used_pulse = force_pulse
+                except OSError as err:
+                    errors.append(f"keyd_dev: {err}")
+
+        # Direct sysfs fallback for any keyboard not grabbed by keyd (or when keyd is absent).
+        sysfs_targets = phys_leds if keyd_dev is not None else leds
+        desired_b = str(desired_int)
+        for led in sysfs_targets:
+            try:
+                current_b = read_led_brightness(led)
+                if str(current_b) != desired_b:
+                    (led / "brightness").write_text(desired_b, encoding="utf-8")
+            except OSError as err:
+                errors.append(f"{led.name}: {err}")
+    elif keyd_dev is not None and not led_on:
+        # Restoring non-dedicated mode (e.g. shutdown): ensure Caps Lock LED is cleared cleanly.
+        try:
+            write_keyd_led(keyd_dev, False, force_pulse=False)
+        except OSError:
+            pass
+
     return {
         "led_count": len(leds),
         "updated": updated,
         "errors": errors,
+        "used_pulse": used_pulse,
     }
 
 
@@ -102,7 +168,7 @@ def find_keyd_keyboard() -> InputDevice | None:
         except OSError:
             continue
         caps = dev.capabilities().get(ecodes.EV_KEY, ())
-        if dev.name == KEYD_NAME and ecodes.KEY_CAPSLOCK in caps:
+        if dev.name == KEYD_NAME and any(code in caps for code in TRIGGER_KEYCODES):
             return dev
         try:
             dev.close()
@@ -114,7 +180,12 @@ def find_keyd_keyboard() -> InputDevice | None:
 def inject_capslock_toggle(use_shift: bool = True) -> None:
     """Emit a synthetic Caps Lock tap so XKB/LED toggle in non-dedicated mode."""
     caps = {ecodes.EV_KEY: [ecodes.KEY_LEFTSHIFT, ecodes.KEY_CAPSLOCK]}
-    with UInput(caps, name="capsomnia-virtual-toggle") as ui:
+    with UInput(
+        caps,
+        name="capsomnia-virtual-toggle",
+        vendor=UINPUT_VENDOR,
+        product=UINPUT_PRODUCT,
+    ) as ui:
         time.sleep(0.05)
         if use_shift:
             ui.write(ecodes.EV_KEY, ecodes.KEY_LEFTSHIFT, 1)
@@ -140,6 +211,10 @@ class HelperServer:
         self.keyd_dev: InputDevice | None = None
         self.next_keyd_probe = 0.0
         self.next_led_sync = 0.0
+        self.ignore_led_echo_until = 0.0
+        self.ignore_macro_until = 0.0
+        self.reassert_window_reset = 0.0
+        self.reassert_count = 0
         self.server_sock: socket.socket | None = None
         self.subscribers: list[socket.socket] = []
 
@@ -162,6 +237,12 @@ class HelperServer:
         os.chmod(self.socket_path, 0o660)
         self.server_sock = srv
 
+    def sync_leds(self) -> dict[str, Any]:
+        res = apply_led_state(self.dedicated, self.led_on, keyd_dev=self.keyd_dev)
+        if res.get("used_pulse"):
+            self.ignore_led_echo_until = time.monotonic() + LED_PULSE_ECHO_GUARD_SEC
+        return res
+
     def ensure_keyd(self, now: float) -> None:
         if self.keyd_dev is not None or now < self.next_keyd_probe:
             return
@@ -170,6 +251,8 @@ class HelperServer:
         if dev is not None:
             log(f"watching {dev.path} ({dev.name})")
             self.keyd_dev = dev
+            if self.dedicated:
+                self.sync_leds()
 
     def broadcast_event(self, payload: dict[str, Any]) -> None:
         raw = (json.dumps(payload) + "\n").encode("utf-8")
@@ -217,7 +300,7 @@ class HelperServer:
         if cmd == "set_mode":
             self.dedicated = bool(req.get("dedicated", True))
             self.led_on = bool(req.get("led_on", False))
-            res = apply_led_state(self.dedicated, self.led_on)
+            res = self.sync_leds()
             snap = snapshot_leds()
             self.last_observed_any_led = snap["any_led_on"]
             self.send_json(conn, {"ok": not res["errors"], **res, **snap})
@@ -226,7 +309,7 @@ class HelperServer:
             use_shift = bool(req.get("use_shift", True))
             self.led_on = target
             if self.dedicated:
-                res = apply_led_state(True, target)
+                res = self.sync_leds()
                 snap = snapshot_leds()
                 self.send_json(conn, {"ok": not res["errors"], **res, **snap})
             else:
@@ -275,7 +358,7 @@ class HelperServer:
             return
         self.next_led_sync = now + LED_SYNC_INTERVAL_SEC
         if self.dedicated:
-            apply_led_state(True, self.led_on)
+            self.sync_leds()
             return
         snap = snapshot_leds()
         any_on = bool(snap["any_led_on"])
@@ -284,6 +367,37 @@ class HelperServer:
         elif any_on != self.last_observed_any_led:
             self.last_observed_any_led = any_on
             self.broadcast_event({"event": "led_changed", "on": any_on})
+
+    def handle_keyd_event(self, ev: Any, now: float) -> None:
+        if ev.type == ecodes.EV_KEY and ev.code in TRIGGER_KEYCODES and ev.value == 1:
+            if self.dedicated:
+                self.broadcast_event({"event": "capslock_key_down", "ts": time.time()})
+            elif ev.code == ecodes.KEY_MACRO and now >= self.ignore_macro_until:
+                self.ignore_macro_until = now + MACRO_INJECT_GUARD_SEC
+                try:
+                    inject_capslock_toggle(use_shift=True)
+                except OSError as err:
+                    log(f"uinput fallback toggle failed: {err}")
+        elif ev.type == ecodes.EV_LED and ev.code == ecodes.LED_CAPSL:
+            observed = bool(ev.value)
+            if self.dedicated:
+                if (
+                    self.keyd_dev is not None
+                    and now >= self.ignore_led_echo_until
+                    and observed != self.led_on
+                ):
+                    if now >= self.reassert_window_reset:
+                        self.reassert_window_reset = now + 1.0
+                        self.reassert_count = 0
+                    if self.reassert_count < MAX_REASSERTS_PER_SEC:
+                        self.reassert_count += 1
+                        try:
+                            write_keyd_led(self.keyd_dev, self.led_on, force_pulse=False)
+                        except OSError as err:
+                            log(f"immediate LED reassert failed: {err}")
+            elif self.last_observed_any_led != observed:
+                self.last_observed_any_led = observed
+                self.broadcast_event({"event": "led_changed", "on": observed})
 
     def run(self) -> int:
         self.setup_socket()
@@ -333,15 +447,9 @@ class HelperServer:
                             pass
                     elif item is self.keyd_dev:
                         try:
+                            ev_now = time.monotonic()
                             for ev in self.keyd_dev.read():
-                                if (
-                                    ev.type == ecodes.EV_KEY
-                                    and ev.code == ecodes.KEY_CAPSLOCK
-                                    and ev.value == 1
-                                ):
-                                    self.broadcast_event(
-                                        {"event": "capslock_key_down", "ts": time.time()}
-                                    )
+                                self.handle_keyd_event(ev, ev_now)
                         except OSError as err:
                             log(f"keyd device read error: {err}")
                             try:
@@ -351,7 +459,7 @@ class HelperServer:
                             self.keyd_dev = None
         finally:
             log("shutting down; restoring kbd-capslock LED trigger")
-            apply_led_state(False, False)
+            apply_led_state(False, False, keyd_dev=self.keyd_dev)
             for sub in self.subscribers:
                 try:
                     sub.close()

@@ -1,8 +1,8 @@
-# ActivityWatch server + Wayland window/AFK watcher (awatcher) for Sway.
+# ActivityWatch server + Wayland window/AFK watcher (awatcher) for Hyprland.
 #
 # Web UI: http://127.0.0.1:5600
 # awatcher uses wlr-foreign-toplevel-management-unstable-v1 and ext-idle-notify-v1
-# on Sway, so it runs under graphical-session.target (after WAYLAND_DISPLAY is
+# on Hyprland, so it runs under graphical-session.target (after WAYLAND_DISPLAY is
 # exported) instead of HM's default.target watcher hook (which fires before login
 # when user linger is enabled).
 { pkgs, ... }:

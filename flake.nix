@@ -1,5 +1,5 @@
 {
-  description = "NixOS configuration for mitac (Sway + greetd, Chromebook delbin & VAIO)";
+  description = "NixOS configuration for mitac (Hyprland (UWSM) + greetd, Chromebook delbin & VAIO)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -28,6 +28,12 @@
     nixpkgs-cursor.url = "github:NixOS/nixpkgs/nixos-unstable";
     # Hermes Agent (CLI + ACP). Do not follow nixpkgs — uv2nix lock pins upstream.
     hermes-agent.url = "github:NousResearch/hermes-agent";
+    # Colorshell (GTK4 + Astal Hyprland desktop shell). Do not follow nixpkgs —
+    # our 26.11 nixpkgs removed pkgs.astal, while colorshell pins a compatible nixpkgs + pywal16.
+    colorshell = {
+      url = "github:retrozinndev/colorshell";
+      inputs.home-manager.follows = "home-manager";
+    };
     # Vendor .debs (flake update re-fetches; see scripts/flake-update.sh).
     # Keep URL version in sync with uniclipboardVersion below (flake-update.sh).
     uniclipboard-deb = {
@@ -125,7 +131,7 @@
                       src = inputs.grok-bot-deb;
                       version = grokBotVersion;
                     };
-                    # 1.8.4 + Sway AWT / sounds / no-update-prompt wrapper.
+                    # 1.8.4 + Hyprland/XWayland AWT / sounds / no-update-prompt wrapper.
                     jquake = final.callPackage ./pkgs/jquake { jquake = prev.jquake; };
                     # OpenCode 2 CLI (nixpkgs still ships 1.x; pin npm linux-x64 binary).
                     opencode = final.callPackage ./pkgs/opencode { };
@@ -141,21 +147,8 @@
                     screenpipe = final.callPackage ./pkgs/screenpipe { };
                     # Cursor Gothic sans-serif typeface (OpenType extracted from WOFF2).
                     cursor-gothic = final.callPackage ./pkgs/cursor-gothic { };
-                    # Sway 1.12 / wlroots 0.20.2: keep a valid XKB keymap on the seat across
-                    # virtual keyboard destroy, never emit wl_keyboard.modifiers without an
-                    # XKB_V1 keymap (fixes Electron/Chromium xkb_state_update_mask NULL
-                    # SIGSEGV), and fix input-method popup list/NULL crashes.
-                    wlroots_0_20 = prev.wlroots_0_20.overrideAttrs (old: {
-                      patches = (old.patches or [ ]) ++ [
-                        ./pkgs/sway/wlroots-no-modifiers-without-keymap.patch
-                      ];
-                    });
-                    sway-unwrapped = prev.sway-unwrapped.overrideAttrs (old: {
-                      patches = (old.patches or [ ]) ++ [
-                        ./pkgs/sway/sway-keyboard-fallback.patch
-                        ./pkgs/sway/sway-text-input-popup-fixes.patch
-                      ];
-                    });
+                    # Tilion Fortress: local stealth Chromium engine + tilion / tilion-mcp CLI.
+                    tilion-fortress = final.callPackage ./pkgs/tilion-fortress { };
                   }
                 )
               ];

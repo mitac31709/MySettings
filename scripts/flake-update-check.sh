@@ -233,15 +233,22 @@ for line in raw.splitlines():
     if len(parts) == 3:
         recs.append(tuple(parts))
 
-# Always keep the refresh glyph visible (waybar side-bar button).
+# Always keep the refresh glyph visible (waybar / Colorshell bar button).
 header = "\uf021"
 max_icons = 10
 if n == 0 or not recs:
     if fetch_ok:
-        tip = "更新なし\nクリックで flake-update"
+        tip = "更新なし\n左クリックで flake-update / 右クリックで再確認"
     else:
-        tip = "確認失敗（一部取得不可）\nクリックで flake-update"
-    obj = {"text": header, "class": "idle", "tooltip": tip}
+        tip = "確認失敗（一部取得不可）\n左クリックで flake-update / 右クリックで再確認"
+    obj = {
+        "text": header,
+        "class": "idle",
+        "tooltip": tip,
+        "count": 0,
+        "fetch_ok": fetch_ok,
+        "items": [],
+    }
 else:
     bar_glyphs = []
     seen = set()
@@ -262,13 +269,38 @@ else:
     obj = {
         "text": "\n".join([header, *shown]),
         "class": "available",
-        "tooltip": "\n".join(tips) + "\n\nクリックで flake-update",
+        "tooltip": "\n".join(tips) + "\n\n左クリックで flake-update / 右クリックで再確認",
+        "count": len(recs),
+        "fetch_ok": fetch_ok,
+        "items": tips,
     }
 print(json.dumps(obj, ensure_ascii=False))
 PY
 )"
 
+prev_items=""
+if [[ -s "$status_file" ]]; then
+  prev_items="$(jq -rc '.items // [] | join("\n")' "$status_file" 2>/dev/null || true)"
+fi
+
 tmp="${status_file}.tmp.$$"
 printf '%s\n' "$json_out" >"$tmp" && mv -f "$tmp" "$status_file"
 pkill -SIGRTMIN+9 -x waybar >/dev/null 2>&1 || true
+
+# Notify Colorshell / desktop session when a background check discovers new updates.
+if ((n > 0)) && [[ ! -t 1 ]] && command -v notify-send >/dev/null 2>&1; then
+  cur_items="$(printf '%s\n' "$json_out" | jq -rc '.items // [] | join("\n")' 2>/dev/null || true)"
+  if [[ -n "$cur_items" && "$cur_items" != "$prev_items" ]]; then
+    summary="$(printf '%s\n' "$cur_items" | head -n 8)"
+    if ((n > 8)); then
+      summary+=$'\n'"…他 $((n - 8)) 件"
+    fi
+    notify-send \
+      --app-name="Flake Update" \
+      --icon="software-update-available-symbolic" \
+      -h "string:x-canonical-private-synchronous:flake-update-check" \
+      "更新が ${n} 件あります" \
+      "$summary" >/dev/null 2>&1 || true
+  fi
+fi
 exit 0
