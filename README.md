@@ -59,6 +59,8 @@ NixOS の世代番号はマシン固有です。コミットとの対応はビ�
 
 任意でブートメニュー用スラッグを変えるときは `modules/nixos/release.nix` の `system.nixos.tags` を更新してから rebuild してください。
 
+ブートメニュー（`systemd-boot`）は `configurationLimit = 10` で世代を 10 件に絞り、`consoleMode = "0"`（UEFI 標準の 80x25）で描画しています（`modules/nixos/common.nix`）。どちらも矢印キー操作時にファームウェアのコンソール描画が数秒止まるのを防ぐための設定なので、変更すると再び遅くなることがあります。反映には rebuild と再起動が必要です。
+
 ## 前提条件
 
 - Flakes が有効な NixOS マシン（この flake でも有効化します）

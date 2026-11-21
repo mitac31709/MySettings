@@ -149,7 +149,18 @@ in
     ./secrets.nix
   ];
 
-  boot.loader.systemd-boot.enable = true;
+  boot.loader.systemd-boot = {
+    enable = true;
+    # Keep the menu responsive on the firmware console. With the default
+    # unlimited configurationLimit every rebuild adds an entry, and a large
+    # menu makes each arrow-key redraw (and the initial scan of loader/entries)
+    # stall for several seconds on the Chromebook/VAIO UEFI console.
+    configurationLimit = 10;
+    # Force the standard 80x25 text mode instead of "keep": rendering the menu
+    # into a high-resolution firmware GOP framebuffer makes redraws after a
+    # keypress noticeably slow. Mode 0 is required by the UEFI spec.
+    consoleMode = "0";
+  };
   boot.loader.efi.canTouchEfiVariables = true;
 
   # Enable monthly scrub automatically once a host's hardware-configuration uses btrfs.

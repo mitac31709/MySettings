@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "backup-status-dashboard" ];
+  system.nixos.tags = [ "boot-menu-responsive" ];
 }
