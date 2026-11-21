@@ -501,6 +501,25 @@ rebuild
 
 日次の `systemd` タイマー（`restic-backups-home.timer`）がバックアップを実行し、古いスナップショットを整理します（`--keep-daily 7 --keep-weekly 5 --keep-monthly 12`）。グラフィカルセッションへのログイン中は **Hyprland の waybar** に進捗（`バックアップ N%`、`$XDG_RUNTIME_DIR/restic-home-status` 経由）が表示され、開始・完了（または失敗）が mako 通知で知らされます。
 
+`backup status` はサービス／タイマーの状態と次回実行、Google Drive の使用量とリポジトリ容量（重複排除・圧縮後の実データ）、直近スナップショットの日時・処理時間・ファイル増減・追加データをまとめて表示します。`backup status --full` で systemd 詳細と直近ログも確認できます。
+
+### バックアップの削除（空き容量の回収）
+
+restic は個別ファイルを削除できず、**スナップショット単位**で削除します。`forget` はスナップショットを一覧から外すだけなので、容量を回収するには **`--prune`（または後続の `backup prune`）が必要**です。日次バックアップ後の保持ポリシー適用は自動で行われます。
+
+```bash
+backup snapshots                              # まず ID を確認
+backup forget <ID> --prune                    # 指定スナップショットを削除して回収
+backup forget --keep-last 3 --prune           # 直近3世代だけ残す
+backup forget --keep-daily 7 --keep-weekly 5 --keep-monthly 12 --prune  # 既定の保持ポリシー
+backup prune                                  # 参照されなくなったデータだけ回収
+
+# 破壊的なので事前に対象を確認（推奨）
+backup forget --keep-last 3 --prune --dry-run
+```
+
+リポジトリ全体を消す場合は `rclone purge gdrive:restic/<host>-home`（すべての世代が失われるので要注意）。他ホストのリポジトリを操作する場合は `RESTIC_REPOSITORY=rclone:gdrive:restic/chromebook-home backup …` を付けます。
+
 ### 初回セットアップ（秘密情報は平文で git / Nix ストアに含めない）
 
 1. 必要に応じて識別子・設定を確認します。

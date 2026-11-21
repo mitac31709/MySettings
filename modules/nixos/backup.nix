@@ -32,6 +32,13 @@ let
   # snapshots.
   repository = "rclone:gdrive:restic/${flakeTarget}-home";
 
+  # Shared with `backup status` so the displayed retention matches the timer.
+  retentionOpts = [
+    "--keep-daily 7"
+    "--keep-weekly 5"
+    "--keep-monthly 12"
+  ];
+
   # Declarative secrets managed solely by agenix under /run/agenix.
   agenixResticPassword =
     config.age.secrets."restic-home-password".path or "/run/agenix/restic-home-password";
@@ -281,6 +288,23 @@ let
           export RCLONE_CONFIG="$runtime_conf"
         }
 
+        prepare_restic_env() {
+          if [ -z "''${RESTIC_PASSWORD:-}" ] && [ -z "''${RESTIC_PASSWORD_FILE:-}" ] && [ -z "''${RESTIC_PASSWORD_COMMAND:-}" ]; then
+            if [ -r "$agenix_pw_file" ]; then
+              export RESTIC_PASSWORD_FILE="$agenix_pw_file"
+            else
+              printf 'エラー: %s が見つかりません（secrets bootstrap && rebuild を実行してください）。\n' \
+                "$agenix_pw_file" >&2
+              exit 1
+            fi
+          fi
+          export RESTIC_CACHE_DIR="/var/cache/restic-backups-home"
+          # Allow overriding RESTIC_REPOSITORY in the environment (e.g. to inspect another host's repo).
+          export RESTIC_REPOSITORY="''${RESTIC_REPOSITORY:-${repository}}"
+          resolve_writable_rclone_conf
+          export RESTIC_PROGRESS_FPS="0.2"
+        }
+
         usage() {
           cat <<'EOF'
     backup — ホーム暗号化バックアップ CLI (restic / rclone / agenix / systemd)
@@ -295,7 +319,8 @@ let
       backup about                   Google Drive 疎通確認
       backup run                     フルバックアップ開始 (systemd)
       backup log                     進捗・ログを journal で追う
-      backup status                  unit / timer の状態を表示
+      backup status                  状態・容量・直近バックアップを整理して表示
+      backup status --full           systemd 詳細と直近ログも表示
 
     確認・部分復元（agenix 鍵・設定を自動読み込み済み）:
       backup snapshots
@@ -304,8 +329,16 @@ let
       backup restore latest --target /tmp/restore
       backup unlock                  古い restic リポジトリロックを解除
 
+    削除（空き容量を作る。restic はスナップショット単位のみ、個別ファイルは不可）:
+      backup forget <ID> --prune     指定スナップショットを削除して領域を回収
+      backup forget --keep-last 3 --prune  直近3世代だけ残す（--dry-run で事前確認可）
+      backup prune                   参照されなくなったデータを回収
+      backup forget --keep-daily 7 --keep-weekly 5 --keep-monthly 12 --prune
+                                     通常の保持ポリシー（日次バックアップ後に自動実行）
+
     注意:
       - restore には必ず --target を指定する（省略すると /home/mitac を上書き）
+      - forget / prune は破壊的。まず --dry-run で対象を確認すること
       - restic サブコマンドの詳細ヘルプ: backup <command> --help
       - 上記以外の第1引数はそのまま restic へ渡されます
     EOF
@@ -335,9 +368,105 @@ let
             ;;
           status)
             shift
-            systemctl status "$unit" --no-pager "$@" || true
-            printf '\n'
-            systemctl status "$timer" --no-pager || true
+            full=0
+            for arg in "$@"; do
+              case "$arg" in
+                --full|-v) full=1 ;;
+              esac
+            done
+
+            printf '=== バックアップ状態 ===\n'
+            unit_state="$(systemctl show -p ActiveState --value "$unit" 2>/dev/null || true)"
+            unit_sub="$(systemctl show -p SubState --value "$unit" 2>/dev/null || true)"
+            unit_result="$(systemctl show -p Result --value "$unit" 2>/dev/null || true)"
+            timer_state="$(systemctl show -p ActiveState --value "$timer" 2>/dev/null || true)"
+            next_run="$(systemctl list-timers "$timer" --no-pager 2>/dev/null | awk 'NR==2 {print $1, $2, $3, $4}' || true)"
+            printf '  サービス : %s (%s) / 前回結果: %s\n' \
+              "''${unit_state:-unknown}" "''${unit_sub:-unknown}" "''${unit_result:-unknown}"
+            printf '  タイマー : %s / 次回: %s\n' \
+              "''${timer_state:-unknown}" "''${next_run:-不明}"
+            printf '  保持     : %s\n' "${lib.concatStringsSep " " retentionOpts}"
+
+            # 容量・スナップショットの取得には restic / rclone の環境が必要。
+            prepare_restic_env
+
+            printf '\n=== 容量 (Google Drive) ===\n'
+            drive_about="$(rclone about "''${remote_name}:" 2>&1 || true)"
+            if [ -n "$drive_about" ]; then
+              printf '%s\n' "$drive_about" | sed 's/^/  /'
+            else
+              printf '  取得失敗（backup reconnect を確認）\n'
+            fi
+            case "$RESTIC_REPOSITORY" in
+              rclone:*)
+                repo_target="''${RESTIC_REPOSITORY#rclone:}"
+                repo_info="$(rclone size "$repo_target" 2>/dev/null || true)"
+                repo_size="$(printf '%s\n' "$repo_info" | awk '/^Total size:/ {print $3, $4}')"
+                repo_objects="$(printf '%s\n' "$repo_info" | awk '/^Total objects:/ {print $3}')"
+                printf '  リポジトリ: %s (%s objects)\n' "''${repo_size:-不明}" "''${repo_objects:-?}"
+                printf '  対象      : %s\n' "$RESTIC_REPOSITORY"
+                ;;
+            esac
+            raw_json="$(restic stats --mode raw-data --json 2>/dev/null | jq -c '.' || true)"
+            if [ -n "$raw_json" ]; then
+              raw_size="$(printf '%s' "$raw_json" | jq -r '.total_size' | awk '{printf "%.2f GiB", $1/1073741824}')"
+              raw_uncompressed="$(printf '%s' "$raw_json" | jq -r '.total_uncompressed_size' | awk '{printf "%.2f GiB", $1/1073741824}')"
+              raw_ratio="$(printf '%s' "$raw_json" | jq -r '.compression_ratio' | awk '{printf "%.2f", $1}')"
+              raw_count="$(printf '%s' "$raw_json" | jq -r '.snapshots_count')"
+              printf '  実データ  : %s (未圧縮 %s / 圧縮 %sx / %s 世代)\n' \
+                "$raw_size" "$raw_uncompressed" "$raw_ratio" "$raw_count"
+            fi
+
+            printf '\n=== 直近のバックアップ ===\n'
+            latest_json="$(restic snapshots --json latest 2>/dev/null | jq -c '.[0] // empty' || true)"
+            if [ -n "$latest_json" ]; then
+              snap_id="$(printf '%s' "$latest_json" | jq -r '.short_id // .id')"
+              snap_time="$(printf '%s' "$latest_json" | jq -r '.time')"
+              snap_host="$(printf '%s' "$latest_json" | jq -r '.hostname')"
+              snap_paths="$(printf '%s' "$latest_json" | jq -r '.paths | join(", ")')"
+              start="$(printf '%s' "$latest_json" | jq -r '.summary.backup_start')"
+              end="$(printf '%s' "$latest_json" | jq -r '.summary.backup_end')"
+              new_files="$(printf '%s' "$latest_json" | jq -r '.summary.files_new')"
+              changed_files="$(printf '%s' "$latest_json" | jq -r '.summary.files_changed')"
+              unchanged_files="$(printf '%s' "$latest_json" | jq -r '.summary.files_unmodified')"
+              added="$(printf '%s' "$latest_json" | jq -r '.summary.data_added' | awk '{printf "%.2f GiB", $1/1073741824}')"
+              added_packed="$(printf '%s' "$latest_json" | jq -r '.summary.data_added_packed' | awk '{printf "%.2f GiB", $1/1073741824}')"
+              duration=""
+              if [ -n "$start" ] && [ "$start" != null ] && [ -n "$end" ] && [ "$end" != null ]; then
+                start_epoch="$(date -d "$start" +%s 2>/dev/null || true)"
+                end_epoch="$(date -d "$end" +%s 2>/dev/null || true)"
+                if [ -n "$start_epoch" ] && [ -n "$end_epoch" ]; then
+                  secs=$((end_epoch - start_epoch))
+                  duration=" ($((secs / 60))分)"
+                fi
+              fi
+              printf '  ID       : %s\n' "$snap_id"
+              printf '  日時     : %s%s\n' "$snap_time" "$duration"
+              printf '  ホスト   : %s\n' "$snap_host"
+              printf '  対象     : %s\n' "$snap_paths"
+              printf '  ファイル : 新規 %s / 変更 %s / 未変更 %s\n' \
+                "$new_files" "$changed_files" "$unchanged_files"
+              printf '  追加     : %s → %s (圧縮後)\n' "$added" "$added_packed"
+            else
+              printf '  スナップショットなし（backup run を実行）\n'
+            fi
+            stats_json="$(restic stats latest --mode restore-size --json 2>/dev/null | jq -c '.' || true)"
+            if [ -n "$stats_json" ]; then
+              restore_files="$(printf '%s' "$stats_json" | jq -r '.total_file_count')"
+              restore_size="$(printf '%s' "$stats_json" | jq -r '.total_size' | awk '{printf "%.2f GiB", $1/1073741824}')"
+              printf '  リストア時: %s ファイル / %s\n' "$restore_files" "$restore_size"
+            fi
+
+            if [ "$full" -eq 1 ]; then
+              printf '\n=== systemd 詳細 ===\n'
+              systemctl status "$unit" --no-pager || true
+              printf '\n'
+              systemctl status "$timer" --no-pager || true
+              printf '\n=== 直近ログ ===\n'
+              journalctl -u "$unit" -n 15 --no-pager || true
+            else
+              printf '\n  詳細は backup status --full\n'
+            fi
             ;;
           setup)
             shift
@@ -377,20 +506,7 @@ let
             exec rclone about "''${remote_name}:" "$@"
             ;;
           *)
-            if [ -z "''${RESTIC_PASSWORD:-}" ] && [ -z "''${RESTIC_PASSWORD_FILE:-}" ] && [ -z "''${RESTIC_PASSWORD_COMMAND:-}" ]; then
-              if [ -r "$agenix_pw_file" ]; then
-                export RESTIC_PASSWORD_FILE="$agenix_pw_file"
-              else
-                printf 'エラー: %s が見つかりません（secrets bootstrap && rebuild を実行してください）。\n' \
-                  "$agenix_pw_file" >&2
-                exit 1
-              fi
-            fi
-            export RESTIC_CACHE_DIR="/var/cache/restic-backups-home"
-            # Allow overriding RESTIC_REPOSITORY in the environment (e.g. to inspect another host's repo).
-            export RESTIC_REPOSITORY="''${RESTIC_REPOSITORY:-${repository}}"
-            resolve_writable_rclone_conf
-            export RESTIC_PROGRESS_FPS="0.2"
+            prepare_restic_env
             exec ${lib.getExe pkgs.restic} "$@"
             ;;
         esac
@@ -794,11 +910,7 @@ in
     progressFps = 0.2;
 
     # Retention: prune old snapshots after each run.
-    pruneOpts = [
-      "--keep-daily 7"
-      "--keep-weekly 5"
-      "--keep-monthly 12"
-    ];
+    pruneOpts = retentionOpts;
 
     # Run daily; catch up if the machine was powered off at the scheduled time.
     timerConfig = {

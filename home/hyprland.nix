@@ -1746,9 +1746,33 @@ let
     }
     {
       section = "バックアップ";
-      label = "backup status";
+      label = "backup status（状態・容量・直近詳細）";
       run = "backup status";
       mode = "term";
+    }
+    {
+      section = "バックアップ";
+      label = "backup status --full（systemd 詳細・ログ）";
+      run = "backup status --full";
+      mode = "term";
+    }
+    {
+      section = "バックアップ";
+      label = "backup forget --prune --dry-run（削除対象の確認）";
+      run = "backup forget --keep-last 3 --prune --dry-run";
+      mode = "term";
+    }
+    {
+      section = "バックアップ";
+      label = "backup forget <ID> --prune（削除・危険）";
+      run = "backup forget <ID> --prune";
+      mode = "show";
+    }
+    {
+      section = "バックアップ";
+      label = "backup prune（未使用データの回収・危険）";
+      run = "backup prune";
+      mode = "show";
     }
     {
       section = "バックアップ";
@@ -1789,6 +1813,10 @@ let
     {
       section = "バックアップ";
       label = "注: --target なしは /home/mitac を上書き（危険）";
+    }
+    {
+      section = "バックアップ";
+      label = "注: 削除はスナップショット単位。forget は --prune で容量回収";
     }
     {
       section = "バックアップ";

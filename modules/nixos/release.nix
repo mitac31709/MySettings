@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "hutao-hyprcursor" ];
+  system.nixos.tags = [ "backup-status-dashboard" ];
 }
