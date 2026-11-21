@@ -1824,6 +1824,10 @@ let
     }
     {
       section = "バックアップ";
+      label = "注: 素の rclone は設定未読。RCLONE_CONFIG に agenix の一時コピーが必要";
+    }
+    {
+      section = "バックアップ";
       label = "注: --new-device は既存 ~/MySettings 保持＆端末ID/認証を再サインイン化";
     }
     {

@@ -518,7 +518,17 @@ backup prune                                  # 参照されなくなったデ�
 backup forget --keep-last 3 --prune --dry-run
 ```
 
-リポジトリ全体を消す場合は `rclone purge gdrive:restic/<host>-home`（すべての世代が失われるので要注意）。他ホストのリポジトリを操作する場合は `RESTIC_REPOSITORY=rclone:gdrive:restic/chromebook-home backup …` を付けます。
+リポジトリ全体を消す場合は、agenix の設定を**書き込み可能な一時ファイル**へコピーしてから `rclone purge` します。素の `rclone` は `~/.config/rclone/rclone.conf` を探すため、`gdrive` セクションが見つからず失敗します。
+
+```bash
+tmp_conf="$(mktemp)"
+install -m 600 /run/agenix/rclone-conf "$tmp_conf"
+RCLONE_CONFIG="$tmp_conf" rclone purge gdrive:restic/mitac-home   # 全世代が消えるので要注意
+# OAuth トークンが更新された場合は: secrets import-rclone "$tmp_conf"
+rm -f "$tmp_conf"
+```
+
+他ホストのリポジトリを restic 系コマンドで操作する場合は `RESTIC_REPOSITORY=rclone:gdrive:restic/chromebook-home backup …` を付けます。
 
 ### 初回セットアップ（秘密情報は平文で git / Nix ストアに含めない）
 
