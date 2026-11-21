@@ -247,7 +247,11 @@ in
     gtk4.extraConfig.gtk-interface-color-scheme = "dark";
   };
 
-  home.pointerCursor = {
+  # Packaged cursor themes go through home.pointerCursor. Local-only themes
+  # (theme.cursor.package = null) live in ~/.local/share/icons/<name> outside
+  # the repo: home.pointerCursor requires a store package and would symlink
+  # over that directory, so emit the equivalent configuration directly.
+  home.pointerCursor = lib.mkIf (theme.cursor.package != null) {
     enable = true;
     package = cursorPkg;
     name = theme.cursor.name;
@@ -255,6 +259,35 @@ in
     gtk.enable = true;
     x11.enable = true;
     hyprcursor.enable = theme.cursor.hyprcursor;
+  };
+
+  home.sessionSearchVariables.XCURSOR_PATH = lib.mkIf (theme.cursor.package == null) [
+    "${config.home.homeDirectory}/.local/share/icons"
+    "${config.home.profileDirectory}/share/icons"
+  ];
+  gtk.cursorTheme = lib.mkIf (theme.cursor.package == null) {
+    package = null;
+    inherit (theme.cursor) name size;
+  };
+  xdg.dataFile."icons/default/index.theme" = lib.mkIf (theme.cursor.package == null) {
+    text = ''
+      [Icon Theme]
+      Name=Default
+      Comment=Default Cursor Theme
+      Inherits=${theme.cursor.name}
+    '';
+  };
+  home.file.".icons/default/index.theme" = lib.mkIf (theme.cursor.package == null) {
+    text = ''
+      [Icon Theme]
+      Name=Default
+      Comment=Default Cursor Theme
+      Inherits=${theme.cursor.name}
+    '';
+  };
+  xresources.properties = lib.mkIf (theme.cursor.package == null) {
+    "Xcursor.theme" = theme.cursor.name;
+    "Xcursor.size" = theme.cursor.size;
   };
 
   dconf.settings = {
@@ -385,7 +418,18 @@ in
     _JAVA_AWT_WM_NONREPARENTING = "1";
     # Expose Qt widget trees over AT-SPI2 for agent-desktop.
     QT_ACCESSIBILITY = "1";
-  };
+  }
+  # Local-only cursor theme (see the home.pointerCursor note above).
+  // lib.optionalAttrs (theme.cursor.package == null) (
+    {
+      XCURSOR_THEME = theme.cursor.name;
+      XCURSOR_SIZE = toString theme.cursor.size;
+    }
+    // lib.optionalAttrs theme.cursor.hyprcursor {
+      HYPRCURSOR_THEME = theme.cursor.name;
+      HYPRCURSOR_SIZE = toString theme.cursor.size;
+    }
+  );
 
   # Yazi via Ghostty for inode/directory mime (xdg-open etc.).
   xdg.dataFile."applications/mitac-yazi.desktop".text = ''

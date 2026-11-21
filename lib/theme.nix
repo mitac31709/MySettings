@@ -200,10 +200,14 @@ let
   # Active mouse cursor theme shared across Hyprland, GTK, X11/XWayland,
   # Hyprcursor, and ReGreet. See home/cursors/README.md to switch to a custom
   # local or externally packaged cursor theme.
+  # package = null: local-only theme managed outside the repo under
+  # ~/.local/share/icons/<name> (e.g. packs that forbid redistribution).
+  # The greeter falls back to Adwaita (it cannot read the user's home).
+  # HutaoPointer: 胡桃ちゃんぽいんた 2023リメイク (Windows .cur/.ani → win2xcur).
   cursor = {
-    name = "Adwaita";
-    size = 24;
-    package = pkgs: pkgs.adwaita-icon-theme;
+    name = "HutaoPointer";
+    size = 32;
+    package = null;
     # Set true when the package provides a Hyprcursor theme (`hyprcursors/` + `manifest.hl`).
     hyprcursor = false;
   };

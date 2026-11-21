@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "hypr-colorshell-osd-gauge" ];
+  system.nixos.tags = [ "hutao-pointer-cursor" ];
 }

@@ -12,7 +12,11 @@ let
   theme = import ../../lib/theme.nix;
   p = theme.palette;
   wallpaperPng = theme.mkWallpaper pkgs;
-  cursorPkg = theme.cursor.package pkgs;
+  # Local-only cursor themes (theme.cursor.package = null) live under the
+  # user's home, which the greeter user cannot read; fall back to Adwaita.
+  greeterCursorName = if theme.cursor.package == null then "Adwaita" else theme.cursor.name;
+  cursorPkg =
+    if theme.cursor.package == null then pkgs.adwaita-icon-theme else theme.cursor.package pkgs;
   cursorSizeStr = toString theme.cursor.size;
 
   greeterLanMouseConfig = (pkgs.formats.toml { }).generate "greeter-lan-mouse.toml" {
@@ -58,7 +62,7 @@ let
   '';
 
   greeterHyprlandConfig = pkgs.writeText "greeter-hyprland.lua" ''
-    hl.env("XCURSOR_THEME", ${builtins.toJSON theme.cursor.name})
+    hl.env("XCURSOR_THEME", ${builtins.toJSON greeterCursorName})
     hl.env("XCURSOR_SIZE", ${builtins.toJSON cursorSizeStr})
     hl.env("HYPRCURSOR_SIZE", ${builtins.toJSON cursorSizeStr})
     ${lib.optionalString theme.cursor.hyprcursor ''hl.env("HYPRCURSOR_THEME", ${builtins.toJSON theme.cursor.name})''}
@@ -127,7 +131,7 @@ in
     });
     cursorTheme = {
       package = cursorPkg;
-      name = theme.cursor.name;
+      name = greeterCursorName;
     };
     font = {
       package = pkgs.nerd-fonts.jetbrains-mono;
