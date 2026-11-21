@@ -92,6 +92,15 @@ stdenvNoCC.mkDerivation {
 - テーマ実体は restic のホームバックアップ対象（`~/.local/share/icons` は除外指定なし）。再インストール後はバックアップから復元するか、原本から再変換する。
 - 別端末（vaio など）でも使うには、その端末の同じパスにテーマを置く。
 
+反映されないときは、まずテーマ実体が設定名（`theme.cursor.name`）と同じパスにあるか確認する。
+
+```bash
+ls ~/.local/share/icons/<name>/index.theme ~/.local/share/icons/<name>/cursors/left_ptr
+hyprctl setcursor <name> <size>
+```
+
+`<name>.backup` に退避されている場合は `<name>` に戻す（Windows の生パックは XCursor ではないので、`cursors/` を持つ変換済みディレクトリを使う）。`hyprctl setcursor` はテーマが無くても `ok` を返すため、ディレクトリの存在確認が確実。既存の GTK アプリは再起動後に settings.ini が効く。
+
 ## 4. 再ビルドなしで手元カーソルを仮テストする
 
 `~/.local/share/icons/<ThemeName>/` に展開して次を実行すると、現在の Hyprland セッションで即確認できます:

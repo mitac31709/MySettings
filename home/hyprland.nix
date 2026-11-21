@@ -1089,6 +1089,11 @@ let
     }
     {
       section = "Colorshell・日常";
+      label = "カーソル未反映 → テーマ実体 (~/.local/share/icons/<name>) を確認";
+      keys = "hyprctl setcursor <name> <size>";
+    }
+    {
+      section = "Colorshell・日常";
       label = "LAN 送受信 / キー表示";
       keys = "LocalSend / showmethekey";
     }
