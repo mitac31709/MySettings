@@ -29,14 +29,6 @@
   color: #f06d7d;
 }
 
-/* KeepAwake tile highlight */
-.tiles-container .tile.keep-awake-tile.enabled .icon image {
-  color: #52d699;
-}
-.tiles-container .tile.keep-awake-tile.enabled .content .description {
-  color: #52d699;
-}
-
 /* KeepAwake sub-page */
 controlcenter .top-container page.keep-awake .ka-hero,
 controlcenter .top-container page.keep-awake .ka-section {

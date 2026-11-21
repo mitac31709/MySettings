@@ -113,7 +113,7 @@ class KeepAwake extends GObject.Object {
     dotClass = "led-dot off";
 
     @property(String)
-    tileDescription = "OFF";
+    tileDescription = "無効";
 
     @property(String)
     tooltip = "画面常時オン (Capsomnia): OFF\n左クリック: ON/OFF 切替 / 右クリック: コントロールセンター / 中クリック: 詳細設定";
@@ -188,7 +188,7 @@ class KeepAwake extends GObject.Object {
             this.cssClass = "keep-awake error";
             this.dotClass = "led-dot error";
             this.barLabel = "ERR";
-            this.tileDescription = "エラー（再試行中）";
+            this.tileDescription = "エラー";
         } else if (this.awakeOn) {
             this.iconName = "video-display-symbolic";
             this.cssClass = "keep-awake on";
@@ -197,14 +197,14 @@ class KeepAwake extends GObject.Object {
                 ? this.remainingFormatted
                 : "ON";
             this.tileDescription = this.timerActive && this.remainingFormatted
-                ? `ON · ${this.remainingFormatted}`
-                : (this.keepDisplayAwake ? "ON · 蓋閉じ維持" : "ON · 蓋閉じ継続");
+                ? `有効 · ${this.remainingFormatted}`
+                : "有効";
         } else {
             this.iconName = "video-display-symbolic";
             this.cssClass = "keep-awake off";
             this.dotClass = "led-dot off";
             this.barLabel = "";
-            this.tileDescription = this.dedicatedCapsLock ? "OFF · CapsLock" : "OFF";
+            this.tileDescription = "無効";
         }
 
         if (rawTooltip && rawTooltip.trim().length > 0) {

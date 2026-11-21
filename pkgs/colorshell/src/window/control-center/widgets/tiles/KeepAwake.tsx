@@ -12,9 +12,6 @@ export const TileKeepAwake = (pages: Pages) => {
             icon={createBinding(ka, "iconName")}
             description={createBinding(ka, "tileDescription")}
             hasArrow
-            class={createBinding(ka, "awakeOn").as((on) =>
-                on ? "enabled keep-awake-tile" : "keep-awake-tile",
-            )}
             state={createBinding(ka, "awakeOn")}
             onEnabled={() => {
                 if (!ka.awakeOn) {
