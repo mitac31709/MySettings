@@ -493,7 +493,7 @@ class CapsomniaWindow(Gtk.ApplicationWindow):
 
             keep_disp = bool(settings.get("keep_display_awake"))
             self.sw_keep_disp.set_active(keep_disp)
-            self.lock_box.set_visible(keep_disp)
+            self.lock_box.set_visible(True)
             self.chk_lock_open.set_active(bool(settings.get("lock_on_lid_open")))
 
             timer = st.get("timer", {})

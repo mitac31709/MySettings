@@ -505,8 +505,9 @@ class CapsomniaDaemon:
 
     def sync_keep_display_marker(self) -> None:
         self.rt_dir.mkdir(parents=True, exist_ok=True)
-        active = bool(self.awake_on and self.prefs["keep_display_awake"])
-        if active:
+        # Unified keep-screen-on: always inhibit hypridle dim/lock/DPMS-off while active.
+        # Closed-lid display behavior (min backlight vs DPMS-off) is handled in sync_display_for_lid.
+        if self.awake_on:
             self.keep_display_marker.touch(exist_ok=True)
         else:
             self.keep_display_marker.unlink(missing_ok=True)
@@ -650,9 +651,14 @@ class CapsomniaDaemon:
             else (("開" if lang == "ja" else "Open") if lid_closed is False else ("不明" if lang == "ja" else "Unknown"))
         )
         disp_str = (
-            ("常時維持" if lang == "ja" else "Keep awake")
+            ("最小輝度で維持" if lang == "ja" else "Keep alive (min backlight)")
             if self.prefs["keep_display_awake"]
-            else ("蓋閉じで消灯" if lang == "ja" else "Sleep on lid close")
+            else ("消灯して処理継続" if lang == "ja" else "Blank screen, keep running")
+        )
+        caps_str = (
+            ("有効（大文字固定なし）" if lang == "ja" else "Enabled (dedicated)")
+            if self.prefs["dedicated_caps_lock_mode"]
+            else ("LED 連動（通常 CapsLock）" if lang == "ja" else "LED linked")
         )
         timer_str = (
             format_countdown(rem)
@@ -665,32 +671,52 @@ class CapsomniaDaemon:
         )
         if lang == "ja":
             tip_lines = [
-                f"Capsomnia: {state_label}",
-                f"タイマー: {timer_str}",
-                f"画面動作: {disp_str}",
+                f"画面常時オン (Capsomnia): {state_label}",
+                f"蓋閉じ処理継続: {'有効' if self.awake_on else '通常（スリープ）'}",
+                f"蓋閉じ時の画面: {disp_str}",
+                f"Caps Lock 切替: {caps_str}",
+                f"自動オフタイマー: {timer_str}",
                 f"蓋の状態: {lid_str}",
             ]
             if self.last_error_msg:
                 tip_lines.append(f"エラー: {self.last_error_msg}")
             tip_lines.append("")
-            tip_lines.append("左クリック: メニュー / 右クリック: 切替 / 中クリック: 設定")
+            tip_lines.append("左クリック: ON/OFF 切替 / 右クリック: コントロールセンター / 中クリック: 詳細設定")
         else:
             tip_lines = [
-                f"Capsomnia: {state_label}",
-                f"Timer: {timer_str}",
-                f"Display: {disp_str}",
+                f"Keep Screen On (Capsomnia): {state_label}",
+                f"Closed-lid tasks: {'Active' if self.awake_on else 'Normal (sleep)'}",
+                f"Closed-lid display: {disp_str}",
+                f"Caps Lock switch: {caps_str}",
+                f"Auto-off timer: {timer_str}",
                 f"Lid: {lid_str}",
             ]
             if self.last_error_msg:
                 tip_lines.append(f"Error: {self.last_error_msg}")
             tip_lines.append("")
-            tip_lines.append("Left click: Menu / Right click: Toggle / Middle click: Settings")
+            tip_lines.append("Left click: Toggle / Right click: Control Center / Middle click: Settings")
 
         payload = json.dumps(
             {
                 "text": text,
                 "tooltip": "\n".join(tip_lines),
                 "class": cls,
+                "awake_on": self.awake_on,
+                "sleep_inhibited": self.confirmed_sleep_inhibited,
+                "status_error": self.status_error,
+                "error_message": self.last_error_msg,
+                "lid_closed": lid_closed,
+                "hotspot_active": self.hotspot_active,
+                "timer": self.timer.status_dict(self.awake_on, now),
+                "settings": {
+                    "dedicated_caps_lock_mode": bool(self.prefs["dedicated_caps_lock_mode"]),
+                    "show_menu_bar_icon": show_icon,
+                    "keep_display_awake": bool(self.prefs["keep_display_awake"]),
+                    "lock_on_lid_open": bool(self.prefs["lock_on_lid_open"]),
+                    "keep_hotspot_alive": bool(self.prefs["keep_hotspot_alive"]),
+                    "auto_off_minutes": int(self.prefs["auto_off_minutes"]),
+                    "shortcut": str(self.prefs.get("shortcut") or ""),
+                },
             },
             ensure_ascii=False,
         )
@@ -879,9 +905,7 @@ class CapsomniaDaemon:
             lid_closed = read_lid_closed()
             self.sync_display_for_lid(lid_closed)
 
-            eligible_lock = bool(
-                self.awake_on and self.prefs["keep_display_awake"] and self.prefs["lock_on_lid_open"]
-            )
+            eligible_lock = bool(self.awake_on and self.prefs["lock_on_lid_open"])
             locked_now = is_hyprlock_running() if eligible_lock else None
             if self.lid_lock_tracker.update(
                 eligible=eligible_lock,

@@ -229,6 +229,23 @@ class CapsomniaCoreTests(unittest.TestCase):
             notify_waybar()
         mock_run.assert_not_called()
 
+    def test_sync_keep_display_marker_tracks_awake_on(self) -> None:
+        from capsomniad import CapsomniaDaemon
+
+        with tempfile.TemporaryDirectory() as tmp:
+            daemon = CapsomniaDaemon.__new__(CapsomniaDaemon)
+            daemon.rt_dir = Path(tmp)
+            daemon.keep_display_marker = Path(tmp) / "keep-display-awake"
+            daemon.prefs = {"keep_display_awake": False}
+
+            daemon.awake_on = True
+            daemon.sync_keep_display_marker()
+            self.assertTrue(daemon.keep_display_marker.exists())
+
+            daemon.awake_on = False
+            daemon.sync_keep_display_marker()
+            self.assertFalse(daemon.keep_display_marker.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

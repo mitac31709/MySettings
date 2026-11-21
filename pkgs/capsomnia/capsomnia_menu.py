@@ -52,17 +52,16 @@ def main() -> int:
         if awake:
             rem = timer.get("remaining_seconds")
             rem_txt = f" (残り {format_countdown(rem)})" if timer.get("active") and rem is not None else ""
-            actions.append((f"● Capsomnia ON{rem_txt} │ OFF にする（通常スリープへ）", lambda: send_control(["off", "--no-sleep"])))
-            actions.append(("Capsomnia │ OFF にして今すぐスリープ", lambda: send_control(["off"])))
+            actions.append((f"● 画面常時オン ON{rem_txt} │ OFF にする（通常動作へ）", lambda: send_control(["off", "--no-sleep"])))
+            actions.append(("画面常時オン │ OFF にして今すぐスリープ", lambda: send_control(["off"])))
         else:
-            actions.append(("○ Capsomnia OFF │ ON にする（蓋閉じでも起き続ける）", lambda: send_control(["on"])))
+            actions.append(("○ 画面常時オン OFF │ ON にする（画面維持・蓋閉じ継続）", lambda: send_control(["on"])))
 
         disp_label = "ON" if keep_disp else "OFF"
-        actions.append((f"画面をスリープさせない (Computer Use) [{disp_label}] │ 切替", lambda: send_control(["settings", "set", "keep-display-awake", "false" if keep_disp else "true"])))
+        actions.append((f"蓋閉じ中も画面セッションを維持 [{disp_label}] │ 切替", lambda: send_control(["settings", "set", "keep-display-awake", "false" if keep_disp else "true"])))
 
-        if keep_disp:
-            lock_label = "ON" if lock_open else "OFF"
-            actions.append((f"蓋を開けたら画面をロック [{lock_label}] │ 切替", lambda: send_control(["settings", "set", "lock-on-lid-open", "false" if lock_open else "true"])))
+        lock_label = "ON" if lock_open else "OFF"
+        actions.append((f"蓋を開けたら画面をロック [{lock_label}] │ 切替", lambda: send_control(["settings", "set", "lock-on-lid-open", "false" if lock_open else "true"])))
 
         if timer.get("active"):
             actions.append(("タイマー │ 今すぐリセット (リスタート)", lambda: send_control(["timer", "restart"])))
@@ -80,28 +79,27 @@ def main() -> int:
             if val:
                 res = send_control(["timer", "set", val])
                 if not res.get("ok"):
-                    subprocess.run(["notify-send", "Capsomnia", f"エラー: {res.get('error')}"], check=False)
+                    subprocess.run(["notify-send", "画面常時オン", f"エラー: {res.get('error')}"], check=False)
 
         actions.append(("タイマー │ カスタム時間（今回限り）…", _custom_ja))
         actions.append(("設定ウィンドウを開く…", lambda: subprocess.Popen(["capsomnia-settings"])))
         actions.append(("ウェルカムガイドを開く…", lambda: subprocess.Popen(["capsomnia-settings", "--welcome"])))
         actions.append(("終了（通常スリープに戻して停止）", lambda: subprocess.run(["systemctl", "--user", "stop", "capsomniad.service"], check=False)))
-        prompt = "Capsomnia"
+        prompt = "画面常時オン"
     else:
         if awake:
             rem = timer.get("remaining_seconds")
             rem_txt = f" ({format_countdown(rem)})" if timer.get("active") and rem is not None else ""
-            actions.append((f"● Capsomnia ON{rem_txt} │ Turn OFF", lambda: send_control(["off", "--no-sleep"])))
-            actions.append(("Capsomnia │ Turn OFF & Sleep Now", lambda: send_control(["off"])))
+            actions.append((f"● Keep Screen On ON{rem_txt} │ Turn OFF", lambda: send_control(["off", "--no-sleep"])))
+            actions.append(("Keep Screen On │ Turn OFF & Sleep Now", lambda: send_control(["off"])))
         else:
-            actions.append(("○ Capsomnia OFF │ Turn ON", lambda: send_control(["on"])))
+            actions.append(("○ Keep Screen On OFF │ Turn ON (keep screen & closed-lid tasks)", lambda: send_control(["on"])))
 
         disp_label = "ON" if keep_disp else "OFF"
-        actions.append((f"Keep display awake (Computer Use) [{disp_label}] │ Toggle", lambda: send_control(["settings", "set", "keep-display-awake", "false" if keep_disp else "true"])))
+        actions.append((f"Keep display alive while lid closed [{disp_label}] │ Toggle", lambda: send_control(["settings", "set", "keep-display-awake", "false" if keep_disp else "true"])))
 
-        if keep_disp:
-            lock_label = "ON" if lock_open else "OFF"
-            actions.append((f"Lock when lid opens [{lock_label}] │ Toggle", lambda: send_control(["settings", "set", "lock-on-lid-open", "false" if lock_open else "true"])))
+        lock_label = "ON" if lock_open else "OFF"
+        actions.append((f"Lock when lid opens [{lock_label}] │ Toggle", lambda: send_control(["settings", "set", "lock-on-lid-open", "false" if lock_open else "true"])))
 
         if timer.get("active"):
             actions.append(("Timer │ Restart countdown", lambda: send_control(["timer", "restart"])))

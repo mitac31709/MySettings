@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "hypr-jquake-colorshell-widgets" ];
+  system.nixos.tags = [ "hypr-colorshell-panel-keepawake" ];
 }

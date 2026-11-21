@@ -71,6 +71,12 @@ let
   brightnessctl = "${pkgs.brightnessctl}/bin/brightnessctl";
   btopBin = "${pkgs.btop}/bin/btop";
   nmtuiBin = "${pkgs.networkmanager}/bin/nmtui";
+  openBtop = pkgs.writeShellScript "colorshell-open-btop" ''
+    exec ${ghosttyBin} -e ${btopBin}
+  '';
+  openNmtui = pkgs.writeShellScript "colorshell-open-nmtui" ''
+    exec ${ghosttyBin} -e ${nmtuiBin}
+  '';
 
   # Initial writable hyprpaper.conf seeded for Colorshell (hyprpaper 0.8+ block syntax).
   initialHyprpaperConf = pkgs.writeText "hyprpaper-initial.conf" ''
@@ -257,10 +263,30 @@ let
     name = "toggle-keep-screen-on";
     runtimeInputs = [
       pkgs.coreutils
+      pkgs.jq
       pkgs.libnotify
     ];
     text = ''
       marker="''${XDG_RUNTIME_DIR}/hypr-keep-screen-on"
+      if out="$(${capsomniaPkg}/bin/cpsm --json toggle --no-sleep 2>/dev/null)" \
+        && printf '%s\n' "$out" | jq -e '.ok == true' >/dev/null 2>&1; then
+        rm -f "$marker"
+        awake="$(printf '%s\n' "$out" | jq -r '.result.awake_on // false')"
+        timer_active="$(printf '%s\n' "$out" | jq -r '.result.timer.active // false')"
+        rem_sec="$(printf '%s\n' "$out" | jq -r '.result.timer.remaining_seconds // empty')"
+        if [ "$awake" = "true" ]; then
+          if [ "$timer_active" = "true" ] && [ -n "$rem_sec" ]; then
+            mins=$(( (rem_sec + 59) / 60 ))
+            notify-send "画面常時オン: ON" "自動減光・ロック・消灯・蓋閉じスリープを抑止中（自動オフ: 約 ''${mins}分）" >/dev/null 2>&1 || true
+          else
+            notify-send "画面常時オン: ON" "自動減光・ロック・消灯・蓋閉じスリープを抑止しています" >/dev/null 2>&1 || true
+          fi
+        else
+          notify-send "画面常時オン: OFF" "通常の自動減光・ロック・消灯・蓋閉じスリープに戻しました" >/dev/null 2>&1 || true
+        fi
+        exit 0
+      fi
+
       if [ -e "$marker" ]; then
         rm -f "$marker"
         notify-send "画面常時オン: OFF" "通常の自動減光・ロック・消灯に戻しました" >/dev/null 2>&1 || true
@@ -1011,7 +1037,8 @@ let
     }
     {
       section = "Colorshell・日常";
-      label = "画面常時オン切替（減光・ロック・消灯を抑止）";
+      label = "画面常時オン切替（Caps Lock・蓋閉じ処理継続・自動オフタイマー統合）";
+      keys = "CapsLock / バークリック";
       run = lib.getExe toggleKeepScreenOn;
       mode = "exec";
     }
@@ -1830,14 +1857,14 @@ let
     # 電源（Chromebook: 電源・Type-C / VAIO: 電源・省電力）
     {
       section = powerSection;
-      label = "Capsomnia（Caps Lock で蓋閉じスリープ抑止・メニュー）";
+      label = "画面常時オン (Capsomnia) メニュー（Caps Lock 切替・蓋閉じ処理継続・タイマー）";
       keys = "CapsLock / Super+Alt+C";
       run = "${capsomniaPkg}/bin/capsomnia-menu";
       mode = "exec";
     }
     {
       section = powerSection;
-      label = "Capsomnia 設定画面（画面維持・自動オフタイマー・詳細）";
+      label = "画面常時オン (Capsomnia) 詳細設定（蓋閉じ維持・自動ロック・テザリング維持・自動オフ）";
       run = "${capsomniaPkg}/bin/capsomnia-settings";
       mode = "exec";
     }
@@ -2514,6 +2541,18 @@ in
         "COLORSHELL_FLAKE_UPDATE_CMD=${lib.getExe openFlakeUpdate}"
         "COLORSHELL_FLAKE_UPDATE_CHECK_CMD=${flakeUpdateCheck}"
         "COLORSHELL_NTP_SYNC_CMD=${lib.getExe ntpSync}"
+        "COLORSHELL_CAPS_CMD=${capsomniaPkg}/bin/cpsm"
+        "COLORSHELL_CAPS_SETTINGS_CMD=${capsomniaPkg}/bin/capsomnia-settings"
+        "COLORSHELL_CAPS_MENU_CMD=${capsomniaPkg}/bin/capsomnia-menu"
+        "COLORSHELL_JQUAKE_OPEN_CMD=${lib.getExe jquakeOpen}"
+        "COLORSHELL_JQUAKE_MENU_CMD=${lib.getExe jquakeMenu}"
+        "COLORSHELL_SERVICES_MENU_CMD=${lib.getExe servicesMenu}"
+        "COLORSHELL_STARTUP_SOUND_CMD=${lib.getExe config.mitac.scripts.startupSound}"
+        "COLORSHELL_CHEATSHEET_CMD=${showCheatsheet}"
+        "COLORSHELL_BTOP_CMD=${openBtop}"
+        "COLORSHELL_NMTUI_CMD=${openNmtui}"
+        "COLORSHELL_GHOSTTY_CMD=${ghosttyBin}"
+        "COLORSHELL_YAZI_CMD=${yaziBin}"
       ]
       ++ lib.optionals (!isChromebook) [
         "COLORSHELL_BATTERY_DEV=BAT1"

@@ -1,7 +1,8 @@
-import { Gtk } from "ags/gtk4";
+import { Gdk, Gtk } from "ags/gtk4";
 import Wireplumber from "../../../modules/volume";
 import Battery from "../../../modules/battery";
 import { sysfsBattery } from "../../../modules/sysfs-battery";
+import { openNmtui } from "../../../modules/sysstats";
 import Notifications from "../../../modules/notifications";
 import Windows from "../../../window";
 import Recording from "../../../modules/recording";
@@ -194,6 +195,18 @@ function StatusIcons() {
                 visible={createBinding(AstalNetwork.get_default(), "primary").as(
                     (primary) => primary !== AstalNetwork.Primary.UNKNOWN,
                 )}
+                tooltipText="ネットワーク（左クリック: コントロールセンター / 右クリック: nmtui）"
+                $={(self) => {
+                    const rightClick = Gtk.GestureClick.new();
+                    rightClick.set_button(Gdk.BUTTON_SECONDARY);
+                    const sigId = rightClick.connect("released", () => {
+                        openNmtui();
+                    });
+                    self.add_controller(rightClick);
+                    self.connect("destroy", () => {
+                        rightClick.disconnect(sigId);
+                    });
+                }}
             >
                 <With value={createBinding(AstalNetwork.get_default(), "primary")}>
                     {(primary: AstalNetwork.Primary) => {
