@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "hutao-pointer-cursor" ];
+  system.nixos.tags = [ "hutao-hyprcursor" ];
 }

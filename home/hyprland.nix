@@ -1089,8 +1089,8 @@ let
     }
     {
       section = "Colorshell・日常";
-      label = "カーソル未反映 → テーマ実体 (~/.local/share/icons/<name>) を確認";
-      keys = "hyprctl setcursor <name> <size>";
+      label = "カーソル未反映 → 実体と hyprcursors/ を確認";
+      keys = "hyprctl reload config-only + setcursor";
     }
     {
       section = "Colorshell・日常";
@@ -2335,6 +2335,7 @@ in
       -- Cursor theme/size (from lib/theme.nix) & Colorshell wallpaper directory
       hl.env("XCURSOR_THEME", ${builtins.toJSON theme.cursor.name})
       hl.env("XCURSOR_SIZE", ${builtins.toJSON cursorSizeStr})
+      hl.env("HYPRCURSOR_THEME", ${builtins.toJSON theme.cursor.name})
       hl.env("HYPRCURSOR_SIZE", ${builtins.toJSON cursorSizeStr})
       ${lib.optionalString theme.cursor.hyprcursor ''hl.env("HYPRCURSOR_THEME", ${builtins.toJSON theme.cursor.name})''}
       hl.env("WALLPAPERS", os.getenv("HOME") .. "/wallpapers")

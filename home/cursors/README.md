@@ -101,6 +101,28 @@ hyprctl setcursor <name> <size>
 
 `<name>.backup` に退避されている場合は `<name>` に戻す（Windows の生パックは XCursor ではないので、`cursors/` を持つ変換済みディレクトリを使う）。`hyprctl setcursor` はテーマが無くても `ok` を返すため、ディレクトリの存在確認が確実。既存の GTK アプリは再起動後に settings.ini が効く。
 
+### Hyprcursor も用意する（Hyprland 0.57+）
+
+Hyprland 0.57 以降は hyprcursor が既定で、XCursor だけのテーマはビルトインの白い矢印にフォールバックする。`~/.local/share/icons/<name>/` に `hyprcursors/` と `manifest.hl` も追加する。
+
+```bash
+work=$(mktemp -d)
+nix shell nixpkgs#hyprcursor nixpkgs#xcur2png -c hyprcursor-util \
+  --extract ~/.local/share/icons/<name> -o "$work"
+sed -i "s/^name = .*/name = <name>/" "$work/extracted_<name>/manifest.hl"
+mkdir -p "$work/out"
+nix shell nixpkgs#hyprcursor -c hyprcursor-util \
+  --create "$work/extracted_<name>" -o "$work/out"
+cp -a "$work/out/theme_<name>"/{hyprcursors,manifest.hl} ~/.local/share/icons/<name>/
+```
+
+テーマの追加・更新後は、Hyprland が起動時に作ったカーソルマネージャが古い状態を保持しているため、`setcursor` の前に `hyprctl reload config-only` を実行する。
+
+```bash
+hyprctl reload config-only
+hyprctl setcursor <name> <size>
+```
+
 ## 4. 再ビルドなしで手元カーソルを仮テストする
 
 `~/.local/share/icons/<ThemeName>/` に展開して次を実行すると、現在の Hyprland セッションで即確認できます:

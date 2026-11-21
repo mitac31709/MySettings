@@ -204,12 +204,14 @@ let
   # ~/.local/share/icons/<name> (e.g. packs that forbid redistribution).
   # The greeter falls back to Adwaita (it cannot read the user's home).
   # HutaoPointer: 胡桃ちゃんぽいんた 2023リメイク (Windows .cur/.ani → win2xcur).
+  # Hyprland 0.57+ uses hyprcursor; a plain XCursor theme falls back to the
+  # built-in pointer, so the local theme also carries `hyprcursors/` + `manifest.hl`.
   cursor = {
     name = "HutaoPointer";
     size = 32;
     package = null;
-    # Set true when the package provides a Hyprcursor theme (`hyprcursors/` + `manifest.hl`).
-    hyprcursor = false;
+    # Set true when the theme provides `hyprcursors/` + `manifest.hl`.
+    hyprcursor = true;
   };
 in
 {
