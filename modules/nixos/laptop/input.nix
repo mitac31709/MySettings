@@ -43,8 +43,19 @@ in
       # Matches all keyboards (VAIO internal + external USB/BT keyboards) unless
       # a more specific host id block (e.g. chromebook/input.nix cros) matches.
       ctrl-alt-del-oom = {
-        ids = [ "*" ];
+        ids = [
+          "*"
+          # Exclude capsomnia-helperd's synthetic toggle UInput device so
+          # non-dedicated fallback toggles are not remapped back to KEY_MACRO.
+          "-k:1209:ca95"
+        ];
         extraConfig = ''
+          [main]
+          # Remap physical Caps Lock to KEY_MACRO (XKB <I120> = NoSymbol) so it
+          # never triggers Eisu_toggle / Caps_Lock in Hyprland, fcitx5/Meltype,
+          # or TTY; capsomnia-helperd watches KEY_MACRO to toggle Keep Awake.
+          capslock = macro
+
           [control+alt]
           delete = command(${sysrqOom})
           backspace = command(${sysrqOom})

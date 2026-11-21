@@ -1155,9 +1155,7 @@ class CapsomniaDaemon:
             self.release_inhibitor()
             self.restore_saved_brightness("shutdown")
             self.keep_display_marker.unlink(missing_ok=True)
-        # Keep user's XKB & keybind state clean on daemon exit.
-        if self.applied_xkb_dedicated:
-            run_hypr_eval('hl.config({ input = { kb_options = "" } })')
+        # Keep user's keybind state clean on daemon exit; preserve caps:none while dedicated mode is active.
         if self.applied_shortcut:
             run_hypr_eval(f"hl.unbind({json.dumps(self.applied_shortcut)})")
         self.loop.quit()
