@@ -85,6 +85,12 @@ baseColorshell.overrideAttrs (old: {
         '      bottomButtons={[{' \
         $'      bottomButtons={[{\n          label: "nmtui を端末で開く",\n          actionClicked: () => {\n              Windows.getDefault().close("control-center");\n              openNmtui();\n          }\n      }, {'
 
+    printf '\n' >> data/css/main.css
+    cat ${./css/main-extra.css} >> data/css/main.css
+
+    printf '\n' >> data/css/osd.css
+    cat ${./css/osd-extra.css} >> data/css/osd.css
+
     printf '\n' >> data/css/bar.css
     cat ${./css/bar-extra.css} >> data/css/bar.css
 

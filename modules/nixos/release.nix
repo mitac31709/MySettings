@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "hypr-colorshell-panel-keepawake" ];
+  system.nixos.tags = [ "hypr-colorshell-osd-gauge" ];
 }
