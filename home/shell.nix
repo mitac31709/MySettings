@@ -82,7 +82,14 @@ in
           rebuildArgs+=(--impure)
         fi
         sudo nixos-rebuild switch "''${rebuildArgs[@]}" |& "$nom"
-        return "''${PIPESTATUS[0]}"
+        local rc="''${PIPESTATUS[0]}"
+        # nom のツリー表示 (⏸ = 青) が SGR / 動的色の上書きを残したまま終了すると、
+        # 以降のプロンプトと出力が低コントラストの青になる。ウィンドウを作り直さずに
+        # 端末属性を Ghostty の設定色へ戻す (OSC 110/111/112 = fg/bg/cursor を既定へ)。
+        if [ -t 1 ]; then
+          printf '\033[0m\033]110\033\\\033]111\033\\\033]112\033\\'
+        fi
+        return "$rc"
       }
 
       # Low-priority nix eval (CPU + IO). Prefer narrow config.… paths over options.…

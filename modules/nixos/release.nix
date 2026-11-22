@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "btop-cpu-lazy-sort" ];
+  system.nixos.tags = [ "rebuild-terminal-color-reset" ];
 }
