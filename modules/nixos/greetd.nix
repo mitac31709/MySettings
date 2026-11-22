@@ -247,6 +247,8 @@ in
   services.gnome.gcr-ssh-agent.enable = false;
   security.pam.services.greetd.enableGnomeKeyring = true;
   security.pam.services.login.enableGnomeKeyring = true;
+  security.pam.services.greetd.fprintAuth = false;
+  security.pam.services.login.fprintAuth = false;
 
   # NumLock on before greetd (and as the default for new VTs).
   # Compositors that reset LED state still need their own session option.

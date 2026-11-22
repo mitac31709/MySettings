@@ -26,7 +26,7 @@
 | 操作 | キー | 動作 |
 |------|------|------|
 | 検索／ランチャー | **Super+D** / **Super+Space** / **Alt+Space** | **Colorshell Runner**（アプリ検索 / `>` クリップボード / `#` 壁紙 / 計算 / コマンド） |
-| アプリ一覧 | **Super+Shift+D** | **Colorshell Apps Drawer** |
+| アプリ一覧 | **Win (Super)** / **Super+Shift+D** | **Colorshell Apps Drawer** |
 | 壁紙切替・動的配色 | **Super+W** | **Colorshell Runner** 壁紙ピッカー（`#`、`~/wallpapers`、pywal16 動的配色） |
 | コントロールセンター | **Super+I** | **Colorshell Control Center**（Wi-Fi / Bluetooth / 音量 / ナイトライト） |
 | 通知・カレンダー・メディア | **Super+M** | **Colorshell Center Window** |
@@ -711,6 +711,7 @@ restic restore latest \
 | キーボード・OOM | `keyd` により **Ctrl+Alt+Del**（**Ctrl+Alt+Backspace** も可）で手動 OOM killer（SysRq-f）＋ libinput 内部キーボード扱い。Chromebook 用 `cros` 最上段変換は適用しないため、`F1`–`F12` は通常のファンクションキーとして動作（`modules/nixos/laptop/input.nix`） |
 | 電源・コード | `zram`（100% / zstd）・`thermald`・`auto-cpufreq`・`power-chords`（全 `"Power Button"` ACPI ノードを監視: 短押し=suspend / 長押し≈2.5s=poweroff / **電源+F1=強制ログアウト** / **電源+F2=再起動**）。Ice Lake eDP は `i915.enable_psr=0` `i915.enable_dc=0`（flip 張り付き＝偽 iowait 回避）。Chromebook 専用 `/dev/cros_ec` Type-C 制御はロードしない |
 | バックライト | Waybar `backlight` はデバイス名固定なし（`intel_backlight` 等を自動検出） |
+| 指紋認証 | ELAN `04f3:0c46` 対応パッチ適用済み `libfprint` + `fprintd`（`modules/nixos/vaio/fingerprint.nix`）。`sudo`（PAM）および `hyprlock`（D-Bus 併用）で利用可。`greetd`/`login`（`gnome-keyring` 自動解錠維持）と Polkit（`cmd-polkit` 非対応）はパスワード認証を維持。登録は `fprintd-enroll`（小型センサーのためタッチ／ゆっくりスワイプ） |
 
 ### VAIO オーディオ確認
 
@@ -827,7 +828,7 @@ modules/nixos/console-gui.nix     # gui / apps（cage 単一アプリ起動・CL
 modules/nixos/laptop.nix          # ノート PC 共通ハードウェア集約（./laptop/*）
 modules/nixos/laptop/             # graphics（Intel iHD + SOF + i915.enable_psr=0/dc=0）/ input（keyd OOM）/ power（zram + thermald + auto-cpufreq + power-chords）
 modules/nixos/vaio.nix            # VAIO 固有集約（./vaio/*）
-modules/nixos/vaio/               # audio（PipeWire + WirePlumber + Bluetooth）
+modules/nixos/vaio/               # audio（PipeWire + WirePlumber + Bluetooth）/ fingerprint（ELAN 04f3:0c46 用 libfprint パッチ + fprintd）/ power
 modules/nixos/chromebook.nix      # delbin Chromebook 固有集約（./chromebook/*）
 modules/nixos/chromebook/         # audio（PulseAudio + UCM）/ power（Type-C EC）/ input（cros keyd + Flip）
 modules/nixos/backup.nix          # 暗号化 /home → Google Drive バックアップ（agenix / restic / rclone）

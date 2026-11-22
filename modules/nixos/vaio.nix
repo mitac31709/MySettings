@@ -4,6 +4,7 @@
 {
   imports = [
     ./vaio/audio.nix
+    ./vaio/fingerprint.nix
     ./vaio/power.nix
   ];
 }

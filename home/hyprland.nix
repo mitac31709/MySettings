@@ -670,7 +670,7 @@ let
     {
       section = "起動・終了";
       label = "Colorshell アプリ一覧（Apps Drawer）";
-      keys = "Super+Shift+D";
+      keys = "Win (Super) / Super+Shift+D";
       run = "${colorshellBin} toggle -w apps-drawer";
       mode = "exec";
     }
@@ -1002,6 +1002,32 @@ let
       section = inputSection;
       label = "注: ELECOM を Mac のままにすると Ctrl↔Win が入れ替わる";
     }
+    (lib.optionals (!isChromebook) [
+      {
+        section = inputSection;
+        label = "指紋を登録（fprintd-enroll・数回タッチ／スワイプ）";
+        run = "fprintd-enroll";
+        mode = "term";
+      }
+      {
+        section = inputSection;
+        label = "登録済み指紋を確認 (fprintd-list)";
+        run = "fprintd-list \"$USER\"";
+        mode = "term";
+      }
+      {
+        section = inputSection;
+        label = "指紋認証テスト (fprintd-verify)";
+        run = "fprintd-verify";
+        mode = "term";
+      }
+      {
+        section = inputSection;
+        label = "登録済み指紋を全削除 (fprintd-delete)";
+        run = "fprintd-delete \"$USER\"";
+        mode = "show";
+      }
+    ])
     # Yazi / Neovim
     {
       section = "Yazi / Neovim";
@@ -2450,6 +2476,8 @@ in
       hl.bind(mod .. " + Space",     hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} runner"}), { dont_inhibit = true })
       hl.bind("ALT + Space",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} runner"}), { dont_inhibit = true })
       hl.bind(mod .. " + SHIFT + D", hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w apps-drawer"}), { dont_inhibit = true })
+      hl.bind("Super_L",             hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w apps-drawer"}), { release = true, dont_inhibit = true })
+      hl.bind("Super_R",             hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w apps-drawer"}), { release = true, dont_inhibit = true })
       hl.bind(mod .. " + W",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} runner -t \"#\""}), { dont_inhibit = true })
       hl.bind(mod .. " + I",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w control-center"}), { dont_inhibit = true })
       hl.bind(mod .. " + M",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w center-window"}), { dont_inhibit = true })
@@ -2692,7 +2720,12 @@ in
       };
       auth = {
         pam.enabled = true;
-        fingerprint.enabled = false;
+        fingerprint = {
+          enabled = !isChromebook;
+          ready_message = "指紋認証でロック解除可能";
+          present_message = "指紋を読み取り中…";
+          retry_delay = 250;
+        };
       };
       background = [
         {
@@ -2738,6 +2771,18 @@ in
           font_size = 11;
           font_family = theme.font.mono;
           position = "0, 12";
+          halign = "center";
+          valign = "bottom";
+        }
+      ]
+      ++ lib.optionals (!isChromebook) [
+        {
+          monitor = "";
+          text = "$FPRINTPROMPT";
+          color = "rgb(${p.fgSecondaryHex})";
+          font_size = 12;
+          font_family = "Adwaita Sans";
+          position = "0, 98";
           halign = "center";
           valign = "bottom";
         }
