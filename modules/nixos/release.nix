@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "win-apps-drawer-fprintd" ];
+  system.nixos.tags = [ "btop-cpu-lazy-sort" ];
 }

@@ -536,7 +536,7 @@ in
     settings = {
       shown_boxes = "net proc cpu mem";
       update_ms = 400;
-      proc_sorting = "pid";
+      proc_sorting = "cpu-lazy";
       save_config_on_exit = false;
     };
   };
