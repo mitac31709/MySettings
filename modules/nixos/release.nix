@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "bath-chime-startup-sounds" ];
+  system.nixos.tags = [ "youtube-bath-chime-sounds" ];
 }

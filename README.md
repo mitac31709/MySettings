@@ -378,7 +378,7 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **暗号化バックアップ** — `restic` + `rclone` で `/home` を Google Drive へ。`agenix` 移行時は `/run/agenix/` 経由で自動無監視実行（未移行時・他端末リカバリ時は Bitwarden `rbw`）。詳細は下記。
 - **デスクトップ** — greetd + ReGreet（Hyprland (UWSM) + **Colorshell**。ログイン画面も受信専用 Lan Mouse 待機）
 - **bootvine** — 起動コンソールに systemd ジョブの依存ツリーを表示（[bootvine](https://codeberg.org/wvhulle/bootvine)、`services.bootvine.enable`）。反映には `rebuild` のあと再起動が必要
-- **起動音（`startup-sound`）** — ログイン時に `startup-sound.service` が歴代 Windows（3.1 / 95 / 98 / 2000 / XP / 7 / 11）・Mac・GameCube・Nintendo Wii・Wii Sports・ブルーアーカイブ・マリオカート8・お風呂が沸きましたチャイム（ノーリツ「人形の夢と目覚め」／リンナイ「カノン」「エリーゼのために」／パロマ「春」）と `~/.local/share/startup-sounds/`（または `home/startup-sounds/`）の音声からランダム再生（`home/startup-sound.nix`）。チートシート `Super+/` や CLI から `startup-sound --list` / `--menu` / `--toggle` が利用可能
+- **起動音（`startup-sound`）** — ログイン時に `startup-sound.service` が歴代 Windows（3.1 / 95 / 98 / 2000 / XP / 7 / 11）・Mac・GameCube・Nintendo Wii・Wii Sports・ブルーアーカイブ・マリオカート8・お風呂が沸きましたチャイム（[お風呂のメロディー集【新新版】](https://youtu.be/alRIEBuUcKk)から抽出したノーリツ／リンナイ／パロマ／パーパス／ナショナル／パナソニック／三菱／コロナ／日立／モリタ／トートー／タカラスタンダード／ダイキン／長府の計21種）と `~/.local/share/startup-sounds/`（または `home/startup-sounds/`）の音声からランダム再生（`home/startup-sound.nix`）。チートシート `Super+/` や CLI から `startup-sound --list` / `--menu` / `--toggle` が利用可能
 - **gui** — ディスプレイ無し時は `cage` で単一 GUI アプリを起動（`gui firefox` など）。引数なしは `apps` を起動
 - **apps** — `fzf` アプリ一覧（`gui` 経由起動）。TTY やシェルから利用可。Hyprland の Super+D は Colorshell Runner
 
