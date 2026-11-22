@@ -11,3 +11,12 @@
    この `home/startup-sounds/` に音声ファイルを置いて `git add` し、`rebuild` してください。
 
 対応拡張子: `.wav`, `.mp3`, `.ogg`, `.oga`, `.opus`, `.flac`, `.m4a`, `.aac`, `.wma`, `.aiff`, `.aif`, `.webm`, `.mka`
+
+## お風呂が沸きましたチャイム
+
+`bath-*.ogg` は給湯器リモコンの「お湯はり完了メロディー」をミュージックボックス調に合成したものです（いずれもパブリックドメインのクラシック旋律）。
+
+- `bath-noritz.ogg` — ノーリツ「人形の夢と目覚め」第2部（テオドール・エステン）
+- `bath-rinnai-canon.ogg` — リンナイ「カノン」（パッヘルベル）
+- `bath-rinnai-elise.ogg` — リンナイ「エリーゼのために」（ベートーヴェン）
+- `bath-paloma-spring.ogg` — パロマ「春」（ヴィヴァルディ『四季』より）

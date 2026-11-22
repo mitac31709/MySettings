@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "t3code-lan-access" ];
+  system.nixos.tags = [ "bath-chime-startup-sounds" ];
 }
