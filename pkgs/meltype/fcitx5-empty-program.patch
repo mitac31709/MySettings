@@ -1,9 +1,9 @@
 --- a/linux/fcitx5/meltype.cpp
 +++ b/linux/fcitx5/meltype.cpp
-@@ -623,9 +623,12 @@
-                                           std::pair{fcitx::CapabilityFlag::Sensitive, "Private"}}) {
-             if (flags.test(flag)) traits += std::string(traits.empty() ? "" : ",") + "\"" + name + "\"";
-         }
+@@ -619,9 +619,12 @@
+         // ロック画面のキーが fcitx5 に届くのは QT_IM_MODULE=fcitx のとき (program() は kscreenlocker_greet) だけで、KWin の入力メソッドで動かすとロック中のキーは届かない
+         if (!flags.test(fcitx::CapabilityFlag::Password) && flags.test(fcitx::CapabilityFlag::Sensitive) && ic->program() == "kscreenlocker_greet")
+             traits += ",\"Password\"";
 +        // Wayland clients that omit app_id (rofi layer-shell) leave program empty,
 +        // so Meltype AppRules can never match. Label them "_empty" for config.json.
 +        const std::string app = ic->program().empty() ? "_empty" : ic->program();
