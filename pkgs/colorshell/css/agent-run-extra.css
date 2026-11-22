@@ -1,0 +1,147 @@
+/* Agent run card. The bar's monospace class resolves to JetBrains Mono
+ * (fonts.fontconfig.defaultFonts.monospace). */
+
+.agent-run-window {
+  background: transparent;
+}
+
+.agent-run-card {
+  background: #151515;
+  border-radius: 18px;
+  padding: 14px 14px 12px;
+  font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", monospace;
+  color: #f4f4f5;
+}
+
+.agent-run-card label {
+  font-family: "JetBrainsMono Nerd Font", "JetBrains Mono", monospace;
+}
+
+.agent-section {
+  /* stacked sections share the card padding */
+}
+
+.agent-gap {
+  min-height: 10px;
+  margin-top: 8px;
+  border-top: 1px solid #2a2a2a;
+}
+
+.agent-mark {
+  font-size: 14px;
+  min-width: 16px;
+}
+
+.agent-mark.running,
+.agent-mark.running.pulse-dim {
+  color: #ff6b4a;
+}
+
+.agent-mark.approval {
+  color: #3b82f6;
+}
+
+.agent-mark.done {
+  color: #3ddc97;
+}
+
+.agent-mark.error {
+  color: #f06d7d;
+}
+
+.agent-mark.pulse-dim {
+  opacity: 0.35;
+}
+
+.agent-action {
+  font-size: 13px;
+  font-weight: 650;
+  color: #f4f4f5;
+}
+
+.agent-clock,
+.agent-step,
+.agent-row-time {
+  font-size: 12px;
+  color: #c8c8c8;
+}
+
+.agent-meta {
+  font-size: 12px;
+  color: #9a9a9a;
+}
+
+.agent-bar {
+  margin-top: 2px;
+}
+
+.agent-seg {
+  border-radius: 99px;
+  min-height: 5px;
+  background: #2c2c2c;
+}
+
+.agent-seg.done {
+  background: #3ddc97;
+}
+
+.agent-seg.active {
+  background: #5b65f0;
+}
+
+.agent-row {
+  padding: 3px 6px;
+  border-radius: 8px;
+}
+
+.agent-row.approval {
+  background: #1e2540;
+}
+
+.agent-row-icon {
+  -gtk-icon-size: 14px;
+  color: #d0d0d0;
+}
+
+.agent-row-text {
+  font-size: 12px;
+  color: #ececec;
+}
+
+.agent-row.done .agent-row-text,
+.agent-row.done .agent-row-time,
+.agent-row.done .agent-row-icon {
+  color: #8d8d8d;
+}
+
+.agent-footer {
+  margin-top: 4px;
+}
+
+.agent-run-card button.agent-btn {
+  border-radius: 10px;
+  padding: 4px 10px;
+  min-height: 0;
+  background: #242424;
+  color: #f4f4f5;
+  font-size: 12px;
+}
+
+.agent-run-card button.agent-btn label {
+  color: #f4f4f5;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.agent-run-card button.approve {
+  background: #3b82f6;
+}
+
+.agent-run-card button.deny {
+  background: transparent;
+  border: 1px solid #3a3a3a;
+}
+
+.agent-run-card button.stop label {
+  color: #ffb4a8;
+}

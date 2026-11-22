@@ -180,5 +180,17 @@
         # Legacy alias so existing `.#mitac` rebuild commands keep working.
         mitac = chromebook;
       };
+
+      packages.${system} = {
+        # Colorshell's T3 status bridge. Same sources the hosts install.
+        agent-run-status =
+          let
+            pkgs = import nixpkgs {
+              inherit system;
+              config.allowUnfree = true;
+            };
+          in
+          pkgs.callPackage ./pkgs/agent-run-status { };
+      };
     };
 }

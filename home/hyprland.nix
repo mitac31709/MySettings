@@ -51,6 +51,17 @@ let
   colorshellPkg = pkgs.callPackage ../pkgs/colorshell {
     baseColorshell = inputs.colorshell.packages.${pkgs.stdenv.hostPlatform.system}.colorshell;
   };
+  # pkgs/agent-run-status speaks the t3code 0.1.8 orchestration v2 RPC. A nixpkgs
+  # bump that moves t3code fails evaluation here instead of shipping a silent mismatch.
+  agentRunStatus =
+    if pkgs.t3code.version != "0.1.8" then
+      throw "agent-run-status expects t3code 0.1.8, but pkgs.t3code is ${pkgs.t3code.version}. Update pkgs/agent-run-status before bumping t3code."
+    else
+      pkgs.callPackage ../pkgs/agent-run-status { };
+  agentRunBin = lib.getExe agentRunStatus;
+  t3Bin = "${pkgs.t3code}/bin/t3";
+  t3DesktopBin = "${pkgs.t3code}/bin/t3code-desktop";
+  xdgOpenBin = lib.getExe' pkgs.xdg-utils "xdg-open";
   colorshellBin = lib.getExe config.programs.colorshell.package;
   ghosttyBin = "${pkgs.ghostty}/bin/ghostty";
   flakeUpdateRunner = pkgs.writeShellScript "run-flake-update" ''
@@ -1280,6 +1291,40 @@ let
     }
     {
       section = "開発";
+      label = "エージェントカード（実行中の模擬）";
+      run = "agent-run-status mock running";
+      mode = "exec";
+    }
+    {
+      section = "開発";
+      label = "エージェントカード（承認待ちの模擬）";
+      run = "agent-run-status mock approval";
+      mode = "exec";
+    }
+    {
+      section = "開発";
+      label = "エージェントカード（完了の模擬）";
+      run = "agent-run-status mock done";
+      mode = "exec";
+    }
+    {
+      section = "開発";
+      label = "エージェントカード（複数の模擬）";
+      run = "agent-run-status mock multi";
+      mode = "exec";
+    }
+    {
+      section = "開発";
+      label = "模擬カードを消す";
+      run = "agent-run-status mock clear";
+      mode = "exec";
+    }
+    {
+      section = "開発";
+      label = "模擬中に本接続が上書きするときは systemctl --user stop agent-run-status（戻すときは start）";
+    }
+    {
+      section = "開発";
       label = "Hermes";
       run = "hermes";
       mode = "term";
@@ -2160,6 +2205,7 @@ in
     ntpSync
     toggleKeepScreenOn
     openFlakeUpdate
+    agentRunStatus
   ];
 
   # Unified Rofi Polkit authentication agent managed under UWSM graphical-session.target.
@@ -2600,6 +2646,30 @@ in
     };
   };
 
+  # T3 Code (v0.1.8) orchestration RPC → $XDG_RUNTIME_DIR/agent-run-status.json.
+  systemd.user.services.agent-run-status = {
+    Unit = {
+      Description = "T3 Code agent run status for Colorshell";
+      After = [ "graphical-session.target" ];
+      BindsTo = [ "graphical-session.target" ];
+      StartLimitIntervalSec = 30;
+      StartLimitBurst = 5;
+    };
+    Service = {
+      ExecStart = "${agentRunBin} daemon";
+      Restart = "on-failure";
+      RestartSec = 2;
+      Environment = [
+        "AGENT_RUN_T3=${t3Bin}"
+        "AGENT_RUN_T3_DESKTOP=${t3DesktopBin}"
+        "AGENT_RUN_XDG_OPEN=${xdgOpenBin}"
+      ];
+    };
+    Install = {
+      WantedBy = [ "graphical-session.target" ];
+    };
+  };
+
   systemd.user.services.colorshell = {
     Unit = {
       After = [ "hyprpaper.service" ];
@@ -2627,6 +2697,10 @@ in
         "COLORSHELL_NMTUI_CMD=${openNmtui}"
         "COLORSHELL_GHOSTTY_CMD=${ghosttyBin}"
         "COLORSHELL_YAZI_CMD=${yaziBin}"
+        "COLORSHELL_AGENT_RUN_CMD=${agentRunBin}"
+        "AGENT_RUN_T3=${t3Bin}"
+        "AGENT_RUN_T3_DESKTOP=${t3DesktopBin}"
+        "AGENT_RUN_XDG_OPEN=${xdgOpenBin}"
       ]
       ++ lib.optionals (!isChromebook) [
         "COLORSHELL_BATTERY_DEV=BAT1"

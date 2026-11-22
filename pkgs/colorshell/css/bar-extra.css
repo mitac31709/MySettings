@@ -1,5 +1,35 @@
 /* MySettings: Top-bar native widgets & status highlights */
 
+/* Agent run pill (hidden until a T3 Code thread is working or waiting) */
+.bar-container .agent-run {
+  background: var(--bg-secondary);
+  padding: 0 7px;
+}
+.bar-container .agent-run .agent-star {
+  font-size: 13px;
+  color: #ff6b4a;
+}
+.bar-container .agent-run .agent-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #ff6b4a;
+}
+.bar-container .agent-run.approval .agent-star,
+.bar-container .agent-run.approval .agent-label {
+  color: #3b82f6;
+}
+.bar-container .agent-run.done .agent-star,
+.bar-container .agent-run.done .agent-label {
+  color: #3ddc97;
+}
+.bar-container .agent-run.error .agent-star,
+.bar-container .agent-run.error .agent-label {
+  color: #f06d7d;
+}
+.bar-container .agent-run.pulse-dim .agent-star {
+  opacity: 0.35;
+}
+
 /* Cheatsheet (?) button */
 .bar-container .cheatsheet {
   min-width: 24px;

@@ -575,6 +575,8 @@ in
       # Computer use CLI for AI agents (`agent-desktop`; pkgs/agent-desktop).
       agentDesktop
       # T3 Code: desktop + `t3` CLI; PATH wraps already-installed agents.
+      # The Colorshell agent card (pkgs/agent-run-status) speaks this package's
+      # RPC. home/hyprland.nix rejects any version other than 0.1.8.
       (t3code.override {
         enableClaude = true;
         enableCursor = true;

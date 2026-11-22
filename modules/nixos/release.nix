@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "jquake-no-focus-steal" ];
+  system.nixos.tags = [ "agent-run-card" ];
 }
