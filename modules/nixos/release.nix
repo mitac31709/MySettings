@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "rebuild-terminal-color-reset" ];
+  system.nixos.tags = [ "t3code-lan-access" ];
 }

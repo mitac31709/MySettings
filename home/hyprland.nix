@@ -1306,6 +1306,10 @@ let
     }
     {
       section = "開発";
+      label = "T3 Code LAN: http://<LAN-IP>:3773（192.168.0.0/18 のみ許可）";
+    }
+    {
+      section = "開発";
       label = "Hermes";
       run = "hermes";
       mode = "term";
