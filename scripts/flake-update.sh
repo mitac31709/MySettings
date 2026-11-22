@@ -18,6 +18,10 @@ if [[ ! -f "$root/flake.nix" ]]; then
 fi
 cd "$root"
 
+# The Python heredocs use (?:\$\{[^}]*\}|[^}])*? to stay inside one Nix attrset.
+# A plain [^}]*? stops early at the '}' in ${...} interpolation (e.g. the
+# meltype rev or the opencode URL), so no hash/url line is ever matched.
+
 read_gh_token() {
   if [[ -n "${GH_TOKEN:-}" ]]; then
     printf '%s' "$GH_TOKEN"
@@ -111,19 +115,19 @@ text = path.read_text()
 replacements = [
     (r'(uniclipboardVersion\s*=\s*")[^"]*(";)', uc_ver, "uniclipboardVersion"),
     (
-        r'(uniclipboard-deb\s*=\s*\{[^}]*?url\s*=\s*")[^"]*(")',
+        r'(uniclipboard-deb\s*=\s*\{(?:\$\{[^}]*\}|[^}])*?url\s*=\s*")[^"]*(")',
         uc_url,
         "uniclipboard-deb url",
     ),
     (r'(chatgptVersion\s*=\s*")[^"]*(";)', chatgpt_ver, "chatgptVersion"),
     (
-        r'(chatgpt-deb\s*=\s*\{[^}]*?url\s*=\s*")[^"]*(")',
+        r'(chatgpt-deb\s*=\s*\{(?:\$\{[^}]*\}|[^}])*?url\s*=\s*")[^"]*(")',
         chatgpt_url,
         "chatgpt-deb url",
     ),
     (r'(grokBotVersion\s*=\s*")[^"]*(";)', grok_bot_ver, "grokBotVersion"),
     (
-        r'(grok-bot-deb\s*=\s*\{[^}]*?url\s*=\s*")[^"]*(")',
+        r'(grok-bot-deb\s*=\s*\{(?:\$\{[^}]*\}|[^}])*?url\s*=\s*")[^"]*(")',
         grok_bot_url,
         "grok-bot-deb url",
     ),
@@ -171,8 +175,8 @@ ver, src_hash, zip_hash = sys.argv[2:5]
 t = p.read_text()
 for pat, val, lbl in [
     (r'(  version\s*=\s*")[^"]*(";)', ver, "meltype version"),
-    (r'(src\s*=\s*fetchFromGitHub\s*\{[^}]*?hash\s*=\s*")[^"]*(";)', src_hash, "meltype src hash"),
-    (r'(binaryZip\s*=\s*fetchurl\s*\{[^}]*?hash\s*=\s*")[^"]*(";)', zip_hash, "meltype binaryZip hash"),
+    (r'(src\s*=\s*fetchFromGitHub\s*\{(?:\$\{[^}]*\}|[^}])*?hash\s*=\s*")[^"]*(";)', src_hash, "meltype src hash"),
+    (r'(binaryZip\s*=\s*fetchurl\s*\{(?:\$\{[^}]*\}|[^}])*?hash\s*=\s*")[^"]*(";)', zip_hash, "meltype binaryZip hash"),
 ]:
     t, n = re.subn(pat, rf"\g<1>{val}\2", t, count=1, flags=re.S)
     if n != 1:
@@ -207,7 +211,7 @@ ver, h = sys.argv[2:4]
 t = p.read_text()
 for pat, val, lbl in [
     (r'(  version\s*=\s*")[^"]*(";)', ver, "opencode version"),
-    (r'(src\s*=\s*fetchurl\s*\{[^}]*?hash\s*=\s*")[^"]*(";)', h, "opencode hash"),
+    (r'(src\s*=\s*fetchurl\s*\{(?:\$\{[^}]*\}|[^}])*?hash\s*=\s*")[^"]*(";)', h, "opencode hash"),
 ]:
     t, n = re.subn(pat, rf"\g<1>{val}\2", t, count=1, flags=re.S)
     if n != 1:
@@ -242,8 +246,8 @@ ver, url, h = sys.argv[2:5]
 t = p.read_text()
 for pat, val, lbl in [
     (r'(  version\s*=\s*")[^"]*(";)', ver, "antigravity version"),
-    (r'(src\s*=\s*fetchurl\s*\{[^}]*?url\s*=\s*")[^"]*(";)', url, "antigravity url"),
-    (r'(src\s*=\s*fetchurl\s*\{[^}]*?hash\s*=\s*")[^"]*(";)', h, "antigravity hash"),
+    (r'(src\s*=\s*fetchurl\s*\{(?:\$\{[^}]*\}|[^}])*?url\s*=\s*")[^"]*(";)', url, "antigravity url"),
+    (r'(src\s*=\s*fetchurl\s*\{(?:\$\{[^}]*\}|[^}])*?hash\s*=\s*")[^"]*(";)', h, "antigravity hash"),
 ]:
     t, n = re.subn(pat, rf"\g<1>{val}\2", t, count=1, flags=re.S)
     if n != 1:
@@ -282,8 +286,8 @@ ver, rev, h = sys.argv[2:5]
 t = p.read_text()
 for pat, val, lbl in [
     (r'(  version\s*=\s*")[^"]*(";)', ver, "wol-pc version"),
-    (r'(src\s*=\s*fetchFromGitHub\s*\{[^}]*?rev\s*=\s*")[^"]*(";)', rev, "wol-pc rev"),
-    (r'(src\s*=\s*fetchFromGitHub\s*\{[^}]*?hash\s*=\s*")[^"]*(";)', h, "wol-pc hash"),
+    (r'(src\s*=\s*fetchFromGitHub\s*\{(?:\$\{[^}]*\}|[^}])*?rev\s*=\s*")[^"]*(";)', rev, "wol-pc rev"),
+    (r'(src\s*=\s*fetchFromGitHub\s*\{(?:\$\{[^}]*\}|[^}])*?hash\s*=\s*")[^"]*(";)', h, "wol-pc hash"),
 ]:
     t, n = re.subn(pat, rf"\g<1>{val}\2", t, count=1, flags=re.S)
     if n != 1:
