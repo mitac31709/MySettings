@@ -360,7 +360,7 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **Tor Browser** — `tor-browser`
 - **Tilion Fortress** — ローカル版ステルス Chromium エンジン + CLI / MCP（`pkgs/tilion-fortress`：`tilion` / `tilion-mcp` / `tilion-fortress` / `fortress-browser`）。v3 機能を有効化する場合は `tilion activate` でライセンスを取得
 - **Qalculate!** — 高機能関数電卓（Qt GUI `qalculate-qt` + CLI `qalc` / `libqalculate`）
-- **JQuake** — `JQuake` / `jquake`（1.8.4 + `pkgs/jquake` ラッパー。Hyprland/XWayland AWT 修正・更新ダイアログ無効化）。ログイン時に `jquake.service` で常駐し、Hyprland では offscreen `stalonetray` にトレイを保持しつつ `jquake-open` / `jquake-toggle` / `jquake-menu`（チートシート `Super+/` やランナーから起動可）で表示・管理。Colorshell の JQuake ボタンはトグルで、表示中に押すとトレイへ戻す（サービスは常駐）。表示時・警報時はトップバーを残したままワークスペース領域いっぱいに最大化（フルスクリーンにしないため画面暗転なし）＋警報時は `hyprlock` 解除。XWayland と Wayland の間でフォーカスが移動した際に Ctrl/Alt が押しっぱなしになるのを防ぐため、表示・警報・トグル時に修飾キーを解放する（`home/jquake.nix` / `home/hyprland.nix`）
+- **JQuake** — `JQuake` / `jquake`（1.8.4 + `pkgs/jquake` ラッパー。Hyprland/XWayland AWT 修正・更新ダイアログ無効化）。ログイン時に `jquake.service` で常駐し、Hyprland では offscreen `stalonetray` にトレイを保持しつつ `jquake-open` / `jquake-toggle` / `jquake-menu`（チートシート `Super+/` やランナーから起動可）で表示・管理。Colorshell の JQuake ボタンはトグルで、表示中に押すとトレイへ戻す（サービスは常駐）。表示時・警報時はトップバーを残したままワークスペース領域いっぱいに最大化（フルスクリーンにしないため画面暗転なし）＋警報時は `hyprlock` 解除。Ctrl/Alt が押しっぱなしになるのを防ぐため、JQuake への強制フォーカス（Java/AWT の X キーボードグラブと競合して修飾キーの keyup を取りこぼす原因）をやめ、`alter_zorder` で前面化するだけにしている（`home/jquake.nix` / `home/hyprland.nix`）
 - **ONLYOFFICE** — `onlyoffice-desktopeditors`（文書・表計算・プレゼン）
 - **Affinity** — 未導入（`affinity-v3` なし。flake 入力も overlay も外してある）。戻すときは次の 3 箇所です。
   1. `flake.nix` の `inputs` に `affinity-nix.url = "github:mrshmllow/affinity-nix";` を足し、`nixpkgs.overlays` の先頭に `inputs.affinity-nix.overlays.default` を戻す

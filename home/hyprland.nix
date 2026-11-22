@@ -408,13 +408,13 @@ let
       pkgs.libnotify
       pkgs.stalonetray
       pkgs.systemd
-      pkgs.xdotool
     ];
     text = ''
-      release_modifiers() {
-        # Focus hopping between XWayland (JQuake) and Wayland surfaces can leave
-        # a modifier logically held; clear them so Ctrl/Alt don't stay stuck.
-        xdotool keyup Control_L Control_R Alt_L Alt_R Shift_L Shift_R Super_L Super_R >/dev/null 2>&1 || true
+      # Raise the map without taking keyboard focus: forcing focus onto the
+      # Java/AWT XWayland window can leave Ctrl/Alt logically held when a
+      # modifier is released during the grab.
+      raise_map() {
+        ${hyprctlBin} dispatch 'hl.dsp.window.alter_zorder({ mode = "top", window = "class:^net-jquake-app-Main$" })' >/dev/null 2>&1 || true
       }
 
       mapfile -t ust < <(
@@ -429,8 +429,7 @@ let
       fi
 
       if ${hyprctlBin} clients -j 2>/dev/null | jq -e '[.[] | select(.class == "net-jquake-app-Main")] | length > 0' >/dev/null; then
-        ${hyprctlBin} dispatch 'hl.dsp.focus({ window = "class:^net-jquake-app-Main$" })' >/dev/null 2>&1 || true
-        release_modifiers
+        raise_map
         exit 0
       fi
 
@@ -455,8 +454,7 @@ let
 
       for _ in $(seq 1 20); do
         if ${hyprctlBin} clients -j 2>/dev/null | jq -e '[.[] | select(.class == "net-jquake-app-Main")] | length > 0' >/dev/null; then
-          ${hyprctlBin} dispatch 'hl.dsp.focus({ window = "class:^net-jquake-app-Main$" })' >/dev/null 2>&1 || true
-          release_modifiers
+          raise_map
           break
         fi
         sleep 0.1
@@ -473,16 +471,10 @@ let
       pkgs.coreutils
       pkgs.hyprland
       pkgs.jq
-      pkgs.xdotool
     ];
     text = ''
-      release_modifiers() {
-        xdotool keyup Control_L Control_R Alt_L Alt_R Shift_L Shift_R Super_L Super_R >/dev/null 2>&1 || true
-      }
-
       if ${hyprctlBin} clients -j 2>/dev/null | jq -e '[.[] | select(.class == "net-jquake-app-Main")] | length > 0' >/dev/null; then
         ${hyprctlBin} dispatch 'closewindow class:^net-jquake-app-Main$' >/dev/null 2>&1 || true
-        release_modifiers
         exit 0
       fi
 

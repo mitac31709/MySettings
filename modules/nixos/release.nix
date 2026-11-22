@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "jquake-toggle-fixes" ];
+  system.nixos.tags = [ "jquake-no-focus-steal" ];
 }

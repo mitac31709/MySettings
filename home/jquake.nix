@@ -226,7 +226,6 @@ let
       pkgs.procps
       pkgs.coreutils
       pkgs.hyprland
-      pkgs.xdotool
     ];
     text = ''
       is_jquake_addr() {
@@ -254,28 +253,27 @@ let
               '
         )"
 
-        ${hyprctl} dispatch 'hl.dsp.focus({ window = "class:^${jquakeClass}$" })' >/dev/null 2>&1 || true
+        # Raise without stealing keyboard focus. Forcing focus onto the AWT
+        # window is what races with its X keyboard grab and strands Ctrl/Alt.
+        # alter_zorder with an explicit selector is bring_to_top for a specific
+        # window (bring_to_top only acts on the currently active window).
+        ${hyprctl} dispatch 'hl.dsp.window.alter_zorder({ mode = "top", window = "class:^${jquakeClass}$" })' >/dev/null 2>&1 || true
 
         if [ -n "$info" ]; then
           floating="$(printf '%s\n' "$info" | jq -r '.floating // false')"
           pinned="$(printf '%s\n' "$info" | jq -r '.pinned // false')"
           if [ "$floating" != "true" ]; then
-            ${hyprctl} dispatch 'hl.dsp.window.float({ action = "toggle" })' >/dev/null 2>&1 || true
+            ${hyprctl} dispatch 'hl.dsp.window.float({ window = "class:^${jquakeClass}$", action = "toggle" })' >/dev/null 2>&1 || true
           fi
           if [ "$pinned" != "true" ]; then
-            ${hyprctl} dispatch 'hl.dsp.window.pin()' >/dev/null 2>&1 || true
+            ${hyprctl} dispatch 'hl.dsp.window.pin({ window = "class:^${jquakeClass}$" })' >/dev/null 2>&1 || true
           fi
         fi
 
-        ${hyprctl} dispatch 'hl.dsp.window.bring_to_top()' >/dev/null 2>&1 || true
         # The jquake-main window rule already maximizes the map (float + pin +
         # maximize), which keeps the top bar visible. Do NOT force fullscreen
-        # here: internal fullscreen hides the bar and darkens the whole screen.
-
-        # Forcing focus between the XWayland JQuake window and Wayland surfaces
-        # (and dismissing hyprlock) can leave a modifier logically held. Release
-        # them all so Ctrl/Alt don't stay "stuck" after the alert.
-        xdotool keyup Control_L Control_R Alt_L Alt_R Shift_L Shift_R Super_L Super_R >/dev/null 2>&1 || true
+        # here: the map is raised via alter_zorder above instead, with no focus
+        # change, so no modifier can be left logically held.
       }
 
       sock="''${XDG_RUNTIME_DIR}/hypr/''${HYPRLAND_INSTANCE_SIGNATURE}/.socket2.sock"
