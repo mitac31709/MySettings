@@ -408,8 +408,15 @@ let
       pkgs.libnotify
       pkgs.stalonetray
       pkgs.systemd
+      pkgs.xdotool
     ];
     text = ''
+      release_modifiers() {
+        # Focus hopping between XWayland (JQuake) and Wayland surfaces can leave
+        # a modifier logically held; clear them so Ctrl/Alt don't stay stuck.
+        xdotool keyup Control_L Control_R Alt_L Alt_R Shift_L Shift_R Super_L Super_R >/dev/null 2>&1 || true
+      }
+
       mapfile -t ust < <(
         systemctl --user is-active \
           stalonetray-jquake.service \
@@ -423,6 +430,7 @@ let
 
       if ${hyprctlBin} clients -j 2>/dev/null | jq -e '[.[] | select(.class == "net-jquake-app-Main")] | length > 0' >/dev/null; then
         ${hyprctlBin} dispatch 'hl.dsp.focus({ window = "class:^net-jquake-app-Main$" })' >/dev/null 2>&1 || true
+        release_modifiers
         exit 0
       fi
 
@@ -448,10 +456,37 @@ let
       for _ in $(seq 1 20); do
         if ${hyprctlBin} clients -j 2>/dev/null | jq -e '[.[] | select(.class == "net-jquake-app-Main")] | length > 0' >/dev/null; then
           ${hyprctlBin} dispatch 'hl.dsp.focus({ window = "class:^net-jquake-app-Main$" })' >/dev/null 2>&1 || true
+          release_modifiers
           break
         fi
         sleep 0.1
       done
+    '';
+  };
+
+  # Bar-button action: toggle the JQuake window. The service stays resident in
+  # the tray (persistentMode + winChoice=2), so a WM_DELETE hides the window
+  # back to the icon instead of quitting it.
+  jquakeToggle = pkgs.writeShellApplication {
+    name = "jquake-toggle";
+    runtimeInputs = [
+      pkgs.coreutils
+      pkgs.hyprland
+      pkgs.jq
+      pkgs.xdotool
+    ];
+    text = ''
+      release_modifiers() {
+        xdotool keyup Control_L Control_R Alt_L Alt_R Shift_L Shift_R Super_L Super_R >/dev/null 2>&1 || true
+      }
+
+      if ${hyprctlBin} clients -j 2>/dev/null | jq -e '[.[] | select(.class == "net-jquake-app-Main")] | length > 0' >/dev/null; then
+        ${hyprctlBin} dispatch 'closewindow class:^net-jquake-app-Main$' >/dev/null 2>&1 || true
+        release_modifiers
+        exit 0
+      fi
+
+      exec ${lib.getExe jquakeOpen}
     '';
   };
 
@@ -2005,6 +2040,12 @@ let
     }
     {
       section = "周辺";
+      label = "JQuake 表示/非表示トグル (jquake-toggle)";
+      run = "${lib.getExe jquakeToggle}";
+      mode = "exec";
+    }
+    {
+      section = "周辺";
       label = "JQuake 管理メニュー (jquake-menu)";
       run = "${lib.getExe jquakeMenu}";
       mode = "exec";
@@ -2121,6 +2162,7 @@ in
     hyprExec
     screenshotBin
     jquakeOpen
+    jquakeToggle
     jquakeMenu
     servicesMenu
     ntpSync
@@ -2584,6 +2626,7 @@ in
         "COLORSHELL_CAPS_SETTINGS_CMD=${capsomniaPkg}/bin/capsomnia-settings"
         "COLORSHELL_CAPS_MENU_CMD=${capsomniaPkg}/bin/capsomnia-menu"
         "COLORSHELL_JQUAKE_OPEN_CMD=${lib.getExe jquakeOpen}"
+        "COLORSHELL_JQUAKE_TOGGLE_CMD=${lib.getExe jquakeToggle}"
         "COLORSHELL_JQUAKE_MENU_CMD=${lib.getExe jquakeMenu}"
         "COLORSHELL_SERVICES_MENU_CMD=${lib.getExe servicesMenu}"
         "COLORSHELL_STARTUP_SOUND_CMD=${lib.getExe config.mitac.scripts.startupSound}"

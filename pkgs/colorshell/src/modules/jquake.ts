@@ -30,7 +30,7 @@ class JQuakeMonitor extends GObject.Object {
     cssClass = "jquake active";
 
     @property(String)
-    tooltip = "JQuake: 状態確認中…\n\n左クリックで表示\n右クリックで管理メニュー";
+    tooltip = "JQuake: 状態確認中…\n\n左クリックで表示/非表示\n右クリックで管理メニュー";
 
     constructor() {
         super();
@@ -80,7 +80,7 @@ class JQuakeMonitor extends GObject.Object {
                 "✗ JQuake: 異常停止",
                 `jquake=${jqS} tray=${stS} alert=${alS}`,
                 "",
-                "左クリックで起動・表示",
+                "左クリックで起動・表示/非表示",
                 "右クリックで管理メニュー",
             ].join("\n");
             return;
@@ -91,12 +91,12 @@ class JQuakeMonitor extends GObject.Object {
                 this.state = "open";
                 this.iconName = "weather-severe-alert-symbolic";
                 this.cssClass = "jquake open";
-                this.tooltip = "JQuake: 表示中\n\n左クリックでフォーカス\n右クリックで管理メニュー";
+                this.tooltip = "JQuake: 表示中\n\n左クリックで非表示（トレイへ）\n右クリックで管理メニュー";
             } else {
                 this.state = "active";
                 this.iconName = "weather-storm-symbolic";
                 this.cssClass = "jquake active";
-                this.tooltip = "JQuake: 待機中（強震モニタ・EEW 監視）\n\n左クリックで表示\n右クリックで管理メニュー";
+                this.tooltip = "JQuake: 待機中（強震モニタ・EEW 監視）\n\n左クリックで表示/非表示\n右クリックで管理メニュー";
             }
             return;
         }
@@ -108,7 +108,7 @@ class JQuakeMonitor extends GObject.Object {
             "! JQuake: 停止中",
             `jquake=${jqS} tray=${stS} alert=${alS}`,
             "",
-            "左クリックで起動・表示",
+            "左クリックで起動・表示/非表示",
             "右クリックで管理メニュー",
         ].join("\n");
     }
@@ -145,10 +145,10 @@ class JQuakeMonitor extends GObject.Object {
             });
     }
 
-    public openWindow(): void {
-        const cmd = GLib.getenv("COLORSHELL_JQUAKE_OPEN_CMD") || "jquake-open";
+    public toggleWindow(): void {
+        const cmd = GLib.getenv("COLORSHELL_JQUAKE_TOGGLE_CMD") || "jquake-toggle";
         execAsync([cmd])
-            .catch((err) => console.warn("jquake-open failed:", err))
+            .catch((err) => console.warn("jquake-toggle failed:", err))
             .finally(() => {
                 this.#updateOpenFromCompositor();
                 this.refreshUnits();

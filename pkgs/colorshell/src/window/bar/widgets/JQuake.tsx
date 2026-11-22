@@ -9,7 +9,7 @@ export const JQuake = () => {
         <Gtk.Button
             class={createBinding(jq, "cssClass")}
             tooltipText={createBinding(jq, "tooltip")}
-            onClicked={() => jq.openWindow()}
+            onClicked={() => jq.toggleWindow()}
             $={(self) => {
                 const rightClick = Gtk.GestureClick.new();
                 rightClick.set_button(Gdk.BUTTON_SECONDARY);

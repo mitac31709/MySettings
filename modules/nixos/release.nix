@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "pkg-updates-nov22" ];
+  system.nixos.tags = [ "jquake-toggle-fixes" ];
 }

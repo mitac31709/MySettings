@@ -226,6 +226,7 @@ let
       pkgs.procps
       pkgs.coreutils
       pkgs.hyprland
+      pkgs.xdotool
     ];
     text = ''
       is_jquake_addr() {
@@ -267,7 +268,14 @@ let
         fi
 
         ${hyprctl} dispatch 'hl.dsp.window.bring_to_top()' >/dev/null 2>&1 || true
-        ${hyprctl} dispatch 'hl.dsp.window.fullscreen_state({ internal = 1, client = 1 })' >/dev/null 2>&1 || true
+        # The jquake-main window rule already maximizes the map (float + pin +
+        # maximize), which keeps the top bar visible. Do NOT force fullscreen
+        # here: internal fullscreen hides the bar and darkens the whole screen.
+
+        # Forcing focus between the XWayland JQuake window and Wayland surfaces
+        # (and dismissing hyprlock) can leave a modifier logically held. Release
+        # them all so Ctrl/Alt don't stay "stuck" after the alert.
+        xdotool keyup Control_L Control_R Alt_L Alt_R Shift_L Shift_R Super_L Super_R >/dev/null 2>&1 || true
       }
 
       sock="''${XDG_RUNTIME_DIR}/hypr/''${HYPRLAND_INSTANCE_SIGNATURE}/.socket2.sock"
