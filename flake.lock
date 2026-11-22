@@ -40,17 +40,19 @@
     "bootvine": {
       "inputs": {
         "crane": "crane",
+        "flake-parts": "flake-parts",
+        "import-tree": "import-tree",
         "nixpkgs": [
           "nixpkgs"
         ],
         "rust-overlay": "rust-overlay"
       },
       "locked": {
-        "lastModified": 1794594878,
-        "narHash": "sha256-HZNvvTpfZLrnJ5kcF3pqjMXF/0gIRVt8S7pNEq4CQLo=",
+        "lastModified": 1795177966,
+        "narHash": "sha256-sRE3N7Wl1M3kQ2v9UX+skYbG3GK+fQ9JANn9MjJV5ZQ=",
         "ref": "refs/heads/main",
-        "rev": "107d498c84ab741446dd06e3aa9d742fa38fdd3b",
-        "revCount": 116,
+        "rev": "958cfa1b54451a7481f315de76bcf5a4400e2793",
+        "revCount": 150,
         "type": "git",
         "url": "https://codeberg.org/wvhulle/bootvine"
       },
@@ -62,19 +64,19 @@
     "chatgpt-deb": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-Ik/Rv6n30F8QgIqL2QzsXJdnQOYiPyxTTmkqLUgVAn0=",
+        "narHash": "sha256-m7VniemuZCJEwaeyUnPf+6lk43m/Tsfa7YhoI5ZubQE=",
         "type": "file",
-        "url": "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.1111.71025_amd64.deb"
+        "url": "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.1117.41037_amd64.deb"
       },
       "original": {
         "type": "file",
-        "url": "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.1111.71025_amd64.deb"
+        "url": "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.1117.41037_amd64.deb"
       }
     },
     "colorshell": {
       "inputs": {
         "corncheese-nix-lib": "corncheese-nix-lib",
-        "flake-parts": "flake-parts",
+        "flake-parts": "flake-parts_2",
         "home-manager": [
           "home-manager"
         ],
@@ -121,11 +123,11 @@
     },
     "crane": {
       "locked": {
-        "lastModified": 1790899423,
-        "narHash": "sha256-THGtz65UGJU+sonZidRboyCMk+9DclpMF7pwL4uDV4M=",
+        "lastModified": 1793836618,
+        "narHash": "sha256-TREenflwEjxOSq292FYwbc3kEm7TDRtXCZRNWEdjBmg=",
         "owner": "ipetkov",
         "repo": "crane",
-        "rev": "47b6b27ed9a3a9181415e4367d0c30ab2a0e0250",
+        "rev": "79fd63528501446749c09f08cad486a58c7d173e",
         "type": "github"
       },
       "original": {
@@ -135,6 +137,27 @@
       }
     },
     "flake-parts": {
+      "inputs": {
+        "nixpkgs-lib": [
+          "bootvine",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1793576659,
+        "narHash": "sha256-V1h85lUaJBQoHFrB2vpXZOE0Ju1MYSnIpsehoVZYlDo=",
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "rev": "ea2630b7470978622c7689a1ff75d2b389175399",
+        "type": "github"
+      },
+      "original": {
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "type": "github"
+      }
+    },
+    "flake-parts_2": {
       "inputs": {
         "nixpkgs-lib": "nixpkgs-lib"
       },
@@ -152,7 +175,7 @@
         "type": "github"
       }
     },
-    "flake-parts_2": {
+    "flake-parts_3": {
       "inputs": {
         "nixpkgs-lib": [
           "hermes-agent",
@@ -176,18 +199,18 @@
     "grok-bot-deb": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-GPlTYnocVcv6wG8axUZ4I6PC/Gq1Ls2IxoIaLL4OiTQ=",
+        "narHash": "sha256-uFwT5hZaeYZ+Fa544FBgeR8Bzk1vEsWWwmtiK57vnFU=",
         "type": "file",
-        "url": "https://downloads.cursor.com/grokbot/stable/cf0aa5097b8fdfea8f2ecd33ce9f71a72655ef08/linux/x64/grok-bot_1.2.0_amd64.deb"
+        "url": "https://downloads.cursor.com/grokbot/stable/a5927fa2ba82336a29f9343babd28b4c903abbb2/linux/x64/grok-bot_1.2.3_amd64.deb"
       },
       "original": {
         "type": "file",
-        "url": "https://downloads.cursor.com/grokbot/stable/cf0aa5097b8fdfea8f2ecd33ce9f71a72655ef08/linux/x64/grok-bot_1.2.0_amd64.deb"
+        "url": "https://downloads.cursor.com/grokbot/stable/a5927fa2ba82336a29f9343babd28b4c903abbb2/linux/x64/grok-bot_1.2.3_amd64.deb"
       }
     },
     "hermes-agent": {
       "inputs": {
-        "flake-parts": "flake-parts_2",
+        "flake-parts": "flake-parts_3",
         "home-manager": "home-manager",
         "nixpkgs": "nixpkgs_2",
         "pyproject-build-systems": "pyproject-build-systems",
@@ -195,11 +218,11 @@
         "uv2nix": "uv2nix"
       },
       "locked": {
-        "lastModified": 1794840355,
-        "narHash": "sha256-w1fQXPh8frMHUgHntJ/g6TdjTHr54rf/xG4McTRUQbU=",
+        "lastModified": 1795314864,
+        "narHash": "sha256-qYQ1eAg0Sjn0sp8DRkCwc5jPtPObdCzNiMbycriJB+Q=",
         "owner": "NousResearch",
         "repo": "hermes-agent",
-        "rev": "36706d42ac486fb484b992b6999e8aedddbfbc94",
+        "rev": "88a1c1f4b19d1bc2b9fe8db870dee9ba0803fad5",
         "type": "github"
       },
       "original": {
@@ -236,16 +259,31 @@
         ]
       },
       "locked": {
-        "lastModified": 1794278858,
-        "narHash": "sha256-rkrJwLgLSHBnXfgoSKIDa+2LLGdTqynsV3GAxOTGhUU=",
+        "lastModified": 1795323022,
+        "narHash": "sha256-8hFMqC+HEa5xVL0f6CV0yAn4WHc29pnturZaPhLY1bs=",
         "owner": "nix-community",
         "repo": "home-manager",
-        "rev": "82ce401aa350502897c3f2e85f384d61cd3b0b6d",
+        "rev": "a76d555f12c54e97364a676f83e703199c8fbe5b",
         "type": "github"
       },
       "original": {
         "owner": "nix-community",
         "repo": "home-manager",
+        "type": "github"
+      }
+    },
+    "import-tree": {
+      "locked": {
+        "lastModified": 1788467110,
+        "narHash": "sha256-ljEMTXP/rH0tOvDzc9gzwww6KcHRPRnEHzd9lK48V7s=",
+        "owner": "vic",
+        "repo": "import-tree",
+        "rev": "eb1b52eaecc57f7c136d07ae8a93e724dfecac46",
+        "type": "github"
+      },
+      "original": {
+        "owner": "vic",
+        "repo": "import-tree",
         "type": "github"
       }
     },
@@ -267,11 +305,11 @@
     },
     "nixpkgs-cursor": {
       "locked": {
-        "lastModified": 1793726008,
-        "narHash": "sha256-jQp1wKvbwWdLBASTXkSi/VYmDJ5AbBi1WvcMt9HWJC8=",
+        "lastModified": 1795234589,
+        "narHash": "sha256-f/VVvxf5RsQgWVhUtefoca5ktVg0DA2bnkMOcmSnozo=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "1d060086d60cb76a40cf37109f979d88a5bd6396",
+        "rev": "2786a2a72088ecf32aea5b3ec52099e6a7cff78f",
         "type": "github"
       },
       "original": {
@@ -314,11 +352,11 @@
     },
     "nixpkgs_3": {
       "locked": {
-        "lastModified": 1794386569,
-        "narHash": "sha256-x9sADJvoVG0L6RejZB+/BB4YiGZFBZrfTlhF4uBq1tQ=",
+        "lastModified": 1795234589,
+        "narHash": "sha256-f/VVvxf5RsQgWVhUtefoca5ktVg0DA2bnkMOcmSnozo=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+        "rev": "2786a2a72088ecf32aea5b3ec52099e6a7cff78f",
         "type": "github"
       },
       "original": {
@@ -401,11 +439,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1791707771,
-        "narHash": "sha256-w3m8HtAVCfGTHw+gcCTAy7jFHSdGbokm8NngbeFrkek=",
+        "lastModified": 1794646145,
+        "narHash": "sha256-rpqDyUM/d5fACYB8W+wKxxO57ICWjjalzb2X25oFFkY=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "c1cfa7a2c809d364ac1a7e9b3ec418afa3f19793",
+        "rev": "5b87ee0513c29127a01ad06e9cb362ea5ce91e78",
         "type": "github"
       },
       "original": {

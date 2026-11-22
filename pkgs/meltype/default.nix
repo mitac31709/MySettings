@@ -21,7 +21,7 @@
 
 stdenv.mkDerivation (finalAttrs: {
   pname = "meltype";
-  version = "1.5.1";
+  version = "1.7.1";
 
   # Rebuild the small fcitx5 addon so MELTYPE_DIR points into the Nix store.
   # NativeAOT core + Mozc helper come from the official Linux release zip.
@@ -29,12 +29,12 @@ stdenv.mkDerivation (finalAttrs: {
     owner = "yksr-melt";
     repo = "Meltype";
     rev = "v${finalAttrs.version}";
-    hash = "sha256-xdSetKTHbJAZ3Z2JM2ELPHl1ULb+C0AJ0+hjYOjy9u0=";
+    hash = "sha256-e0mZw46PVMLBzqYVny0MnTJySWoyzUZE7fADjR67lsM=";
   };
 
   binaryZip = fetchurl {
     url = "https://github.com/yksr-melt/Meltype/releases/download/v${finalAttrs.version}/Meltype-${finalAttrs.version}-linux.zip";
-    hash = "sha256-FgGwenucotyhxFY8Gx/3pz2EFmCklE0WGJxCFeAxUIU=";
+    hash = "sha256-VzNEFMH1utm0GLkDURbXwglMDbq3oBhnsIMzouyU67g=";
   };
 
   patches = [

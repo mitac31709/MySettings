@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "boot-menu-responsive" ];
+  system.nixos.tags = [ "pkg-updates-nov22" ];
 }
