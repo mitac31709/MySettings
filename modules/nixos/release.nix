@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "new-bath-chime-sounds" ];
+  system.nixos.tags = [ "genshin-startup-sound" ];
 }

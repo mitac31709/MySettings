@@ -27,3 +27,7 @@
 - `bath-takara-a/b/c.ogg` — タカラスタンダード メロディー A／B／C
 - `bath-daikin.ogg` — ダイキン
 - `bath-chofu.ogg` — 長府
+
+## ゲーム起動音
+
+- `genshin-impact-startup.ogg` — 原神のロゴが出る起動ジングル（[Genshin Impact 2.5 HoYoverse Startup](https://youtu.be/It5JUWLYm9s) から抽出）
