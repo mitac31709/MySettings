@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "genshin-startup-sound" ];
+  system.nixos.tags = [ "genshin-main-theme-sound" ];
 }

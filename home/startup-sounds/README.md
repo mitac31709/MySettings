@@ -30,4 +30,4 @@
 
 ## ゲーム起動音
 
-- `genshin-impact-startup.ogg` — 原神のロゴが出る起動ジングル（[Genshin Impact 2.5 HoYoverse Startup](https://youtu.be/It5JUWLYm9s) から抽出）
+- `genshin-impact-main-theme.ogg` — 原神「Genshin Impact Main Theme」（ログイン画面のメインテーマ）。[Internet Archive の OST コレクション](https://archive.org/details/genshin-impact-music-collection) の音源から、静かな導入のあとにメロディーが入る約30秒を切り出して音量を揃えたもの
