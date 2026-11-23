@@ -14,18 +14,15 @@
 
 ## お風呂が沸きましたチャイム
 
-`bath-*.ogg` は [お風呂のメロディー集【新新版】](https://youtu.be/alRIEBuUcKk)（AotonTV）から各メーカーのチャイム部分を切り出し、音量を揃えたものです。動画の表示順に 1 回分ずつ抽出しています。
+`bath-*.ogg` は [お風呂のメロディー集【新新版】](https://youtu.be/alRIEBuUcKk)（AotonTV）から各メーカーのチャイム部分を切り出し、音量を揃えたものです。動画の表示順に 1 回分ずつ抽出し、旧／古（旧型）のメロディーは含めていません。
 
-- `bath-noritz-old/new.ogg` — ノーリツ「人形の夢と目覚め」（旧／新）
-- `bath-rinnai-canon-old/new.ogg` — リンナイ「カノン」（古／新）
-- `bath-paloma-old/new.ogg` — パロマ（古／新）
+- `bath-noritz-new.ogg` — ノーリツ「人形の夢と目覚め」（新）
+- `bath-rinnai-canon-new.ogg` — リンナイ「カノン」（新）
+- `bath-paloma-new.ogg` — パロマ（新）
 - `bath-purpose.ogg` — パーパス
-- `bath-national-old.ogg` — ナショナル（旧）
-- `bath-panasonic-old/new.ogg` — パナソニック（古／新）
-- `bath-mitsubishi-old.ogg` — 三菱（旧）
+- `bath-panasonic-new.ogg` — パナソニック（新）
 - `bath-corona.ogg` / `bath-corona-voice.ogg` — コロナ（ふろauto／音声案内）
 - `bath-hitachi.ogg` — 日立（音声案内）
-- `bath-morita.ogg` — モリタ（旧型）
 - `bath-toto.ogg` — トートー
 - `bath-takara-a/b/c.ogg` — タカラスタンダード メロディー A／B／C
 - `bath-daikin.ogg` — ダイキン
