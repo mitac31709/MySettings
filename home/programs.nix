@@ -574,12 +574,26 @@ in
       claude-code
       # Computer use CLI for AI agents (`agent-desktop`; pkgs/agent-desktop).
       agentDesktop
-      # T3 Code: desktop + `t3` CLI; PATH wraps already-installed agents.
-      (t3code.override {
-        enableClaude = true;
-        enableCursor = true;
-        enableCursorCli = true;
-        enableOpencode = true;
+      # T3 Code: desktop + `t3` CLI; PATH wraps already-installed agents (including raw `antigravity` CLI).
+      (symlinkJoin {
+        name = "t3code-${t3code.version}";
+        paths = [
+          (t3code.override {
+            enableClaude = true;
+            enableCursor = true;
+            enableCursorCli = true;
+            enableOpencode = true;
+          })
+        ];
+        nativeBuildInputs = [ makeBinaryWrapper ];
+        postBuild = ''
+          for program in "$out/bin"/*; do
+            if [ -e "$program" ]; then
+              wrapProgram "$program" --prefix PATH : ${lib.makeBinPath [ antigravity ]}
+            fi
+          done
+        '';
+        inherit (t3code) meta;
       })
       # Google Antigravity CLI (`agy` / `antigravity`; pkgs/antigravity) is installed
       # via home/antigravity-translate.nix (wrapping `agy` with PLaMo 2-pane watch).

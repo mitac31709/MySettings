@@ -14,6 +14,7 @@
     ./meltype.nix
     ./clipboard.nix
     ./cursor.nix
+    ./t3code.nix
     ./lan-mouse.nix
     ./rquickshare.nix
     ./taildrop.nix
