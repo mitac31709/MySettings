@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "remove-antigravity-translate" ];
+  system.nixos.tags = [ "colorshell-pywal-no-term-seq" ];
 }

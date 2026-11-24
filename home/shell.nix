@@ -83,11 +83,11 @@ in
         fi
         sudo nixos-rebuild switch "''${rebuildArgs[@]}" |& "$nom"
         local rc="''${PIPESTATUS[0]}"
-        # nom のツリー表示 (⏸ = 青) が SGR / 動的色の上書きを残したまま終了すると、
-        # 以降のプロンプトと出力が低コントラストの青になる。ウィンドウを作り直さずに
-        # 端末属性を Ghostty の設定色へ戻す (OSC 110/111/112 = fg/bg/cursor を既定へ)。
+        # 終了後に SGR と端末のパレット・動的色上書きを既定へ戻す (OSC 104 = palette,
+        # OSC 110/111/112 = fg/bg/cursor)。根本原因 (colorshell の pywal16 が /dev/pts/* へ
+        # OSC 4/10/11 を流し込む問題) は pkgs/colorshell/default.nix の `wal -s` で抑止済み。
         if [ -t 1 ]; then
-          printf '\033[0m\033]110\033\\\033]111\033\\\033]112\033\\'
+          printf '\033[0m\033]104\033\\\033]110\033\\\033]111\033\\\033]112\033\\'
         fi
         return "$rc"
       }

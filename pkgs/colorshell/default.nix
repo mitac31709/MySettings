@@ -44,6 +44,15 @@ baseColorshell.overrideAttrs (old: {
     cp ${./src/window/control-center/widgets/pages/KeepAwake.tsx} src/window/control-center/widgets/pages/KeepAwake.tsx
     cp ${./src/window/control-center/widgets/pages/Services.tsx} src/window/control-center/widgets/pages/Services.tsx
 
+    # Prevent pywal16 from broadcasting OSC 4/10/11 sequences to open PTYs (/dev/pts/*),
+    # which overwrote Ghostty's Nocturne Slate palette with low-contrast dark blue whenever
+    # colorshell restarted (e.g. during `rebuild`) or switched wallpapers. Also skip wal's
+    # redundant wallpaper setter (-n; hyprpaper manages it) and unrelated app reloads (-e).
+    substituteInPlace src/modules/color/engine/pywal16.ts \
+      --replace-fail \
+        '}" -t --cols16 ' \
+        '}" -s -t -n -e --cols16 '
+
     substituteInPlace src/window/bar/index.tsx \
       --replace-fail \
         'import { Tray } from "./widgets/Tray";' \
