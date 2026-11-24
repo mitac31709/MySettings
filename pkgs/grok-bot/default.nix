@@ -128,7 +128,7 @@ stdenv.mkDerivation {
 
     makeWrapper $out/lib/grok-bot/grok-bot $out/bin/grok-bot \
       --prefix LD_LIBRARY_PATH : "$out/lib/grok-bot" \
-      --add-flags "\''${NIXOS_OZONE_WL:+\''${WAYLAND_DISPLAY:+--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true}}"
+      --add-flags "\''${NIXOS_OZONE_WL:+\''${WAYLAND_DISPLAY:+--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true --wayland-text-input-version=3}}"
 
     substituteInPlace $out/share/applications/grok-bot.desktop \
       --replace-fail 'Exec=grok-bot -- %U' 'Exec=grok-bot %U'
