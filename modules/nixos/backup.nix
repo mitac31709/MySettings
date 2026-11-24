@@ -39,6 +39,184 @@ let
     "--keep-monthly 12"
   ];
 
+  # Shared between restic (`services.restic.backups.home.exclude`) and `backup audit`.
+  backupExcludes = [
+    "/home/${user}/.cache"
+    "/home/${user}/.local/share/Trash"
+    "/home/${user}/.config/mozilla/firefox/*/storage"
+    "/home/${user}/.mozilla/firefox/*/storage"
+    "/home/${user}/**/node_modules"
+    "/home/${user}/**/.direnv"
+    "/home/${user}/**/target"
+    "/home/${user}/.local/state/nvim/swap"
+
+    # Steam: game installs + client/runtime (re-downloadable). Keep config
+    # (minus htmlcache), userdata, and Proton compatdata.
+    # Also exclude steam.sh (and bootstrap.tar.xz): bin_steam.sh treats
+    # executable steam.sh as "already bootstrapped" and skips extracting
+    # ubuntu12_32, causing startup to fail if ubuntu12_32 is excluded.
+    "/home/${user}/.local/share/Steam/steam.sh"
+    "/home/${user}/.local/share/Steam/bootstrap.tar.xz"
+    "/home/${user}/.local/share/Steam/steamapps/common"
+    "/home/${user}/.local/share/Steam/steamapps/downloading"
+    "/home/${user}/.local/share/Steam/steamapps/temp"
+    "/home/${user}/.local/share/Steam/steamapps/shadercache"
+    "/home/${user}/.local/share/Steam/steamapps/workshop"
+    "/home/${user}/.local/share/Steam/depotcache"
+    "/home/${user}/.local/share/Steam/steamrt64"
+    "/home/${user}/.local/share/Steam/steamrt32"
+    "/home/${user}/.local/share/Steam/ubuntu12_32"
+    "/home/${user}/.local/share/Steam/ubuntu12_64"
+    "/home/${user}/.local/share/Steam/package"
+    "/home/${user}/.local/share/Steam/steamui"
+    "/home/${user}/.local/share/Steam/appcache"
+    "/home/${user}/.local/share/Steam/linux32"
+    "/home/${user}/.local/share/Steam/linux64"
+    "/home/${user}/.local/share/Steam/legacycompat"
+    "/home/${user}/.local/share/Steam/clientui"
+    "/home/${user}/.local/share/Steam/bin"
+    "/home/${user}/.local/share/Steam/graphics"
+    "/home/${user}/.local/share/Steam/config/htmlcache"
+
+    # Cursor: agent worker binaries + editor caches/logs.
+    "/home/${user}/.config/Cursor/User/globalStorage/anysphere.cursor-agent-worker"
+    "/home/${user}/.config/Cursor/CachedData"
+    "/home/${user}/.config/Cursor/CachedExtensionVSIXs"
+    "/home/${user}/.config/Cursor/CachedProfilesData"
+    "/home/${user}/.config/Cursor/Cache"
+    "/home/${user}/.config/Cursor/Code Cache"
+    "/home/${user}/.config/Cursor/GPUCache"
+    "/home/${user}/.config/Cursor/DawnWebGPUCache"
+    "/home/${user}/.config/Cursor/DawnGraphiteCache"
+    "/home/${user}/.config/Cursor/IndexedDB"
+    "/home/${user}/.config/Cursor/logs"
+
+    # Codex / ChatGPT Desktop: Chromium component/DRM/GPU/service caches.
+    "/home/${user}/.config/Codex/CertificateRevocation"
+    "/home/${user}/.config/Codex/Crash Reports"
+    "/home/${user}/.config/Codex/GPUPersistentCache"
+    "/home/${user}/.config/Codex/OnDeviceHeadSuggestModel"
+    "/home/${user}/.config/Codex/WasmTtsEngine"
+    "/home/${user}/.config/Codex/WidevineCdm"
+    "/home/${user}/.config/Codex/component_crx_cache"
+    "/home/${user}/.config/Codex/Default/Cache"
+    "/home/${user}/.config/Codex/Default/Code Cache"
+    "/home/${user}/.config/Codex/Default/GPUCache"
+    "/home/${user}/.config/Codex/Default/Service Worker"
+    "/home/${user}/.config/Codex/Default/DawnGraphiteCache"
+    "/home/${user}/.config/Codex/Default/DawnWebGPUCache"
+
+    # Grok Bot: Electron/Chromium runtime caches.
+    "/home/${user}/.config/Grok Bot/Cache"
+    "/home/${user}/.config/Grok Bot/Code Cache"
+    "/home/${user}/.config/Grok Bot/v8-code-cache"
+    "/home/${user}/.config/Grok Bot/GPUCache"
+    "/home/${user}/.config/Grok Bot/DawnGraphiteCache"
+    "/home/${user}/.config/Grok Bot/DawnWebGPUCache"
+    "/home/${user}/.config/Grok Bot/Crashpad"
+    "/home/${user}/.config/Grok Bot/attachment-image-cache"
+    "/home/${user}/.config/Grok Bot/link-preview-cache"
+    "/home/${user}/.config/Grok Bot/plugin-logo-cache"
+    "/home/${user}/.config/Grok Bot/link-favicon-cache"
+
+    # Discord: Electron/Chromium runtime caches & logs.
+    "/home/${user}/.config/discord/Cache"
+    "/home/${user}/.config/discord/Code Cache"
+    "/home/${user}/.config/discord/GPUCache"
+    "/home/${user}/.config/discord/DawnGraphiteCache"
+    "/home/${user}/.config/discord/DawnWebGPUCache"
+    "/home/${user}/.config/discord/Crashpad"
+    "/home/${user}/.config/discord/logs"
+    "/home/${user}/.config/discord/discord_asset_cache"
+
+    # OrcaSlicer: regenerable caches/logs/OTA (keep OrcaSlicer.conf, user/, printers/).
+    "/home/${user}/.config/OrcaSlicer/cache"
+    "/home/${user}/.config/OrcaSlicer/log"
+    "/home/${user}/.config/OrcaSlicer/ota"
+
+    # Development toolchains / package caches (re-downloadable).
+    "/home/${user}/.platformio/packages"
+    "/home/${user}/.platformio/penv"
+    "/home/${user}/.platformio/.cache"
+    "/home/${user}/.arduino15/packages"
+    "/home/${user}/.arduino15/tmp"
+    "/home/${user}/.arduino15/library_index.json*"
+    "/home/${user}/.arduino15/package_index.json*"
+    "/home/${user}/.npm"
+    "/home/${user}/.local/share/pnpm/store"
+
+    # Auto-downloaded binaries / old upgrade backups (apps are packaged in Nix).
+    "/home/${user}/.local/share/cursor-agent/versions"
+    "/home/${user}/.local/share/app.uniclipboard.desktop-upgrade-backups"
+
+    # Vivaldi: regenerable caches, DRM/components, site WebStorage.
+    # Keep Default/Extensions — Preferences still lists installs, and excluding
+    # the tree leaves every extension broken after restore (CRX cache alone is incomplete).
+    "/home/${user}/.config/vivaldi/Default/Service Worker"
+    "/home/${user}/.config/vivaldi/Default/GPUCache"
+    "/home/${user}/.config/vivaldi/Default/Code Cache"
+    "/home/${user}/.config/vivaldi/Default/Cache"
+    "/home/${user}/.config/vivaldi/Default/WebStorage"
+    "/home/${user}/.config/vivaldi/component_crx_cache"
+    "/home/${user}/.config/vivaldi/WasmTtsEngine"
+    "/home/${user}/.config/vivaldi/WidevineCdm"
+    "/home/${user}/.config/vivaldi/Safe Browsing"
+    "/home/${user}/.config/vivaldi/GPUPersistentCache"
+    "/home/${user}/.config/vivaldi/GraphiteDawnCache"
+
+    "/home/${user}/.bash_history"
+    "/home/${user}/.bash_profile"
+    "/home/${user}/.bashrc"
+    "/home/${user}/.nix-defexpr"
+    "/home/${user}/.nix-profile"
+
+    # Secrets managed declaratively by agenix (plus leftover plaintext copies / .backup files).
+    "/home/${user}/.ssh/id_ed25519"
+    "/home/${user}/.ssh/id_wsl_builder"
+    "/home/${user}/.ssh/id_wsl_builder.pub"
+    "/home/${user}/.ssh/*.backup"
+    "/home/${user}/.android/adbkey"
+    "/home/${user}/.android/adbkey.pub"
+    "/home/${user}/.android/adbkey*.backup"
+    "/home/${user}/.config/gh/hosts.yml"
+    "/home/${user}/.config/gh/hosts.yml.backup"
+    "/home/${user}/.config/opencode/service.json"
+    "/home/${user}/.config/opencode/service.json.backup"
+    "/home/${user}/.config/rclone/rclone.conf"
+    "/home/${user}/.config/lan-mouse/lan-mouse.pem"
+    "/home/${user}/.config/lan-mouse/lan-mouse.pem.backup"
+    "/home/${user}/.config/wol-pc/config.env"
+    "/home/${user}/Projects/wol-pc/config.env"
+
+    # Gradle build/dependency caches (re-downloadable).
+    "/home/${user}/.gradle/caches"
+    "/home/${user}/.gradle/.tmp"
+    "/home/${user}/.gradle/daemon"
+
+    # T3 Code: downloaded agent/browser runtimes, logs, temp dirs, Electron caches
+    # (keep ~/.t3/userdata/statev2.sqlite, providers, attachments, and ~/.config/t3code-v2 settings).
+    "/home/${user}/.t3/tools"
+    "/home/${user}/.t3/userdata/logs"
+    "/home/${user}/.t3/userdata/antigravity-tmp"
+    "/home/${user}/.config/t3code-v2/Cache"
+    "/home/${user}/.config/t3code-v2/Code Cache"
+    "/home/${user}/.config/t3code-v2/GPUCache"
+    "/home/${user}/.config/t3code-v2/GPUPersistentCache"
+    "/home/${user}/.config/t3code-v2/DawnGraphiteCache"
+    "/home/${user}/.config/t3code-v2/DawnWebGPUCache"
+    "/home/${user}/.config/t3code-v2/Crashpad"
+
+    # Bottles: downloaded Wine/Proton runners and temp downloads (keep bottles/ prefixes).
+    "/home/${user}/.local/share/bottles/runners"
+    "/home/${user}/.local/share/bottles/temp"
+
+    # Auto-downloaded CLI tool runtimes and plugin caches (apps are packaged in Nix).
+    "/home/${user}/.opencode/bin"
+    "/home/${user}/.local/share/dsh/node22"
+    "/home/${user}/.cursor/plugins/cache"
+    "/home/${user}/.config/Cursor/agent-harness/versions"
+  ];
+
   # Declarative secrets managed solely by agenix under /run/agenix.
   agenixResticPassword =
     config.age.secrets."restic-home-password".path or "/run/agenix/restic-home-password";
@@ -736,154 +914,7 @@ in
     # caches/extensions, Firefox storage) and HM/Nix links.
     # Login password (/etc/shadow) is intentionally not staged.
     # ~/MySettings (flake checkout, including .git / uncommitted work) is kept.
-    exclude = [
-      "/home/${user}/.cache"
-      "/home/${user}/.local/share/Trash"
-      "/home/${user}/.config/mozilla/firefox/*/storage"
-      "/home/${user}/.mozilla/firefox/*/storage"
-      "/home/${user}/**/node_modules"
-      "/home/${user}/**/.direnv"
-      "/home/${user}/**/target"
-      "/home/${user}/.local/state/nvim/swap"
-
-      # Steam: game installs + client/runtime (re-downloadable). Keep config
-      # (minus htmlcache), userdata, and Proton compatdata.
-      # Also exclude steam.sh (and bootstrap.tar.xz): bin_steam.sh treats
-      # executable steam.sh as "already bootstrapped" and skips extracting
-      # ubuntu12_32, causing startup to fail if ubuntu12_32 is excluded.
-      "/home/${user}/.local/share/Steam/steam.sh"
-      "/home/${user}/.local/share/Steam/bootstrap.tar.xz"
-      "/home/${user}/.local/share/Steam/steamapps/common"
-      "/home/${user}/.local/share/Steam/steamapps/downloading"
-      "/home/${user}/.local/share/Steam/steamapps/temp"
-      "/home/${user}/.local/share/Steam/steamapps/shadercache"
-      "/home/${user}/.local/share/Steam/steamapps/workshop"
-      "/home/${user}/.local/share/Steam/depotcache"
-      "/home/${user}/.local/share/Steam/steamrt64"
-      "/home/${user}/.local/share/Steam/steamrt32"
-      "/home/${user}/.local/share/Steam/ubuntu12_32"
-      "/home/${user}/.local/share/Steam/ubuntu12_64"
-      "/home/${user}/.local/share/Steam/package"
-      "/home/${user}/.local/share/Steam/steamui"
-      "/home/${user}/.local/share/Steam/appcache"
-      "/home/${user}/.local/share/Steam/linux32"
-      "/home/${user}/.local/share/Steam/linux64"
-      "/home/${user}/.local/share/Steam/legacycompat"
-      "/home/${user}/.local/share/Steam/clientui"
-      "/home/${user}/.local/share/Steam/bin"
-      "/home/${user}/.local/share/Steam/graphics"
-      "/home/${user}/.local/share/Steam/config/htmlcache"
-
-      # Cursor: agent worker binaries + editor caches/logs.
-      "/home/${user}/.config/Cursor/User/globalStorage/anysphere.cursor-agent-worker"
-      "/home/${user}/.config/Cursor/CachedData"
-      "/home/${user}/.config/Cursor/CachedExtensionVSIXs"
-      "/home/${user}/.config/Cursor/CachedProfilesData"
-      "/home/${user}/.config/Cursor/Cache"
-      "/home/${user}/.config/Cursor/Code Cache"
-      "/home/${user}/.config/Cursor/GPUCache"
-      "/home/${user}/.config/Cursor/DawnWebGPUCache"
-      "/home/${user}/.config/Cursor/DawnGraphiteCache"
-      "/home/${user}/.config/Cursor/IndexedDB"
-      "/home/${user}/.config/Cursor/logs"
-
-      # Codex / ChatGPT Desktop: Chromium component/DRM/GPU/service caches.
-      "/home/${user}/.config/Codex/CertificateRevocation"
-      "/home/${user}/.config/Codex/Crash Reports"
-      "/home/${user}/.config/Codex/GPUPersistentCache"
-      "/home/${user}/.config/Codex/OnDeviceHeadSuggestModel"
-      "/home/${user}/.config/Codex/WasmTtsEngine"
-      "/home/${user}/.config/Codex/WidevineCdm"
-      "/home/${user}/.config/Codex/component_crx_cache"
-      "/home/${user}/.config/Codex/Default/Cache"
-      "/home/${user}/.config/Codex/Default/Code Cache"
-      "/home/${user}/.config/Codex/Default/GPUCache"
-      "/home/${user}/.config/Codex/Default/Service Worker"
-      "/home/${user}/.config/Codex/Default/DawnGraphiteCache"
-      "/home/${user}/.config/Codex/Default/DawnWebGPUCache"
-
-      # Grok Bot: Electron/Chromium runtime caches.
-      "/home/${user}/.config/Grok Bot/Cache"
-      "/home/${user}/.config/Grok Bot/Code Cache"
-      "/home/${user}/.config/Grok Bot/v8-code-cache"
-      "/home/${user}/.config/Grok Bot/GPUCache"
-      "/home/${user}/.config/Grok Bot/DawnGraphiteCache"
-      "/home/${user}/.config/Grok Bot/DawnWebGPUCache"
-      "/home/${user}/.config/Grok Bot/Crashpad"
-      "/home/${user}/.config/Grok Bot/attachment-image-cache"
-      "/home/${user}/.config/Grok Bot/link-preview-cache"
-      "/home/${user}/.config/Grok Bot/plugin-logo-cache"
-      "/home/${user}/.config/Grok Bot/link-favicon-cache"
-
-      # Discord: Electron/Chromium runtime caches & logs.
-      "/home/${user}/.config/discord/Cache"
-      "/home/${user}/.config/discord/Code Cache"
-      "/home/${user}/.config/discord/GPUCache"
-      "/home/${user}/.config/discord/DawnGraphiteCache"
-      "/home/${user}/.config/discord/DawnWebGPUCache"
-      "/home/${user}/.config/discord/Crashpad"
-      "/home/${user}/.config/discord/logs"
-      "/home/${user}/.config/discord/discord_asset_cache"
-
-      # OrcaSlicer: regenerable caches/logs/OTA (keep OrcaSlicer.conf, user/, printers/).
-      "/home/${user}/.config/OrcaSlicer/cache"
-      "/home/${user}/.config/OrcaSlicer/log"
-      "/home/${user}/.config/OrcaSlicer/ota"
-
-      # Development toolchains / package caches (re-downloadable).
-      "/home/${user}/.platformio/packages"
-      "/home/${user}/.platformio/penv"
-      "/home/${user}/.platformio/.cache"
-      "/home/${user}/.arduino15/packages"
-      "/home/${user}/.arduino15/tmp"
-      "/home/${user}/.arduino15/library_index.json*"
-      "/home/${user}/.arduino15/package_index.json*"
-      "/home/${user}/.npm"
-      "/home/${user}/.local/share/pnpm/store"
-
-      # Auto-downloaded binaries / old upgrade backups (apps are packaged in Nix).
-      "/home/${user}/.local/share/cursor-agent/versions"
-      "/home/${user}/.local/share/app.uniclipboard.desktop-upgrade-backups"
-
-      # Vivaldi: regenerable caches, DRM/components, site WebStorage.
-      # Keep Default/Extensions — Preferences still lists installs, and excluding
-      # the tree leaves every extension broken after restore (CRX cache alone is incomplete).
-      "/home/${user}/.config/vivaldi/Default/Service Worker"
-      "/home/${user}/.config/vivaldi/Default/GPUCache"
-      "/home/${user}/.config/vivaldi/Default/Code Cache"
-      "/home/${user}/.config/vivaldi/Default/Cache"
-      "/home/${user}/.config/vivaldi/Default/WebStorage"
-      "/home/${user}/.config/vivaldi/component_crx_cache"
-      "/home/${user}/.config/vivaldi/WasmTtsEngine"
-      "/home/${user}/.config/vivaldi/WidevineCdm"
-      "/home/${user}/.config/vivaldi/Safe Browsing"
-      "/home/${user}/.config/vivaldi/GPUPersistentCache"
-      "/home/${user}/.config/vivaldi/GraphiteDawnCache"
-
-      "/home/${user}/.bash_history"
-      "/home/${user}/.bash_profile"
-      "/home/${user}/.bashrc"
-      "/home/${user}/.nix-defexpr"
-      "/home/${user}/.nix-profile"
-
-      # Secrets managed declaratively by agenix (plus leftover plaintext copies / .backup files).
-      "/home/${user}/.ssh/id_ed25519"
-      "/home/${user}/.ssh/id_wsl_builder"
-      "/home/${user}/.ssh/id_wsl_builder.pub"
-      "/home/${user}/.ssh/*.backup"
-      "/home/${user}/.android/adbkey"
-      "/home/${user}/.android/adbkey.pub"
-      "/home/${user}/.android/adbkey*.backup"
-      "/home/${user}/.config/gh/hosts.yml"
-      "/home/${user}/.config/gh/hosts.yml.backup"
-      "/home/${user}/.config/opencode/service.json"
-      "/home/${user}/.config/opencode/service.json.backup"
-      "/home/${user}/.config/rclone/rclone.conf"
-      "/home/${user}/.config/lan-mouse/lan-mouse.pem"
-      "/home/${user}/.config/lan-mouse/lan-mouse.pem.backup"
-      "/home/${user}/.config/wol-pc/config.env"
-      "/home/${user}/Projects/wol-pc/config.env"
-    ];
+    exclude = backupExcludes;
 
     # Decrypt restic passphrase and rclone OAuth config solely via agenix.
     passwordFile = agenixResticPassword;
