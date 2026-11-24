@@ -93,6 +93,11 @@ baseColorshell.overrideAttrs (old: {
         '      bottomButtons={[{' \
         $'      bottomButtons={[{\n          label: "nmtui を端末で開く",\n          actionClicked: () => {\n              Windows.getDefault().close("control-center");\n              openNmtui();\n          }\n      }, {'
 
+    substituteInPlace src/compositor/interface/hyprland/compositor.ts \
+      --replace-fail \
+        'this.hyprctl(`dispatch hl.dsp.exec_cmd("''${cmd}")`);' \
+        'this.hyprctl(`dispatch hl.dsp.exec_cmd(''${JSON.stringify(cmd)})`);'
+
     printf '\n' >> data/css/main.css
     cat ${./css/main-extra.css} >> data/css/main.css
 
