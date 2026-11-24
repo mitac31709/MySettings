@@ -618,6 +618,8 @@ in
       sshpass
       rofi-prompt
       tmux
+      ripgrep
+      fd
       trayscale
       vivaldi
       firefox
