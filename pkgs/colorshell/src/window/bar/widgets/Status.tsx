@@ -192,9 +192,6 @@ function StatusIcons() {
             />
 
             <Gtk.Box
-                visible={createBinding(AstalNetwork.get_default(), "primary").as(
-                    (primary) => primary !== AstalNetwork.Primary.UNKNOWN,
-                )}
                 tooltipText="ネットワーク（左クリック: コントロールセンター / 右クリック: nmtui）"
                 $={(self) => {
                     const rightClick = Gtk.GestureClick.new();
@@ -210,17 +207,14 @@ function StatusIcons() {
             >
                 <With value={createBinding(AstalNetwork.get_default(), "primary")}>
                     {(primary: AstalNetwork.Primary) => {
-                        let device: AstalNetwork.Wifi | AstalNetwork.Wired;
-                        switch (primary) {
-                            case AstalNetwork.Primary.WIRED:
-                                device = AstalNetwork.get_default().wired!;
-                                break;
-                            case AstalNetwork.Primary.WIFI:
-                                device = AstalNetwork.get_default().wifi!;
-                                break;
-
-                            default:
-                                return <Gtk.Image iconName={"network-no-route-symbolic"} />;
+                        const net = AstalNetwork.get_default();
+                        const device = primary === AstalNetwork.Primary.WIRED
+                            ? net.wired
+                            : primary === AstalNetwork.Primary.WIFI
+                                ? net.wifi
+                                : null;
+                        if (!device) {
+                            return <Gtk.Image iconName={"network-no-route-symbolic"} />;
                         }
 
                         return <Gtk.Image iconName={createBinding(device, "iconName")} />;
