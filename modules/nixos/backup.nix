@@ -217,6 +217,23 @@ let
     "/home/${user}/.config/Cursor/agent-harness/versions"
   ];
 
+  # GNU du treats `**` as single-segment glob; expand `/**/` so top-level matches also exclude.
+  backupAuditExcludes = pkgs.writeText "restic-home-du-excludes" (
+    lib.concatStringsSep "\n" (
+      lib.concatMap (
+        p:
+        if lib.hasInfix "/**/" p then
+          [
+            (builtins.replaceStrings [ "/**/" ] [ "/" ] p)
+            p
+          ]
+        else
+          [ p ]
+      ) backupExcludes
+    )
+    + "\n"
+  );
+
   # Declarative secrets managed solely by agenix under /run/agenix.
   agenixResticPassword =
     config.age.secrets."restic-home-password".path or "/run/agenix/restic-home-password";
@@ -447,6 +464,7 @@ let
             pkgs.openssh
             pkgs.systemd
             pkgs.coreutils
+            pkgs.gawk
           ]
         }:/run/wrappers/bin:/run/current-system/sw/bin:/etc/profiles/per-user/${user}/bin:$PATH"
 
@@ -499,6 +517,7 @@ let
       backup log                     進捗・ログを journal で追う
       backup status                  状態・容量・直近バックアップを整理して表示
       backup status --full           systemd 詳細と直近ログも表示
+      backup audit [N]               除外ルール適用後の大きいディレクトリ上位 N 件を表示 (既定: 25)
 
     確認・部分復元（agenix 鍵・設定を自動読み込み済み）:
       backup snapshots
@@ -539,6 +558,19 @@ let
               printf '%s を開始しました（sudo 経由）。\n' "$unit"
             fi
             printf 'ログ確認: backup log\n'
+            ;;
+          audit)
+            shift
+            limit="''${1:-25}"
+            case "$limit" in
+              ""|*[!0-9]*|0)
+                printf '使い方: backup audit [N]（N は正の整数、既定 25）\n' >&2
+                exit 2
+                ;;
+            esac
+            printf '=== バックアップ対象サイズ監査 (/home/%s, 上位 %s 件 / 現行 exclude 適用) ===\n' "${user}" "$limit"
+            out="$(du -xh --max-depth=3 --exclude-from=${backupAuditExcludes} "/home/${user}" 2>/dev/null || true)"
+            printf '%s\n' "$out" | sort -hr | awk -v n="$limit" 'NR <= n { print }'
             ;;
           log|logs)
             shift
