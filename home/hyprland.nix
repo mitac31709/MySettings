@@ -2564,14 +2564,14 @@ in
 
       -- Interactive resize submap
       hl.define_submap("resize", "escape", function()
-        hl.bind("right",  hl.dsp.window.resize({ x = 24,  y = 0 }),   { repeating = true })
-        hl.bind("left",   hl.dsp.window.resize({ x = -24, y = 0 }),   { repeating = true })
-        hl.bind("up",     hl.dsp.window.resize({ x = 0,   y = -24 }), { repeating = true })
-        hl.bind("down",   hl.dsp.window.resize({ x = 0,   y = 24 }),  { repeating = true })
-        hl.bind("l",      hl.dsp.window.resize({ x = 24,  y = 0 }),   { repeating = true })
-        hl.bind("h",      hl.dsp.window.resize({ x = -24, y = 0 }),   { repeating = true })
-        hl.bind("k",      hl.dsp.window.resize({ x = 0,   y = -24 }), { repeating = true })
-        hl.bind("j",      hl.dsp.window.resize({ x = 0,   y = 24 }),  { repeating = true })
+        hl.bind("right",  hl.dsp.window.resize({ x = 24,  y = 0,   relative = true }), { repeating = true })
+        hl.bind("left",   hl.dsp.window.resize({ x = -24, y = 0,   relative = true }), { repeating = true })
+        hl.bind("up",     hl.dsp.window.resize({ x = 0,   y = -24, relative = true }), { repeating = true })
+        hl.bind("down",   hl.dsp.window.resize({ x = 0,   y = 24,  relative = true }), { repeating = true })
+        hl.bind("l",      hl.dsp.window.resize({ x = 24,  y = 0,   relative = true }), { repeating = true })
+        hl.bind("h",      hl.dsp.window.resize({ x = -24, y = 0,   relative = true }), { repeating = true })
+        hl.bind("k",      hl.dsp.window.resize({ x = 0,   y = -24, relative = true }), { repeating = true })
+        hl.bind("j",      hl.dsp.window.resize({ x = 0,   y = 24,  relative = true }), { repeating = true })
         hl.bind("Return", hl.dsp.submap("reset"))
       end)
     '';
