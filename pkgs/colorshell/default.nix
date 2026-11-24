@@ -55,6 +55,14 @@ baseColorshell.overrideAttrs (old: {
         '<Tray />' \
         $'<ResticBackup />\n                    <SystemStats />\n                    <KeepAwake />\n                    <Services />\n                    <JQuake />\n                    <StartupSound />\n                    <Updates />\n                    <Tray />'
 
+    substituteInPlace src/widget/Notification.tsx \
+      --replace-fail \
+        '@register({ GTypeName: "ClshNotification" })' \
+        $'function safeNotificationMarkup(raw: string | null): string {\n    const text = raw ?? "";\n    if (!text) return "";\n    try {\n        Pango.parse_markup(text, -1, String.fromCharCode(0));\n        return text;\n    } catch {\n        return GLib.markup_escape_text(text, -1);\n    }\n}\n\n@register({ GTypeName: "ClshNotification" })' \
+      --replace-fail \
+        'label={createBinding(this, "body").as(s => s ?? "")} useMarkup' \
+        'label={createBinding(this, "body").as(safeNotificationMarkup)} useMarkup'
+
     substituteInPlace src/window/control-center/index.tsx \
       --replace-fail \
         'import { Sliders } from "./widgets/Sliders";' \
