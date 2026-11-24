@@ -515,12 +515,11 @@ class CapsomniaDaemon:
             self.dimmed_device = None
 
     def sync_keep_display_marker(self) -> None:
-        self.rt_dir.mkdir(parents=True, exist_ok=True)
-        # Unified keep-screen-on: always inhibit hypridle dim/lock/DPMS-off while active.
-        # Closed-lid display behavior (min backlight vs DPMS-off) is handled in sync_display_for_lid.
         if self.awake_on:
-            self.keep_display_marker.touch(exist_ok=True)
-        else:
+            if not self.keep_display_marker.exists():
+                self.rt_dir.mkdir(parents=True, exist_ok=True)
+                self.keep_display_marker.touch(exist_ok=True)
+        elif self.keep_display_marker.exists():
             self.keep_display_marker.unlink(missing_ok=True)
 
     def sync_display_for_lid(self, lid_closed: bool | None, now: float | None = None) -> None:
@@ -927,7 +926,14 @@ class CapsomniaDaemon:
             self.sync_display_for_lid(lid_closed, now=now)
 
             eligible_lock = bool(self.awake_on and self.prefs["lock_on_lid_open"])
-            locked_now = is_hyprlock_running() if eligible_lock else None
+            locked_now = (
+                is_hyprlock_running()
+                if self.lid_lock_tracker.needs_lock_check(
+                    eligible=eligible_lock,
+                    clamshell_closed=lid_closed,
+                )
+                else None
+            )
             if self.lid_lock_tracker.update(
                 eligible=eligible_lock,
                 clamshell_closed=lid_closed,
