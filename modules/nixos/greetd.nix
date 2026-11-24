@@ -65,7 +65,9 @@ let
     hl.env("XCURSOR_THEME", ${builtins.toJSON greeterCursorName})
     hl.env("XCURSOR_SIZE", ${builtins.toJSON cursorSizeStr})
     hl.env("HYPRCURSOR_SIZE", ${builtins.toJSON cursorSizeStr})
-    ${lib.optionalString theme.cursor.hyprcursor ''hl.env("HYPRCURSOR_THEME", ${builtins.toJSON theme.cursor.name})''}
+    ${lib.optionalString (
+      theme.cursor.package != null && theme.cursor.hyprcursor
+    ) ''hl.env("HYPRCURSOR_THEME", ${builtins.toJSON theme.cursor.name})''}
 
     hl.monitor({
       output = "",
