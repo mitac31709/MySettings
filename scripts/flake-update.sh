@@ -363,7 +363,16 @@ if [[ -t 0 ]]; then
   case "$answer" in
     [yY]|[yY][eE][sS])
       sudo -v
+      set +e
       sudo nixos-rebuild switch --flake "$root#$host" "${impure_args[@]+"${impure_args[@]}"}" |& nom
+      rc="${PIPESTATUS[0]}"
+      set -e
+      if [[ -t 1 ]]; then
+        printf '\033[0m\033]110\033\\\033]111\033\\\033]112\033\\'
+      fi
+      if [[ "$rc" -ne 0 ]]; then
+        exit "$rc"
+      fi
       ;;
     *)
       echo "rebuild はスキップしました。後で反映するには: rebuild"
