@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "genshin-main-theme-sound" ];
+  system.nixos.tags = [ "afk-2026-11-24" ];
 }
