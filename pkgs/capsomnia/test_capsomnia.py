@@ -246,6 +246,53 @@ class CapsomniaCoreTests(unittest.TestCase):
             daemon.sync_keep_display_marker()
             self.assertFalse(daemon.keep_display_marker.exists())
 
+    def test_dpms_lua_uses_hyprland_table_syntax(self) -> None:
+        from unittest.mock import patch
+        from capsomniad import build_dpms_lua, set_output_dpms
+
+        self.assertEqual(
+            build_dpms_lua("eDP-1", "off"),
+            'hl.dsp.dpms({ action = "off", monitor = "eDP-1" })',
+        )
+        with patch("capsomniad.run_hyprctl", return_value=(True, "dpms: expected at most 1 argument, got 2")):
+            ok, _ = set_output_dpms("eDP-1", "off")
+            self.assertFalse(ok)
+        with patch("capsomniad.run_hyprctl", return_value=(True, "ok")):
+            ok, out = set_output_dpms("eDP-1", "off")
+            self.assertTrue(ok)
+            self.assertEqual(out, "ok")
+
+    def test_sync_display_for_lid_backs_off_after_dpms_failure(self) -> None:
+        from unittest.mock import patch
+        from capsomniad import CapsomniaDaemon
+
+        with tempfile.TemporaryDirectory() as tmp:
+            daemon = CapsomniaDaemon.__new__(CapsomniaDaemon)
+            daemon.rt_dir = Path(tmp)
+            daemon.keep_display_marker = Path(tmp) / "keep-display-awake"
+            daemon.state_dir = Path(tmp) / "state"
+            daemon.brightness_backup_path = daemon.state_dir / "brightness.json"
+            daemon.dimmed_device = None
+            daemon.awake_on = True
+            daemon.did_power_off_builtin_display = False
+            daemon.next_dpms_retry_at = 0.0
+            daemon.prefs = {"keep_display_awake": False}
+
+            with patch("capsomniad.get_builtin_output_name", return_value="eDP-1"), patch(
+                "capsomniad.set_output_dpms", return_value=(False, "err")
+            ) as mock_dpms:
+                daemon.sync_display_for_lid(True, now=100.0)
+                daemon.sync_display_for_lid(True, now=100.25)
+                daemon.sync_display_for_lid(True, now=104.9)
+                self.assertEqual(mock_dpms.call_count, 1)
+
+                daemon.sync_display_for_lid(True, now=105.0)
+                self.assertEqual(mock_dpms.call_count, 2)
+
+                daemon.sync_display_for_lid(False, now=105.5)
+                daemon.sync_display_for_lid(True, now=105.6)
+                self.assertEqual(mock_dpms.call_count, 3)
+
 
 class CapsomniaHelperTests(unittest.TestCase):
     class _FakeDev:
