@@ -1328,44 +1328,14 @@ let
     }
     {
       section = "開発";
-      label = "Antigravity（思考日本語訳: 現在設定に従う）";
+      label = "Antigravity";
       run = "agy";
-      mode = "term";
-    }
-    {
-      section = "開発";
-      label = "Antigravity（今回だけ思考日本語訳 ON）";
-      run = "agy --translate";
       mode = "term";
     }
     {
       section = "開発";
       label = "Antigravity（全許可）";
       run = "agy --dangerously-skip-permissions";
-      mode = "term";
-    }
-    {
-      section = "開発";
-      label = "Antigravity（今回だけ翻訳なし）";
-      run = "agy --no-translate";
-      mode = "term";
-    }
-    {
-      section = "開発";
-      label = "Antigravity 思考翻訳 ON/OFF 切替";
-      run = "agy-ja toggle";
-      mode = "term";
-    }
-    {
-      section = "開発";
-      label = "Antigravity 思考翻訳 状態確認";
-      run = "agy-ja status";
-      mode = "term";
-    }
-    {
-      section = "開発";
-      label = "PLaMo 翻訳サーバー停止（RAM解放）";
-      run = "plamo-translate stop";
       mode = "term";
     }
     {
@@ -1415,10 +1385,6 @@ let
       label = "Antigravity Remote Control ログ確認";
       run = "journalctl --user -u antigravity-cli-daemon -n 50 --no-pager";
       mode = "term";
-    }
-    {
-      section = "開発";
-      label = "注: agy 起動中は F9 / Ctrl+b t / ステータスバークリックで翻訳ペインを即 ON/OFF";
     }
     {
       section = "開発";

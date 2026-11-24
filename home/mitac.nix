@@ -4,7 +4,7 @@
 {
   imports = [
     ./flake-tools.nix
-    ./antigravity-translate.nix
+    ./antigravity.nix
     ./local-llm.nix
     ./hermes.nix
     ./secrets.nix

@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "genshin-main-theme-sound" ];
+  system.nixos.tags = [ "remove-antigravity-translate" ];
 }
