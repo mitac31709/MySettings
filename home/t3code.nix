@@ -32,6 +32,8 @@ let
               existing = json.loads(raw)
 
       merged = json.loads(json.dumps(existing))
+      # Usage-limit stops should auto-continue when the provider reports a reset time.
+      merged["autoResumeLimitedThreads"] = True
       instances = merged.setdefault("providerInstances", {})
       ag = instances.setdefault("antigravity", {})
       ag["driver"] = "antigravity"
