@@ -177,7 +177,7 @@ class RestoreIntegrationTest(unittest.TestCase):
         )
 
         cls.expected_files = {
-            "home/mitac/Documents/hiragino-otf/test-font.otf": b"font fixture\x00\xff",
+            "home/mitac/.local/share/fonts/hiragino-otf/test-font.otf": b"font fixture\x00\xff",
             "home/mitac/Documents/notes.txt": "復元するメモ\n".encode(),
             "home/mitac/.config/example.conf": b"setting = restored\n",
             "run/restic-backups-home/system/bluetooth/AA:BB": b"system fixture\n",
@@ -1523,8 +1523,8 @@ class RestorePromptTest(unittest.TestCase):
         (ro_src / "item").write_text("new secret\n", encoding="utf-8")
         (ro_src / "item").chmod(0o400)
         ro_src.chmod(0o500)
-        (fixture / "home" / "mitac" / "Documents" / "hiragino-otf").mkdir(parents=True)
-        (fixture / "home" / "mitac" / "Documents" / "hiragino-otf" / "Hiragino.otf").write_bytes(
+        (fixture / "home" / "mitac" / ".local" / "share" / "fonts" / "hiragino-otf").mkdir(parents=True)
+        (fixture / "home" / "mitac" / ".local" / "share" / "fonts" / "hiragino-otf" / "Hiragino.otf").write_bytes(
             b"OTF\x00data"
         )
         (fixture / "home" / "mitac" / ".config" / "rclone").mkdir(parents=True)
@@ -1606,7 +1606,7 @@ class RestorePromptTest(unittest.TestCase):
         self.assertEqual(stat.S_IMODE((target_home / "ro_existing" / "item").stat().st_mode), 0o400)
         self.assertEqual(stat.S_IMODE((target_home / "ro_existing").stat().st_mode), 0o500)
         self.assertEqual(
-            (target_home / "Documents" / "hiragino-otf" / "Hiragino.otf").read_bytes(),
+            (target_home / ".local" / "share" / "fonts" / "hiragino-otf" / "Hiragino.otf").read_bytes(),
             b"OTF\x00data",
         )
 

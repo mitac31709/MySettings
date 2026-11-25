@@ -303,7 +303,11 @@ echo "==> Running nix flake update (all inputs including nixpkgs-cursor and boot
 nix flake update
 
 # --- Global npm CLI packages if locally installed (dsh / dsh-tui) ---
-npm_global_modules="${HOME}/.npm-global/lib/node_modules"
+npm_global_dir="${XDG_DATA_HOME:-${HOME}/.local/share}/npm-global"
+if [[ ! -d "$npm_global_dir" && -d "${HOME}/.npm-global" ]]; then
+  npm_global_dir="${HOME}/.npm-global"
+fi
+npm_global_modules="${npm_global_dir}/lib/node_modules"
 dsh_pkgs=()
 for pkg in "@deepseek-ai/dsh" "@deepseek-harness-tui/dsh-tui"; do
   if [[ -r "${npm_global_modules}/${pkg}/package.json" ]]; then
@@ -320,17 +324,17 @@ if ((${#dsh_pkgs[@]} > 0)); then
   fi
   if [[ -n "$npm_bin" ]]; then
     extra_npm_args=()
-    if [[ -f "${HOME}/.npm-global/bin/dsh-tui" && ! -L "${HOME}/.npm-global/bin/dsh-tui" ]]; then
-      # Preserve custom node22 wrapper scripts in ~/.npm-global/bin.
+    if [[ -f "${npm_global_dir}/bin/dsh-tui" && ! -L "${npm_global_dir}/bin/dsh-tui" ]]; then
+      # Preserve custom node22 wrapper scripts in npm-global/bin.
       extra_npm_args+=(--no-bin-links)
     fi
     echo "==> Updating global npm packages: ${dsh_pkgs[*]}"
-    "$npm_bin" install -g --prefix "${HOME}/.npm-global" "${extra_npm_args[@]+"${extra_npm_args[@]}"}" "${dsh_pkgs[@]}"
+    "$npm_bin" install -g --prefix "${npm_global_dir}" "${extra_npm_args[@]+"${extra_npm_args[@]}"}" "${dsh_pkgs[@]}"
   else
     echo "dsh-tui: npm not found; skipping npm global update"
   fi
 else
-  echo "==> dsh-tui: ~/.npm-global に未導入のためスキップ"
+  echo "==> dsh-tui: ${npm_global_dir} に未導入のためスキップ"
 fi
 
 echo "==> Refreshing waybar update status"
@@ -350,7 +354,7 @@ if [[ -t 0 ]]; then
     vaio|chromebook) ;;
     *) host="chromebook" ;;
   esac
-  hiragino_dir="${MITAC_HIRAGINO_DIR:-/home/mitac/Documents/hiragino-otf}"
+  hiragino_dir="${MITAC_HIRAGINO_DIR:-/home/mitac/.local/share/fonts/hiragino-otf}"
   impure_args=()
   if [[ -d "$hiragino_dir" ]]; then
     impure_args=(--impure)

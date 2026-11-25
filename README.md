@@ -99,13 +99,13 @@ NixOS の世代番号はマシン固有です。コミットとの対応はビ�
      'git clone -b main https://github.com/mitac31709/MySettings.git ~/MySettings'
    cd ~/MySettings
    ```
-5. **（既存バックアップまたは agenix 鍵を復元する場合）** OS ビルドの前に「[OS ビルド前に実機へ復元](#os-ビルド前に実機へ復元)」の手順で `./scripts/restore-on-nixos.sh`（別端末のバックアップや初期化後の新端末構築では `--from <chromebook|vaio|mitac> --new-device`）を実行する。不足ツール（`restic` / `rclone` / `jq` / `python3` / `rbw` / `pinentry-qt`）を自動取得し、**`rbw` で Bitwarden（`restic-home` および登録済みなら `agenix-master-key`）を自動読込**して Google OAuth・暗号化パスワード・`/etc/agenix/master.key` を自動配置します（`/home` バックアップを使わず **agenix マスター鍵だけを復元**する場合は `./scripts/restore-on-nixos.sh --agenix-only`）。初回は `rbw` 設定・ログインのみ案内に従います（`restic-home` 未登録なら対話入力・ブラウザー OAuth へフォールバック）。バックアップ内の `/home/mitac`（`/home/mitac/Documents/hiragino-otf/` を含む）およびシステム状態が**元の位置へ復元**されます（`/etc/agenix/master.key` やシステム状態の反映時のみ `sudo` パスワード入力が必要。今回新規取得・更新した `~/.config/rclone/rclone.conf` は保持され、`--new-device` 指定時は既存の `~/MySettings`・`rbw`・`rclone.conf` を保持したうえで Tailscale/WARP/Bluetooth・各種端末 ID/トークン・Wi-Fi の NIC 名縛りを初期化し、複数端末の同時稼働で競合しない状態にします）。展開確認のみしたい場合は `./scripts/restore-on-nixos.sh --new-device /var/tmp/restore-check` のように展開先を引数指定します。
+5. **（既存バックアップまたは agenix 鍵を復元する場合）** OS ビルドの前に「[OS ビルド前に実機へ復元](#os-ビルド前に実機へ復元)」の手順で `./scripts/restore-on-nixos.sh`（別端末のバックアップや初期化後の新端末構築では `--from <chromebook|vaio|mitac> --new-device`）を実行する。不足ツール（`restic` / `rclone` / `jq` / `python3` / `rbw` / `pinentry-qt`）を自動取得し、**`rbw` で Bitwarden（`restic-home` および登録済みなら `agenix-master-key`）を自動読込**して Google OAuth・暗号化パスワード・`/etc/agenix/master.key` を自動配置します（`/home` バックアップを使わず **agenix マスター鍵だけを復元**する場合は `./scripts/restore-on-nixos.sh --agenix-only`）。初回は `rbw` 設定・ログインのみ案内に従います（`restic-home` 未登録なら対話入力・ブラウザー OAuth へフォールバック）。バックアップ内の `/home/mitac`（`/home/mitac/.local/share/fonts/hiragino-otf/` を含む）およびシステム状態が**元の位置へ復元**されます（`/etc/agenix/master.key` やシステム状態の反映時のみ `sudo` パスワード入力が必要。今回新規取得・更新した `~/.config/rclone/rclone.conf` は保持され、`--new-device` 指定時は既存の `~/MySettings`・`rbw`・`rclone.conf` を保持したうえで Tailscale/WARP/Bluetooth・各種端末 ID/トークン・Wi-Fi の NIC 名縛りを初期化し、複数端末の同時稼働で競合しない状態にします）。展開確認のみしたい場合は `./scripts/restore-on-nixos.sh --new-device /var/tmp/restore-check` のように展開先を引数指定します。
 6. 実機の `hardware-configuration.nix` を生成し、flake を適用する（対象は `vaio` または `chromebook`）：
    ```bash
    # VAIO の場合（Chromebook は hosts/chromebook/hardware-configuration.nix と .#chromebook）
    sudo nixos-generate-config --show-hardware-config > hosts/vaio/hardware-configuration.nix
 
-   # 適用（~/Documents/hiragino-otf が既にある場合は `--impure` を追加）
+   # 適用（~/.local/share/fonts/hiragino-otf が既にある場合は `--impure` を追加）
    sudo NIX_CONFIG='experimental-features = nix-command flakes' \
      nixos-rebuild switch --flake .#vaio
    ```
@@ -114,7 +114,7 @@ NixOS の世代番号はマシン固有です。コミットとの対応はビ�
 
 #### パターン B: Live USB（CLI）から `nixos-install --flake` で直接導入
 
-GUI インストーラを経由せず、USB のターミナルから直接この flake の環境を書き込む手順です（Graphical ISO の GUI 端末でも、Minimal ISO の TTY コンソールでも実行できます。Live 環境上には `/home/mitac/Documents/hiragino-otf` が無いため、初回は Noto CJK でビルドされます）。
+GUI インストーラを経由せず、USB のターミナルから直接この flake の環境を書き込む手順です（Graphical ISO の GUI 端末でも、Minimal ISO の TTY コンソールでも実行できます。Live 環境上には `/home/mitac/.local/share/fonts/hiragino-otf` が無いため、初回は Noto CJK でビルドされます）。
 
 1. Minimal ISO の TTY を使う場合だけ、文字化け防止のためロケールは ISO 既定の英語（`en_US.UTF-8`）のまま（Graphical ISO の端末なら日本語のまま可）、必要なら日本語配列とネットワークを設定する：
    ```bash
@@ -188,7 +188,7 @@ GUI インストーラを経由せず、USB のターミナルから直接この
    - **別機体の既存バックアップから復元する場合**: 「[OS ビルド前に実機へ復元](#os-ビルド前に実機へ復元)」のとおり `./scripts/restore-on-nixos.sh --from <chromebook|vaio|mitac> --new-device` を実行し（`rbw` で Bitwarden の `restic-home` と `agenix-master-key` を自動取得・**新しい鍵を作らないこと**）、既存の `~/MySettings`・`rbw`・一時 `rclone.conf` を保持しつつ `/home/mitac` を復元する（端末 ID 衝突防止のため Bluetooth/WARP・P2P・トークン系ログインは新端末で初回サインイン。Wi-Fi と Tailscale は `/etc/agenix/master.key` 導入＋`rebuild` で自動展開）。各端末の自動バックアップ先はホスト別リポジトリ（`chromebook-home` / `vaio-home`）へ分離されているため、既存端末と同時運用しても互いにロックやスナップショットを上書きしません。`/etc/agenix/master.key` が配置され `rebuild` 済みであれば、日次バックアップおよび `backup` CLI は追加の `rbw` 解錠不要で動作します。
    - **新規でバックアップを初期構築する場合**: 「`/home の暗号化バックアップ` → `初回セットアップ`」に従い、GCP OAuth クライアント作成 → `backup setup` を実行して `secrets/rclone-conf.age` と `secrets/restic-home-password.age` を agenix へ登録し、`rebuild` 後 `backup run` を実行する。
 5. **ヒラギノフォント（任意）**:
-   `/home/mitac/Documents/hiragino-otf/` に OTF ファイルを配置し、`rebuild` を実行する（ディレクトリが存在すると `rebuild` が自動で `--impure` を付けて同梱します）。
+   `/home/mitac/.local/share/fonts/hiragino-otf/` に OTF ファイルを配置し、`rebuild` を実行する（ディレクトリが存在すると `rebuild` が自動で `--impure` を付けて同梱します）。
 6. **Vivaldi × ChatGPT 拡張（利用する場合）**:
    Vivaldi で Web Store 版を入れた後、`vivaldi-chatgpt-extension-patch` が `~/.local/share/vivaldi-chatgpt-extension` を生成するため、`vivaldi://extensions` で Store 版を無効化し、Developer mode → Load unpacked で同ディレクトリを読み込む。
 7. **その他の任意設定と実機確認**:
@@ -323,7 +323,7 @@ passwd mitac
 1. `flake.nix` の pinned `.deb` URL 更新（UniClipboard / ChatGPT / Grok Bot）
 2. `pkgs/` の独自パッケージ更新（**Meltype** / **OpenCode** / **Antigravity** / **wol-pc**。`nix store prefetch-file` でハッシュ再計算）
 3. `nix flake update` により `flake.lock` の全入力更新（`nixpkgs` / `nixpkgs-cursor` / `colorshell` / `bootvine` / `home-manager` 等）
-4. `~/.npm-global` に導入済みの場合、`@deepseek-ai/dsh` / `@deepseek-harness-tui/dsh-tui` の `npm` 更新
+4. `~/.local/share/npm-global` に導入済みの場合、`@deepseek-ai/dsh` / `@deepseek-harness-tui/dsh-tui` の `npm` 更新
 5. `rebuild`（`nixos-rebuild switch`）をそのまま実行するかの対話確認
 
 Cursor（`code-cursor` / `cursor-cli`）だけ先行更新したいときは `flake-update-cursor`（または `nix flake update nixpkgs-cursor`）も引き続き使えます。
@@ -344,10 +344,10 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **Hermes** — Nous Research のエージェント（`hermes` / `hermes-acp`）。flake 入力 `hermes-agent` + `home/hermes.nix`（CLI + ACP。gateway / Desktop は無し）。状態は `~/.hermes`。初回は `hermes setup` でプロバイダ認証し、T3 の Providers で Hermes / Local ACP を有効化。ACP 確認は `hermes acp --check`
 - **Antigravity** — Google のターミナルエージェント（`agy` / `antigravity`、`pkgs/antigravity` で CLI バイナリをピン留め、`home/antigravity.nix` で導入と Remote Control 常駐デーモン `antigravity-cli-daemon` を管理）
 - **Local LLM (`llama.cpp` + `Qwen3.5-4B`)** — `home/local-llm.nix` により `pkgs.llama-cpp`（`llama-cli` / `llama-server` / `llama-bench`）とオンデマンドランチャー `local-llm`（`scripts/local-llm.py`）を導入。初回に `unsloth/Qwen3.5-4B-GGUF`（`Q4_K_M`、約 2.55 GiB、SHA-256 検証付き）を `~/.cache/local-llm/` へ自動取得し、CPU 物理コア数・`ctx=8192`・KV 量子化 `q8_0`・思考モード既定 OFF（`--thinking` で切替可）で `127.0.0.1:18922` に OpenAI 互換 API（`/v1`）と内蔵 WebUI を起動し、無通信 600 秒で自動停止して RAM を解放する。`local-llm web`（アプリメニュー `Local LLM (Qwen3.5-4B)`）/ `chat` / `ask` / `status` / `stop` に加え、`local-llm acp` で **T3 Code** 向け ACP v1（プローブ時は RAM 0、`qwen3.5:4b` / `qwen3.5:4b-thinking`、`code` / `ask` モード、`/clear` / `/stop` / `/status`）を提供
-- **dsh-TUI** — DeepSeek Harness の TUI（`dsh-tui` / `dst`）。Node のグローバル npm（`~/.npm-global`、`.npmrc` の `prefix`）へ `npm i -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui`。初回起動でプロファイルを初期化（`pnpm` 必須）。モデル利用は `DEEPSEEK_API_KEY` または `/auth`
+- **dsh-TUI** — DeepSeek Harness の TUI（`dsh-tui` / `dst`）。Node のグローバル npm（`~/.local/share/npm-global`、`~/.config/npm/npmrc` の `prefix`）へ `npm i -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui`。初回起動でプロファイルを初期化（`pnpm` 必須）。モデル利用は `DEEPSEEK_API_KEY` または `/auth`
 - **ChatGPT** — 公式 Linux デスクトップ（Codex 含む、`pkgs/chatgpt`、`.deb`）。アプリメニュー / `chatgpt`。起動時に Vivaldi 等向け Native Messaging（`com.openai.codexextension`）を入れ、ブラウザ拡張の Browser Use を有効化する
 - **Vivaldi × ChatGPT 拡張** — Vivaldi は `chrome.sidePanel.setOptions` を無視するため、Web Store 版は side panel が真っ白になる（VB-120826）。`vivaldi-chatgpt-extension-patch` が `~/.local/share/vivaldi-chatgpt-extension` に `default_path=codex-work-sidepanel.html` の unpacked 版を作る。初回だけ `vivaldi://extensions` で Store 版を無効化し、Developer mode → Load unpacked でそのディレクトリを読み込む
-- **Node.js / pnpm** — `node` / `npm` / `pnpm`（グローバル npm は `~/.npm-global`）
+- **Node.js / pnpm** — `node` / `npm` / `pnpm`（グローバル npm は `~/.local/share/npm-global`）
 - **Parsec** — `parsec-bin`（Intel VA-API / `intel-media-driver` でハードウェアエンコード）。ホテル等で `-6023/-11010` になるときは Tailscale 経由（下記）
 - **Steam** — `programs.steam.enable`
 - **VirtualBox** — `virtualisation.virtualbox.host.enable`（Extension Pack 有効、`mitac` を `vboxusers` グループへ追加）
@@ -412,7 +412,7 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 
 有効にする手順:
 
-1. OTF を ASCII 名で `/home/mitac/Documents/hiragino-otf/` に置く（`~/Documents/ヒラギノ.zip` を展開。パスは `lib/machine.nix` の `hiraginoDir`）
+1. OTF を ASCII 名で `/home/mitac/.local/share/fonts/hiragino-otf/` に置く（`~/Documents/ヒラギノ.zip` を展開。パスは `lib/machine.nix` の `hiraginoDir`）
 2. `--impure` でビルドする。`rebuild` はこのディレクトリがあるときだけ `--impure` を付けます
 
 仕組み: `builtins.pathExists` は pure 評価では flake の外の絶対パスを読めず、結果は false です。`--impure` のときだけ実在を見て、ある場合だけ `builtins.path` でストアへコピーし `fonts.packages` に足します。第一候補は sans `Hiragino Kaku Gothic ProN` / serif `Hiragino Mincho ProN` のままです。
@@ -625,7 +625,7 @@ rm -f "$tmp_conf"
 メッセージ・プロンプトは日本語で表示されます（GUI 端末・LXQt・Hyprland 上での利用を想定。非 CJK TTY コンソールでは表示できない文字があります）。最新スナップショットを固定し、必要容量と空き容量を確認してから、`restic restore --verify` で検証後に次のとおり復元します（検証が失敗した場合は元のファイルを変更せず一時展開先を保持して終了します）。
 
 - **既定（`EXTRACT_DIR` なし）**: `/home/mitac` と同一ファイルシステム上の一時領域（`/var/tmp` が同一 FS なら `/var/tmp/restore-mitac-XXXXXXXX`、`/home/mitac` が別パーティションまたは Btrfs 別サブボリュームなら `/home/mitac/.restore-mitac-XXXXXXXX`）で検証後、進捗を表示しながら**元の位置へ高速に反映**し、成功時に一時ディレクトリを削除します（`復元と検証が完了しました。` を表示）。
-  - ホーム: `/home/mitac/`（`~/MySettings`・`/home/mitac/Documents/hiragino-otf/` を含む。今回の実行中に Bitwarden 反映・手動入力・OAuth 再接続で新規取得／更新した `$RCLONE_CONFIG` は保持）
+  - ホーム: `/home/mitac/`（`~/MySettings`・`/home/mitac/.local/share/fonts/hiragino-otf/` を含む。今回の実行中に Bitwarden 反映・手動入力・OAuth 再接続で新規取得／更新した `$RCLONE_CONFIG` は保持）
   - システム状態（空でないディレクトリのみ自動で `sudo` 実行）: `/var/lib/bluetooth`・`/var/lib/cloudflare-warp`（`root:root` 所有に変更し、稼働中のサービスを再起動）。※ Wi-Fi と Tailscale は `agenix` 一元管理のためシステム状態からは復元しません。
 - **`--from HOST` / `--repo REPO`（リポジトリ指定）**: 別のホスト用リポジトリ（`rclone:gdrive:restic/<HOST>-home`）やローカルコピーしたリポジトリ URI を指定します。未指定時は環境変数 `RESTIC_REPOSITORY`、次に `RESTORE_HOST`／現在ホスト名に基づく `<host>-home`（`nixos` / `localhost` の場合は `mitac-home`）を使います。
 - **`--new-device`（複数端末の同時運用・初期化後クリーン構築向け）**: 同一アカウント内の別端末や再インストール後の環境で衝突・競合が起きないよう、次の処理を行います：
@@ -633,7 +633,7 @@ rm -f "$tmp_conf"
   - **初期化（新端末で初回サインイン／agenix 再展開）**: `bluetooth` / `cloudflare-warp`（および旧スナップショットに残る `tailscale` / `nm-connections`）ステージ領域、UniClipboard・Lan Mouse 鍵・LocalSend・RQuickShare・Parsec 端末認証、Vivaldi Sync / Cookie / アカウント状態（`Bookmarks` 等は保持）、Cursor 認証/秘密情報/テレメトリ ID（`User/settings.json` 等は保持）、Codex / ChatGPT・Grok Bot・Discord・Steam・AGY/OpenCode インストール ID 等のトークン系ログイン状態、`SingletonLock`
 - **引数 `[EXTRACT_DIR]` 指定時**: `/home`・`/etc`・`/var/lib` には一切触れず、`EXTRACT_DIR`（`home/mitac/`・`run/restic-backups-home/system/`・`.restored-snapshot-id`）へ展開と検証のみを行います（`--new-device` 併用時はそのステージ領域内で初期化済み状態を検査できます）。
 
-バックアップ対象には `~/MySettings`（`.git` や未コミットの作業を含む）も含まれますが、再生成可能な大容量キャッシュ／ゲーム本体（Steam `common` 等）・agenix 管理済みシークレット・`/etc/shadow` は含まれません。ヒラギノ（`/home/mitac/Documents/hiragino-otf`）が復元された場合は、直後の OS ビルドで `--impure`（`rebuild` 導入後は自動付与）を指定してください（未配置時の既定は Noto CJK）。使い方は `./scripts/restore-on-nixos.sh --help` でも確認できます。
+バックアップ対象には `~/MySettings`（`.git` や未コミットの作業を含む）も含まれますが、再生成可能な大容量キャッシュ／ゲーム本体（Steam `common` 等）・agenix 管理済みシークレット・`/etc/shadow` は含まれません。ヒラギノ（`/home/mitac/.local/share/fonts/hiragino-otf`）が復元された場合は、直後の OS ビルドで `--impure`（`rebuild` 導入後は自動付与）を指定してください（未配置時の既定は Noto CJK）。使い方は `./scripts/restore-on-nixos.sh --help` でも確認できます。
 
 ### 復元・確認（適用済みの環境）
 

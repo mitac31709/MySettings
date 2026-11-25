@@ -2081,7 +2081,7 @@ main() {
     printf '展開先: %s\n' "$target"
     printf 'ホーム: %s/home/mitac\n' "$target"
     printf 'システム状態: %s/run/restic-backups-home/system\n' "$target"
-    printf 'フォント: %s/home/mitac/Documents/hiragino-otf\n' "$target"
+    printf 'フォント: %s/home/mitac/.local/share/fonts/hiragino-otf\n' "$target"
     if (( NEW_DEVICE == 1 )); then
       print_new_device_checklist
     fi
@@ -2145,8 +2145,8 @@ main() {
   else
     printf 'システム状態: %s/var/lib/{bluetooth,cloudflare-warp}（Wi-Fi / Tailscale は agenix 一元管理）\n' "$root_prefix"
   fi
-  printf 'フォント（バックアップ時）: %s/Documents/hiragino-otf\n' "$target_home"
-  printf '%s/MySettings から NixOS を再ビルドする際、Documents/hiragino-otf がある場合は --impure を付けてください。\n' "$target_home"
+  printf 'フォント（バックアップ時）: %s/.local/share/fonts/hiragino-otf\n' "$target_home"
+  printf '%s/MySettings から NixOS を再ビルドする際、.local/share/fonts/hiragino-otf がある場合は --impure を付けてください。\n' "$target_home"
   if (( NEW_DEVICE == 1 )); then
     print_new_device_checklist
   fi

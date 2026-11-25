@@ -16,6 +16,7 @@ in
 {
   programs.bash = {
     enable = true;
+    historyFile = "${config.xdg.stateHome}/bash/history";
     # -1 = unlimited (bash: non-negative caps; negative / unset = no limit).
     historySize = -1;
     historyFileSize = -1;

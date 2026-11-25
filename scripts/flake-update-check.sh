@@ -163,7 +163,11 @@ else
 fi
 
 # --- Global npm CLI packages if locally installed (dsh / dsh-tui) ---
-npm_global_modules="${HOME}/.npm-global/lib/node_modules"
+npm_global_dir="${XDG_DATA_HOME:-${HOME}/.local/share}/npm-global"
+if [[ ! -d "$npm_global_dir" && -d "${HOME}/.npm-global" ]]; then
+  npm_global_dir="${HOME}/.npm-global"
+fi
+npm_global_modules="${npm_global_dir}/lib/node_modules"
 check_npm_global() {
   local pkg_name="$1" icon="$2" short="$3" label="$4"
   local pkg_json="${npm_global_modules}/${pkg_name}/package.json"

@@ -143,6 +143,7 @@ let
     "/home/${user}/.arduino15/library_index.json*"
     "/home/${user}/.arduino15/package_index.json*"
     "/home/${user}/.npm"
+    "/home/${user}/.local/share/go/pkg/mod"
     "/home/${user}/.local/share/pnpm/store"
 
     # Auto-downloaded binaries / old upgrade backups (apps are packaged in Nix).
@@ -165,6 +166,7 @@ let
     "/home/${user}/.config/vivaldi/GraphiteDawnCache"
 
     "/home/${user}/.bash_history"
+    "/home/${user}/.local/state/bash/history"
     "/home/${user}/.bash_profile"
     "/home/${user}/.bashrc"
     "/home/${user}/.nix-defexpr"
@@ -192,6 +194,9 @@ let
     "/home/${user}/.gradle/caches"
     "/home/${user}/.gradle/.tmp"
     "/home/${user}/.gradle/daemon"
+    "/home/${user}/.local/share/gradle/caches"
+    "/home/${user}/.local/share/gradle/.tmp"
+    "/home/${user}/.local/share/gradle/daemon"
 
     # T3 Code: downloaded agent/browser runtimes, logs, temp dirs, Electron caches
     # (keep ~/.t3/userdata/statev2.sqlite, providers, attachments, and ~/.config/t3code-v2 settings).

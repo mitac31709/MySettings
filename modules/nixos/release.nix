@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "podman-distrobox" ];
+  system.nixos.tags = [ "xdg-home-cleanup" ];
 }

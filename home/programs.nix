@@ -239,7 +239,10 @@ in
       package = pkgs.adwaita-icon-theme;
       name = "Adwaita";
     };
-    gtk2.force = true;
+    gtk2 = {
+      force = true;
+      configLocation = "${config.xdg.configHome}/gtk-2.0/gtkrc";
+    };
     gtk3 = {
       colorScheme = "dark";
       extraConfig.gtk-application-prefer-dark-theme = true;
@@ -315,6 +318,11 @@ in
       "gtk-4.0/gtk.css".text = ''
         /* keep empty — avoid stale light GTK CSS overrides */
       '';
+      "npm/npmrc".text = ''
+        prefix=${config.xdg.dataHome}/npm-global
+        cache=${config.xdg.cacheHome}/npm
+        allow-scripts=@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs
+      '';
       "nvim".source = ./nvim;
     }
     (lib.mkIf (osConfig != null) {
@@ -358,7 +366,10 @@ in
   };
 
   # GnuPG + gpg-agent using the same Rofi pinentry as rbw.
-  programs.gpg.enable = true;
+  programs.gpg = {
+    enable = true;
+    homedir = "${config.xdg.dataHome}/gnupg";
+  };
   services.gpg-agent = {
     enable = true;
     pinentry.package = pkgs.rofi-prompt;
@@ -423,6 +434,12 @@ in
     _JAVA_AWT_WM_NONREPARENTING = "1";
     # Expose Qt widget trees over AT-SPI2 for agent-desktop.
     QT_ACCESSIBILITY = "1";
+    # Keep dev toolchains, npm, PulseAudio cookie, and XCompose cache in XDG dirs.
+    GOPATH = "${config.xdg.dataHome}/go";
+    GRADLE_USER_HOME = "${config.xdg.dataHome}/gradle";
+    NPM_CONFIG_USERCONFIG = "${config.xdg.configHome}/npm/npmrc";
+    PULSE_COOKIE = "${config.xdg.configHome}/pulse/cookie";
+    XCOMPOSECACHE = "${config.xdg.cacheHome}/xcompose";
   }
   # Local-only cursor theme (see the home.pointerCursor note above).
   // lib.optionalAttrs (theme.cursor.package == null) (
@@ -435,6 +452,11 @@ in
       HYPRCURSOR_SIZE = toString theme.cursor.size;
     }
   );
+
+  # libX11 creates compose cache files under $XCOMPOSECACHE only when the directory exists.
+  home.activation.ensureXComposeCacheDir = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    ${pkgs.coreutils}/bin/install -d -m 700 "${config.xdg.cacheHome}/xcompose"
+  '';
 
   # Yazi via Ghostty launcher entry.
   xdg.dataFile."applications/mitac-yazi.desktop".text = ''
@@ -475,17 +497,15 @@ in
     };
   };
 
-  # Writable npm global prefix (store node/npm cannot install -g into itself).
-  # Used for dsh / dsh-tui (`npm i -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui`).
-  # allow-scripts: native helpers (node-pty / koffi / spawn helper) needed at runtime.
-  home.file.".npmrc".text = ''
-    prefix=${config.home.homeDirectory}/.npm-global
-    allow-scripts=@deepseek-ai/dsh-subprocess-local,koffi,node-pty,@google/genai,protobufjs
-  '';
-
+  # Writable npm global prefix (store node/npm cannot install -g into itself)
+  # lives in xdg.configFile."npm/npmrc" + NPM_CONFIG_USERCONFIG.
   home.sessionPath = [
-    "${config.home.homeDirectory}/.npm-global/bin"
+    "${config.xdg.dataHome}/npm-global/bin"
   ];
+
+  # Export XDG_* variables explicitly (xdg.localBinInPath stays false so stale
+  # legacy symlinks in ~/.local/bin do not shadow Nix store binaries).
+  xdg.enable = true;
 
   # Keep XDG dirs in English even with ja_JP.UTF-8 locale.
   xdg.userDirs = {
@@ -499,9 +519,7 @@ in
     publicShare = "$HOME/Public";
     templates = "$HOME/Templates";
     videos = "$HOME/Videos";
-    extraConfig = {
-      XDG_PROJECTS_DIR = "$HOME/Projects";
-    };
+    projects = "$HOME/Projects";
   };
 
   # xdg.configFile."nvim".source is merged in xdg.configFile above.
