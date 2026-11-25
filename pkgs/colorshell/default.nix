@@ -47,6 +47,7 @@ baseColorshell.overrideAttrs (old: {
     cp ${./src/window/control-center/widgets/BatteryInfo.tsx} src/window/control-center/widgets/BatteryInfo.tsx
     cp ${./src/window/control-center/widgets/tiles/KeepAwake.tsx} src/window/control-center/widgets/tiles/KeepAwake.tsx
     cp ${./src/window/control-center/widgets/pages/KeepAwake.tsx} src/window/control-center/widgets/pages/KeepAwake.tsx
+    cp ${./src/window/control-center/widgets/pages/Network.tsx} src/window/control-center/widgets/pages/Network.tsx
     cp ${./src/window/control-center/widgets/pages/Services.tsx} src/window/control-center/widgets/pages/Services.tsx
 
     # Prevent pywal16 from broadcasting OSC 4/10/11 sequences to open PTYs (/dev/pts/*),
@@ -107,13 +108,28 @@ baseColorshell.overrideAttrs (old: {
         '    TileNightLight' \
         $'    TileNightLight,\n    TileKeepAwake'
 
-    substituteInPlace src/window/control-center/widgets/pages/Network.tsx \
+    # Fix Chinese strings left in upstream ja_JP locale
+    substituteInPlace src/i18n/lang/ja_JP.ts \
+      --replace-fail 'more: "更多",' 'more: "その他",' \
+      --replace-fail 'more_settings: "更多设置",' 'more_settings: "詳細設定",'
+
+    # Fix Control Center sub-page overlay sizing so tall pages (e.g. Network Wi-Fi list)
+    # scroll inside the card instead of pushing the header out of view.
+    substituteInPlace src/window/control-center/widgets/pages/index.tsx \
       --replace-fail \
-        'import { execApp } from "../../../../modules/apps";' \
-        $'import { execApp } from "../../../../modules/apps";\nimport { openNmtui } from "../../../../modules/sysstats";' \
+        $'        this.#stack = new Gtk.Stack({\n            visible: true,' \
+        $'        this.#stack = new Gtk.Stack({\n            visible: true,\n            vhomogeneous: false,' \
       --replace-fail \
-        '      bottomButtons={[{' \
-        $'      bottomButtons={[{\n          label: "nmtui を端末で開く",\n          actionClicked: () => {\n              Windows.getDefault().close("control-center");\n              openNmtui();\n          }\n      }, {'
+        $'            vexpand: false,\n            hexpand: false,\n            valign: Gtk.Align.CENTER,' \
+        $'            vexpand: true,\n            hexpand: false,\n            valign: Gtk.Align.FILL,'
+
+    substituteInPlace src/window/control-center/widgets/Page.tsx \
+      --replace-fail \
+        '<Gtk.ScrolledWindow hscrollbarPolicy={Gtk.PolicyType.NEVER} propagateNaturalHeight' \
+        '<Gtk.ScrolledWindow hscrollbarPolicy={Gtk.PolicyType.NEVER} propagateNaturalHeight={false} vexpand' \
+      --replace-fail \
+        'spacing={2} valign={Gtk.Align.END} vexpand>' \
+        'spacing={2} valign={Gtk.Align.END} vexpand={false}>'
 
     substituteInPlace src/compositor/interface/hyprland/compositor.ts \
       --replace-fail \
