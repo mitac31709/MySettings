@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "atuin-shell-history" ];
+  system.nixos.tags = [ "t3code-antigravity-subagent-details" ];
 }

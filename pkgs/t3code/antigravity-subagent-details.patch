@@ -1,0 +1,2563 @@
+diff -ruN --no-dereference -x .repos -x node_modules -x dist -x .vite-temp -x .vite -x 'pnpm*' -x .tsbuildinfo a/apps/server/src/orchestration-v2/Adapters/AntigravityAdapterV2.test.ts b/apps/server/src/orchestration-v2/Adapters/AntigravityAdapterV2.test.ts
+--- a/apps/server/src/orchestration-v2/Adapters/AntigravityAdapterV2.test.ts	1970-01-01 09:00:01.000000000 +0900
++++ b/apps/server/src/orchestration-v2/Adapters/AntigravityAdapterV2.test.ts	2026-11-26 03:49:11.272837729 +0900
+@@ -1543,6 +1543,101 @@
+     }).pipe(Effect.provide(layerSession)),
+   );
+ 
++  it.effect(
++    "streams detached subagent transcript items and marks errored subagent failed from parent notice",
++    () =>
++      Effect.gen(function* () {
++        const fileSystem = yield* FileSystem.FileSystem;
++        const path = yield* Path.Path;
++        const profile = yield* fileSystem.makeTempDirectoryScoped({
++          prefix: "t3-antigravity-sync-",
++        });
++        const childId = "41bcb0e1-2fe9-4152-9e2d-8a8116029720";
++        const records = (conversationId: string, kind: string) =>
++          path.join(profile, "antigravity-acp", "brain", conversationId, ".system_generated", kind);
++        const write = (directory: string, name: string, value: unknown) =>
++          fileSystem
++            .makeDirectory(directory, { recursive: true })
++            .pipe(
++              Effect.andThen(
++                fileSystem.writeFileString(path.join(directory, name), JSON.stringify(value)),
++              ),
++            );
++        yield* write(records("mock-session-1", "subagents"), `${childId}.json`, {
++          conversationId: childId,
++          state: "SUBAGENT_STATE_ALIVE",
++        });
++        yield* write(records(childId, "messages"), "launch.json", {
++          sender: "mock-session-1",
++          sourceMetadata: { tool: { toolCall: { id: "call_research", name: "invoke_subagent" } } },
++        });
++        const transcriptDir = records(childId, "logs");
++        yield* fileSystem.makeDirectory(transcriptDir, { recursive: true });
++        yield* fileSystem.writeFileString(
++          path.join(transcriptDir, "transcript.jsonl"),
++          [
++            JSON.stringify({
++              step_index: 1,
++              type: "PLANNER_RESPONSE",
++              status: "DONE",
++              created_at: "2026-11-25T15:04:31Z",
++              model: "gemini-pro-orchestrator",
++              thinking: "Inspecting target file",
++              tool_calls: [{ name: "read_file", args: { Path: '"/project/README.md"' } }],
++            }),
++            JSON.stringify({
++              step_index: 2,
++              type: "GENERIC",
++              status: "DONE",
++              created_at: "2026-11-25T15:04:32Z",
++              content: "Created At: 2026-11-25T15:04:31Z\nCompleted At: 2026-11-25T15:04:32Z\nhello",
++            }),
++          ].join("\n") + "\n",
++        );
++
++        const { usage, send, startTurn, until, throughPromptSettled } =
++          yield* openSessionWithRunningCommand({}, profile);
++        yield* startTurn(1, false);
++        const prompt = yield* throughPromptSettled;
++
++        yield* write(records("mock-session-1", "messages"), "error-notice.json", {
++          sender: "system",
++          content: `The subagent Researcher (research) with id "${childId}" encountered an error and has either stopped or failed to start execution: RESOURCE_EXHAUSTED (code 429): Quota exceeded.`,
++        });
++        yield* TestClock.adjust("10 minutes");
++        yield* send({
++          sessionUpdate: "agent_message_chunk",
++          content: { type: "text", text: "Subagent hit quota." },
++        });
++        yield* send(usage);
++        yield* TestClock.adjust("3 seconds");
++        const run = yield* until((event) => event.type === "turn.terminal");
++
++        const allEvents = [...prompt, ...run];
++        const childItems = allEvents.flatMap((event) =>
++          event.type === "turn_item.updated" &&
++          event.turnItem.threadId !== event.turnItem.nodeId &&
++          event.turnItem.runId === null
++            ? [event.turnItem]
++            : [],
++        );
++        assert.isTrue(childItems.some((item) => item.type === "reasoning"));
++        assert.isTrue(
++          childItems.some((item) => item.type === "dynamic_tool" && item.toolName === "Read"),
++        );
++        assert.isTrue(
++          childItems.some(
++            (item) => item.type === "error" && item.failure.class === "usage_limit",
++          ),
++        );
++        const lastSubagent = allEvents
++          .flatMap((event) => (event.type === "subagent.updated" ? [event.subagent] : []))
++          .at(-1);
++        assert.equal(lastSubagent?.status, "failed");
++        assert.equal(lastSubagent?.model, "gemini-pro-orchestrator");
++      }).pipe(Effect.provide(layerSession)),
++  );
++
+   it.effect("ends a continuation run whose replayed reply launched a subagent", () =>
+     Effect.gen(function* () {
+       const fileSystem = yield* FileSystem.FileSystem;
+diff -ruN --no-dereference -x .repos -x node_modules -x dist -x .vite-temp -x .vite -x 'pnpm*' -x .tsbuildinfo a/apps/server/src/orchestration-v2/Adapters/AntigravityAdapterV2.ts b/apps/server/src/orchestration-v2/Adapters/AntigravityAdapterV2.ts
+--- a/apps/server/src/orchestration-v2/Adapters/AntigravityAdapterV2.ts	1970-01-01 09:00:01.000000000 +0900
++++ b/apps/server/src/orchestration-v2/Adapters/AntigravityAdapterV2.ts	2026-11-26 03:45:54.793617290 +0900
+@@ -34,6 +34,7 @@
+   antigravitySubagentLaunches,
+   describeAntigravitySubagentLaunches,
+   readAntigravityChildrenAtWork,
++  readAntigravityDetachedSubagentSync,
+ } from "../../provider/acp/AntigravityChildWork.ts";
+ import { readAntigravityClientTextFile } from "../../provider/acp/AntigravityClientFiles.ts";
+ import { watchAntigravityPromptOutcome } from "../../provider/acp/AntigravityTurnOutcome.ts";
+@@ -304,6 +305,12 @@
+               rootSessionId: sessionId,
+               toolCallIds: nativeTaskIds,
+             }),
++          syncDetachedSubagents: ({ sessionId, subagents }) =>
++            readAntigravityDetachedSubagentSync({
++              profileDirectory,
++              rootSessionId: sessionId,
++              subagents,
++            }),
+         }),
+   };
+ }
+diff -ruN --no-dereference -x .repos -x node_modules -x dist -x .vite-temp -x .vite -x 'pnpm*' -x .tsbuildinfo a/apps/server/src/orchestration-v2/NativeChildWorkQuery.test.ts b/apps/server/src/orchestration-v2/NativeChildWorkQuery.test.ts
+--- a/apps/server/src/orchestration-v2/NativeChildWorkQuery.test.ts	1970-01-01 09:00:01.000000000 +0900
++++ b/apps/server/src/orchestration-v2/NativeChildWorkQuery.test.ts	2026-11-26 04:09:35.611464381 +0900
+@@ -1,9 +1,18 @@
+ import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
+ import * as NodeServices from "@effect/platform-node/NodeServices";
+ import { expect, it } from "@effect/vitest";
+-import { ProviderInstanceId, ThreadId } from "@t3tools/contracts";
++import {
++  ProviderInstanceId,
++  ThreadId,
++  type OrchestrationV2DomainEvent,
++  type OrchestrationV2TurnItem,
++} from "@t3tools/contracts";
++import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
++import * as DateTime from "effect/DateTime";
+ import * as Effect from "effect/Effect";
++import * as FileSystem from "effect/FileSystem";
+ import * as Layer from "effect/Layer";
++import * as Path from "effect/Path";
+ 
+ import * as ServerConfig from "../config.ts";
+ import { resolveAntigravityInstanceDirectories } from "../provider/antigravityAuthSupport.ts";
+@@ -18,6 +27,7 @@
+   makeProfile,
+   ROOT,
+ } from "../provider/acp/AntigravityChildWork.testkit.ts";
++import * as EventSink from "./EventSink.ts";
+ import * as NativeChildWorkQuery from "./NativeChildWorkQuery.ts";
+ import * as ThreadManagement from "./ThreadManagementService.ts";
+ 
+@@ -135,4 +145,274 @@
+       expect(yield* readChildren("run-root-earlier", rolledBack)).toEqual([]);
+     }),
+   );
++
++  it.effect("hydrates historical subagent transcripts and reconciles stale active status idempotently", () =>
++    Effect.gen(function* () {
++      const fs = yield* FileSystem.FileSystem;
++      const path = yield* Path.Path;
++      const { stateDir } = yield* ServerConfig.ServerConfig;
++      const { profile } = yield* resolveAntigravityInstanceDirectories(stateDir, instanceId);
++      const childConvId = "41bcb0e1-2fe9-4152-9e2d-8a8116029720";
++      const nativeTaskId = "35bea692fa95447fbdae6333fec5515f";
++      const writeJson = (segments: ReadonlyArray<string>, value: unknown) => {
++        const file = path.join(profile, "antigravity-acp", "brain", ...segments);
++        return fs
++          .makeDirectory(path.dirname(file), { recursive: true })
++          .pipe(Effect.andThen(fs.writeFileString(file, JSON.stringify(value))));
++      };
++      yield* writeJson([ROOT, ".system_generated", "subagents", `${childConvId}.json`], {
++        conversationId: childConvId,
++        subagentDescriptor: { typeName: "research", role: LAUNCH.role },
++        state: "SUBAGENT_STATE_ALIVE",
++      });
++      yield* writeJson([childConvId, ".system_generated", "messages", "launch.json"], {
++        sender: ROOT,
++        content: LAUNCH.prompt,
++        sourceMetadata: {
++          tool: { conversationId: ROOT, toolCall: { id: nativeTaskId, name: "invoke_subagent" } },
++        },
++      });
++      yield* writeJson([ROOT, ".system_generated", "messages", "err.json"], {
++        sender: "system",
++        content: `The subagent ${LAUNCH.role} (research) with id "${childConvId}" encountered an error and has either stopped or failed to start execution: RESOURCE_EXHAUSTED (code 429): Individual quota reached.`,
++      });
++      const transcriptPath = path.join(
++        profile,
++        "antigravity-acp",
++        "brain",
++        childConvId,
++        ".system_generated",
++        "logs",
++        "transcript.jsonl",
++      );
++      yield* fs.makeDirectory(path.dirname(transcriptPath), { recursive: true });
++      yield* fs.writeFileString(
++        transcriptPath,
++        [
++          JSON.stringify({
++            step_index: 0,
++            type: "SYSTEM_MESSAGE",
++            status: "DONE",
++            content: LAUNCH.prompt,
++          }),
++          JSON.stringify({
++            step_index: 1,
++            type: "PLANNER_RESPONSE",
++            status: "DONE",
++            created_at: "2026-11-25T15:04:31Z",
++            model: "gemini-pro-orchestrator",
++            thinking: "Reading README",
++            tool_calls: [{ name: "read_file", args: { Path: '"/project/README.md"' } }],
++          }),
++          JSON.stringify({
++            step_index: 2,
++            type: "GENERIC",
++            status: "DONE",
++            created_at: "2026-11-25T15:04:32Z",
++            content: "Created At: 2026-11-25T15:04:31Z\nCompleted At: 2026-11-25T15:04:32Z\nreadme ok",
++          }),
++        ].join("\n") + "\n",
++      );
++
++      const startedAt = DateTime.makeUnsafe("2026-11-25T15:04:29Z");
++      const subagentNodeId = IdAllocator.derive.nodeFromProviderItem({
++        driver: "antigravity",
++        nativeItemId: `provider-instance:antigravity:${nativeTaskId}`,
++      });
++      const childRootNodeId = IdAllocator.derive.nodeFromProviderItem({
++        driver: "antigravity",
++        nativeItemId: `provider-instance:antigravity:${nativeTaskId}:child-root`,
++      });
++      const parentThreadId = ThreadId.make("thread-parent");
++      let childMessages: Array<unknown> = [];
++      let childTurnItems: Array<OrchestrationV2TurnItem> = [];
++      let childNodes = [
++        {
++          id: childRootNodeId,
++          threadId: childThreadId,
++          runId: null,
++          parentNodeId: null,
++          rootNodeId: childRootNodeId,
++          kind: "root_turn",
++          status: "running",
++          countsForRun: false,
++          providerThreadId: null,
++          providerTurnId: null,
++          nativeItemRef: { driver: "antigravity", nativeId: nativeTaskId, strength: "strong" },
++          runtimeRequestId: null,
++          checkpointScopeId: null,
++          startedAt,
++          completedAt: null,
++        },
++      ];
++      let parentSubagent = {
++        id: subagentNodeId,
++        threadId: parentThreadId,
++        runId: "run-root",
++        parentNodeId: "node-root",
++        origin: "provider_native",
++        createdBy: "agent",
++        driver: "antigravity",
++        providerInstanceId: instanceId,
++        providerThreadId: null,
++        childThreadId,
++        nativeTaskRef: { driver: "antigravity", nativeId: nativeTaskId, strength: "strong" },
++        prompt: LAUNCH.prompt,
++        title: LAUNCH.role,
++        model: null as string | null,
++        status: "running",
++        result: null as string | null,
++        startedAt,
++        completedAt: null as DateTime.Utc | null,
++        updatedAt: startedAt,
++      };
++      let parentNodes = [
++        {
++          id: subagentNodeId,
++          threadId: parentThreadId,
++          runId: "run-root",
++          parentNodeId: "node-root",
++          rootNodeId: "node-root",
++          kind: "subagent",
++          status: "running",
++          countsForRun: false,
++          providerThreadId: "provider-root",
++          providerTurnId: "provider-turn-root",
++          nativeItemRef: { driver: "antigravity", nativeId: nativeTaskId, strength: "strong" },
++          runtimeRequestId: null,
++          checkpointScopeId: null,
++          startedAt,
++          completedAt: null,
++        },
++      ];
++      let parentTurnItems: Array<unknown> = [
++        {
++          id: IdAllocator.derive.turnItemFromProviderItem({
++            driver: "antigravity",
++            nativeItemId: `provider-instance:antigravity:${nativeTaskId}`,
++          }),
++          threadId: parentThreadId,
++          runId: "run-root",
++          nodeId: subagentNodeId,
++          providerThreadId: "provider-root",
++          providerTurnId: "provider-turn-root",
++          nativeItemRef: { driver: "antigravity", nativeId: nativeTaskId, strength: "strong" },
++          parentItemId: null,
++          ordinal: 2,
++          status: "running",
++          title: LAUNCH.role,
++          startedAt,
++          completedAt: null,
++          updatedAt: startedAt,
++          type: "subagent",
++          subagentId: subagentNodeId,
++          origin: "provider_native",
++          driver: "antigravity",
++          providerInstanceId: instanceId,
++          childThreadId,
++          prompt: LAUNCH.prompt,
++          result: null,
++        },
++      ];
++      let writeCount = 0;
++
++      const queryLayer = NativeChildWorkQuery.layer.pipe(
++        Layer.provide(
++          Layer.merge(
++            Layer.mock(ThreadManagement.ThreadManagementService)({
++              getThreadRecords: ((requestedThreadId: string) =>
++                Effect.succeed(
++                  requestedThreadId === childThreadId
++                    ? {
++                        thread: {
++                          id: childThreadId,
++                          creationSource: "provider",
++                          lineage: {
++                            parentThreadId,
++                            relationshipToParent: "subagent",
++                            rootThreadId: parentThreadId,
++                          },
++                          forkedFrom: { type: "node", nodeId: subagentNodeId },
++                        },
++                        turnItems: childTurnItems,
++                        messages: childMessages,
++                        nodes: childNodes,
++                      }
++                    : {
++                        subagents: [parentSubagent],
++                        nodes: parentNodes,
++                        turnItems: parentTurnItems,
++                        runs: [
++                          {
++                            id: "run-root",
++                            providerThreadId: "provider-root",
++                            activeAttemptId: "attempt-root",
++                          },
++                        ],
++                        attempts: [{ id: "attempt-root", nativeThreadId: ROOT }],
++                        providerThreads: [
++                          {
++                            id: "provider-root",
++                            providerInstanceId: instanceId,
++                            nativeThreadRef: { nativeId: ROOT },
++                            nativeMetadata: { itemIdentityVersion: 2 },
++                          },
++                        ],
++                      },
++                )) as never,
++            }),
++            Layer.mock(EventSink.EventSinkV2)({
++              write: ({ events }) =>
++                Effect.sync(() => {
++                  writeCount += 1;
++                  for (const event of events as ReadonlyArray<OrchestrationV2DomainEvent>) {
++                    if (event.type === "turn-item.updated" && event.threadId === childThreadId) {
++                      childTurnItems = [
++                        ...childTurnItems.filter((item) => item.id !== event.payload.id),
++                        event.payload,
++                      ];
++                    } else if (
++                      event.type === "message.updated" &&
++                      event.threadId === childThreadId
++                    ) {
++                      childMessages = [...childMessages, event.payload];
++                    } else if (
++                      event.type === "subagent.updated" &&
++                      event.threadId === parentThreadId
++                    ) {
++                      parentSubagent = event.payload as never;
++                    } else if (event.type === "node.updated" && event.threadId === parentThreadId) {
++                      parentNodes = [event.payload as never];
++                    } else if (event.type === "node.updated" && event.threadId === childThreadId) {
++                      childNodes = [event.payload as never];
++                    } else if (
++                      event.type === "turn-item.updated" &&
++                      event.threadId === parentThreadId
++                    ) {
++                      parentTurnItems = [event.payload];
++                    }
++                  }
++                  return { storedEvents: [] };
++                }),
++            }),
++          ),
++        ),
++      );
++
++      yield* Effect.gen(function* () {
++        const query = yield* NativeChildWorkQuery.NativeChildWorkQuery;
++        yield* query.hydrateNativeChildThread(childThreadId);
++        expect(writeCount).toBe(1);
++        expect(childTurnItems.map((item) => item.type)).toEqual([
++          "reasoning",
++          "dynamic_tool",
++          "error",
++        ]);
++        expect(parentSubagent.status).toBe("failed");
++        expect(parentSubagent.model).toBe("gemini-pro-orchestrator");
++        yield* query.hydrateNativeChildThread(childThreadId);
++        expect(writeCount).toBe(1);
++      }).pipe(Effect.provide(queryLayer));
++    }),
++  );
+ });
+diff -ruN --no-dereference -x .repos -x node_modules -x dist -x .vite-temp -x .vite -x 'pnpm*' -x .tsbuildinfo a/apps/server/src/orchestration-v2/NativeChildWorkQuery.ts b/apps/server/src/orchestration-v2/NativeChildWorkQuery.ts
+--- a/apps/server/src/orchestration-v2/NativeChildWorkQuery.ts	1970-01-01 09:00:01.000000000 +0900
++++ b/apps/server/src/orchestration-v2/NativeChildWorkQuery.ts	2026-11-26 03:52:25.061029023 +0900
+@@ -1,19 +1,36 @@
+ import {
++  EventId,
++  isOrchestrationV2WorkActive,
+   isProviderNativeSubagentThread,
++  type OrchestrationV2ConversationMessage,
++  type OrchestrationV2DomainEvent,
+   OrchestrationV2GetNativeChildWorkError,
+   type OrchestrationV2GetNativeChildWorkInput,
+   type OrchestrationV2GetNativeChildWorkResult,
++  type OrchestrationV2TurnItem,
++  type ThreadId,
+ } from "@t3tools/contracts";
++import { acpScopedNativeId } from "@t3tools/provider-acp/server/adapter";
++import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
++import { randomUuidV4 } from "@t3tools/provider-core/server/randomUuid";
+ import * as Context from "effect/Context";
++import * as DateTime from "effect/DateTime";
+ import * as Digest from "effect/crypto/Digest";
+ import * as Effect from "effect/Effect";
+ import * as Layer from "effect/Layer";
++import * as Option from "effect/Option";
+ import * as Path from "effect/Path";
++import * as Semaphore from "effect/Semaphore";
+ 
+ import * as ServerConfig from "../config.ts";
+-import { readAntigravityChildWork } from "../provider/acp/AntigravityChildWork.ts";
++import {
++  readAntigravityChildTimeline,
++  readAntigravityChildWork,
++} from "../provider/acp/AntigravityChildWork.ts";
+ import { resolveAntigravityInstanceDirectories } from "../provider/antigravityAuthSupport.ts";
++import * as EventSink from "./EventSink.ts";
+ import * as ThreadManagement from "./ThreadManagementService.ts";
++import { boundFileChangeForStorage } from "./WireProjection.ts";
+ 
+ /** Reads what a provider-native subagent's children did, on demand. Other providers stream real child sessions. */
+ export class NativeChildWorkQuery extends Context.Service<
+@@ -25,90 +42,125 @@
+       OrchestrationV2GetNativeChildWorkResult,
+       OrchestrationV2GetNativeChildWorkError
+     >;
++    readonly hydrateNativeChildThread: (threadId: ThreadId) => Effect.Effect<void>;
+   }
+ >()("t3/orchestration-v2/NativeChildWorkQuery") {}
+ 
+ const NO_CHILDREN: OrchestrationV2GetNativeChildWorkResult = { children: [] };
+ 
++const messageSignature = (message: OrchestrationV2ConversationMessage) =>
++  JSON.stringify({ ...message, createdAt: 0, updatedAt: 0 });
++
++const turnItemSignature = (item: OrchestrationV2TurnItem) =>
++  JSON.stringify({ ...item, ordinal: 0, updatedAt: 0 });
++
+ const make = Effect.gen(function* () {
+   const threads = yield* ThreadManagement.ThreadManagementService;
+   const { stateDir } = yield* ServerConfig.ServerConfig;
+   const digest = yield* Digest.Digest;
+   const path = yield* Path.Path;
++  const eventSink = yield* Effect.serviceOption(EventSink.EventSinkV2);
++  const hydrationLocks = new Map<string, Semaphore.Semaphore>();
++
++  const hydrationLockFor = (threadId: ThreadId) => {
++    let lock = hydrationLocks.get(threadId);
++    if (lock === undefined) {
++      lock = Semaphore.makeUnsafe(1);
++      hydrationLocks.set(threadId, lock);
++    }
++    return lock;
++  };
++
++  const resolveAntigravityChildContext = Effect.fn(
++    "NativeChildWorkQuery.resolveAntigravityChildContext",
++  )(function* (threadId: ThreadId) {
++    const { thread } = yield* threads.getThreadRecords(threadId, []);
++    const parentThreadId = thread.lineage.parentThreadId;
++    if (
++      !isProviderNativeSubagentThread(thread) ||
++      parentThreadId === null ||
++      thread.forkedFrom?.type !== "node"
++    ) {
++      return undefined;
++    }
++    const subagentId = thread.forkedFrom.nodeId;
++    const { subagents } = yield* threads.getThreadRecords(parentThreadId, ["subagents"]);
++    const subagent = subagents.find(
++      (candidate) => candidate.id === subagentId && candidate.childThreadId === thread.id,
++    );
++    const nativeTaskId = subagent?.nativeTaskRef?.nativeId;
++    if (
++      subagent?.driver !== "antigravity" ||
++      subagent.origin !== "provider_native" ||
++      subagent.runId === null ||
++      !nativeTaskId
++    ) {
++      return undefined;
++    }
++    const others = subagents.filter(
++      (candidate) =>
++        candidate.id !== subagent.id &&
++        candidate.driver === "antigravity" &&
++        candidate.origin === "provider_native" &&
++        candidate.providerInstanceId === subagent.providerInstanceId,
++    );
++    const { runs, providerThreads } = yield* threads.getThreadRecords(
++      parentThreadId,
++      ["runs", "providerThreads"],
++      { runIds: [subagent.runId, ...others.flatMap((other) => other.runId ?? [])] },
++    );
++    const { attempts } = yield* threads.getThreadRecords(parentThreadId, ["attempts"], {
++      attemptIds: runs.flatMap((run) => run.activeAttemptId ?? []),
++    });
++    const providerThreadOf = (runId: string | null) => {
++      const providerThreadId = runs.find((run) => run.id === runId)?.providerThreadId;
++      return providerThreads.find((candidate) => candidate.id === providerThreadId);
++    };
++    // Rollback moves the provider thread to a fresh session; a batch's records stay where it ran.
++    const sessionOf = (runId: string | null) => {
++      const attemptId = runs.find((run) => run.id === runId)?.activeAttemptId;
++      return (
++        attempts.find((attempt) => attempt.id === attemptId)?.nativeThreadId ??
++        providerThreadOf(runId)?.nativeThreadRef?.nativeId
++      );
++    };
++    const providerThread = providerThreadOf(subagent.runId);
++    const rootSessionId = sessionOf(subagent.runId);
++    if (!rootSessionId || providerThread?.providerInstanceId !== subagent.providerInstanceId) {
++      return undefined;
++    }
++    const directories = yield* resolveAntigravityInstanceDirectories(
++      stateDir,
++      subagent.providerInstanceId,
++    ).pipe(Effect.provideService(Digest.Digest, digest), Effect.provideService(Path.Path, path));
++    const siblings = others.flatMap((other) => {
++      const id = other.nativeTaskRef?.nativeId;
++      return id && sessionOf(other.runId) === rootSessionId
++        ? [{ nativeTaskId: id, title: other.title, prompt: other.prompt }]
++        : [];
++    });
++    return {
++      thread,
++      parentThreadId,
++      subagent,
++      nativeTaskId,
++      providerThread,
++      rootSessionId,
++      profileDirectory: directories.profile,
++      siblings,
++    };
++  });
+ 
+   const getNativeChildWork = Effect.fn("NativeChildWorkQuery.getNativeChildWork")(
+     function* (input: OrchestrationV2GetNativeChildWorkInput) {
+-      const { thread } = yield* threads.getThreadRecords(input.threadId, []);
+-      const parentThreadId = thread.lineage.parentThreadId;
+-      if (
+-        !isProviderNativeSubagentThread(thread) ||
+-        parentThreadId === null ||
+-        thread.forkedFrom?.type !== "node"
+-      ) {
+-        return NO_CHILDREN;
+-      }
+-      const subagentId = thread.forkedFrom.nodeId;
+-      const { subagents } = yield* threads.getThreadRecords(parentThreadId, ["subagents"]);
+-      const subagent = subagents.find(
+-        (candidate) => candidate.id === subagentId && candidate.childThreadId === thread.id,
+-      );
+-      const nativeTaskId = subagent?.nativeTaskRef?.nativeId;
+-      if (
+-        subagent?.driver !== "antigravity" ||
+-        subagent.origin !== "provider_native" ||
+-        subagent.runId === null ||
+-        !nativeTaskId
+-      ) {
+-        return NO_CHILDREN;
+-      }
+-      const others = subagents.filter(
+-        (candidate) =>
+-          candidate.id !== subagent.id &&
+-          candidate.driver === "antigravity" &&
+-          candidate.origin === "provider_native" &&
+-          candidate.providerInstanceId === subagent.providerInstanceId,
+-      );
+-      const { runs, providerThreads } = yield* threads.getThreadRecords(
+-        parentThreadId,
+-        ["runs", "providerThreads"],
+-        { runIds: [subagent.runId, ...others.flatMap((other) => other.runId ?? [])] },
+-      );
+-      const { attempts } = yield* threads.getThreadRecords(parentThreadId, ["attempts"], {
+-        attemptIds: runs.flatMap((run) => run.activeAttemptId ?? []),
+-      });
+-      const providerThreadOf = (runId: string | null) => {
+-        const providerThreadId = runs.find((run) => run.id === runId)?.providerThreadId;
+-        return providerThreads.find((candidate) => candidate.id === providerThreadId);
+-      };
+-      // Rollback moves the provider thread to a fresh session; a batch's records stay where it ran.
+-      const sessionOf = (runId: string | null) => {
+-        const attemptId = runs.find((run) => run.id === runId)?.activeAttemptId;
+-        return (
+-          attempts.find((attempt) => attempt.id === attemptId)?.nativeThreadId ??
+-          providerThreadOf(runId)?.nativeThreadRef?.nativeId
+-        );
+-      };
+-      const providerThread = providerThreadOf(subagent.runId);
+-      const rootSessionId = sessionOf(subagent.runId);
+-      if (!rootSessionId || providerThread?.providerInstanceId !== subagent.providerInstanceId) {
+-        return NO_CHILDREN;
+-      }
+-      const directories = yield* resolveAntigravityInstanceDirectories(
+-        stateDir,
+-        subagent.providerInstanceId,
+-      ).pipe(Effect.provideService(Digest.Digest, digest), Effect.provideService(Path.Path, path));
++      const ctx = yield* resolveAntigravityChildContext(input.threadId);
++      if (ctx === undefined) return NO_CHILDREN;
+       const children = yield* readAntigravityChildWork({
+-        profileDirectory: directories.profile,
+-        rootSessionId,
+-        nativeTaskId,
+-        launch: { title: subagent.title, prompt: subagent.prompt },
+-        // Only batches from the same agent session can share its records.
+-        siblings: others.flatMap((other) => {
+-          const id = other.nativeTaskRef?.nativeId;
+-          return id && sessionOf(other.runId) === rootSessionId
+-            ? [{ nativeTaskId: id, title: other.title, prompt: other.prompt }]
+-            : [];
+-        }),
++        profileDirectory: ctx.profileDirectory,
++        rootSessionId: ctx.rootSessionId,
++        nativeTaskId: ctx.nativeTaskId,
++        launch: { title: ctx.subagent.title, prompt: ctx.subagent.prompt },
++        siblings: ctx.siblings,
+       });
+       return { children };
+     },
+@@ -121,7 +173,221 @@
+       ),
+   );
+ 
+-  return NativeChildWorkQuery.of({ getNativeChildWork });
++  const hydrateNativeChildThread = Effect.fn("NativeChildWorkQuery.hydrateNativeChildThread")(
++    function* (threadId: ThreadId) {
++      if (Option.isNone(eventSink)) return;
++      const quick = yield* threads.getThreadRecords(threadId, []);
++      if (!isProviderNativeSubagentThread(quick.thread)) return;
++      yield* hydrationLockFor(threadId).withPermits(1)(
++        Effect.gen(function* () {
++          const ctx = yield* resolveAntigravityChildContext(threadId);
++          if (ctx === undefined) return;
++          const itemIdentityVersion =
++            ctx.providerThread?.nativeMetadata?.itemIdentityVersion ??
++            (String(ctx.subagent.id).includes("provider-instance%3A") ? 2 : undefined);
++          const scopedNativeId = (nativeId: string) =>
++            itemIdentityVersion === 2
++              ? acpScopedNativeId(ctx.subagent.providerInstanceId, nativeId)
++              : nativeId;
++          const deriveTurnItemId = (nativeId: string) =>
++            IdAllocator.derive.turnItemFromProviderItem({
++              driver: "antigravity",
++              nativeItemId: scopedNativeId(nativeId),
++            });
++          const deriveMessageId = (nativeId: string) =>
++            IdAllocator.derive.messageFromProviderItem({
++              driver: "antigravity",
++              nativeItemId: scopedNativeId(nativeId),
++            });
++
++          const childRecords = yield* threads.getThreadRecords(ctx.thread.id, [
++            "turnItems",
++            "messages",
++            "nodes",
++          ]);
++          const parentRecords = yield* threads.getThreadRecords(ctx.parentThreadId, [
++            "nodes",
++            "turnItems",
++          ]);
++          const childRootNode =
++            childRecords.nodes.find((node) => node.kind === "root_turn") ?? undefined;
++          const childRootNodeId =
++            childRootNode?.id ??
++            IdAllocator.derive.nodeFromProviderItem({
++              driver: "antigravity",
++              nativeItemId: scopedNativeId(`${ctx.nativeTaskId}:child-root`),
++            });
++
++          const fallbackTimestamp = ctx.subagent.startedAt ?? ctx.subagent.updatedAt;
++          const timeline = yield* readAntigravityChildTimeline({
++            profileDirectory: ctx.profileDirectory,
++            rootSessionId: ctx.rootSessionId,
++            nativeTaskId: ctx.nativeTaskId,
++            launch: { title: ctx.subagent.title, prompt: ctx.subagent.prompt },
++            siblings: ctx.siblings,
++            target: {
++              nativeTaskId: ctx.nativeTaskId,
++              childThreadId: ctx.thread.id,
++              childRootNodeId,
++              providerThreadId: null,
++              prompt: ctx.subagent.prompt,
++              fallbackTimestamp,
++              deriveTurnItemId,
++              deriveMessageId,
++            },
++          });
++          if (timeline === undefined) return;
++
++          const existingMessages = new Map(
++            childRecords.messages.map((message) => [message.id, message]),
++          );
++          const existingItems = new Map(
++            childRecords.turnItems.map((item) => [item.id, boundFileChangeForStorage(item)]),
++          );
++          const now = yield* DateTime.now;
++          const events: Array<OrchestrationV2DomainEvent> = [];
++
++          for (const message of timeline.messages) {
++            const existing = existingMessages.get(message.id);
++            if (existing !== undefined && messageSignature(existing) === messageSignature(message)) {
++              continue;
++            }
++            events.push({
++              id: EventId.make(yield* randomUuidV4),
++              type: "message.updated",
++              threadId: ctx.thread.id,
++              nodeId: childRootNodeId,
++              driver: "antigravity",
++              providerInstanceId: ctx.subagent.providerInstanceId,
++              occurredAt: now,
++              payload: message,
++            });
++          }
++
++          for (const rawItem of timeline.turnItems) {
++            const item = boundFileChangeForStorage(rawItem);
++            const existing = existingItems.get(item.id);
++            if (existing !== undefined && turnItemSignature(existing) === turnItemSignature(item)) {
++              continue;
++            }
++            events.push({
++              id: EventId.make(yield* randomUuidV4),
++              type: "turn-item.updated",
++              threadId: ctx.thread.id,
++              nodeId: childRootNodeId,
++              driver: "antigravity",
++              providerInstanceId: ctx.subagent.providerInstanceId,
++              occurredAt: now,
++              payload: item,
++            });
++          }
++
++          const shouldReconcileStatus =
++            timeline.status !== null &&
++            ((isOrchestrationV2WorkActive(ctx.subagent.status) &&
++              timeline.status !== ctx.subagent.status) ||
++              (ctx.subagent.status === "idle" && timeline.status === "failed"));
++          const nextStatus = shouldReconcileStatus ? timeline.status! : ctx.subagent.status;
++          const nextModel = ctx.subagent.model ?? timeline.model;
++          const nextResult = timeline.result ?? ctx.subagent.result;
++          const isTerminal =
++            nextStatus === "completed" || nextStatus === "failed" || nextStatus === "cancelled";
++
++          if (
++            shouldReconcileStatus ||
++            (ctx.subagent.model === null && timeline.model !== null)
++          ) {
++            const completedAt = isTerminal ? (ctx.subagent.completedAt ?? now) : null;
++            const nextProgress = isTerminal
++              ? undefined
++              : (timeline.progress ?? ctx.subagent.progress);
++            const { progress: _droppedProgress, ...subagentRest } = ctx.subagent;
++            const updatedSubagent = {
++              ...subagentRest,
++              status: nextStatus,
++              model: nextModel,
++              result: nextResult,
++              completedAt,
++              updatedAt: now,
++              ...(nextProgress === undefined ? {} : { progress: nextProgress }),
++            };
++            events.push({
++              id: EventId.make(yield* randomUuidV4),
++              type: "subagent.updated",
++              threadId: ctx.parentThreadId,
++              ...(ctx.subagent.runId === null ? {} : { runId: ctx.subagent.runId }),
++              nodeId: ctx.subagent.id,
++              driver: "antigravity",
++              providerInstanceId: ctx.subagent.providerInstanceId,
++              occurredAt: now,
++              payload: updatedSubagent,
++            });
++
++            if (shouldReconcileStatus) {
++              const parentNode = parentRecords.nodes.find((node) => node.id === ctx.subagent.id);
++              if (parentNode !== undefined) {
++                events.push({
++                  id: EventId.make(yield* randomUuidV4),
++                  type: "node.updated",
++                  threadId: ctx.parentThreadId,
++                  ...(parentNode.runId === null ? {} : { runId: parentNode.runId }),
++                  nodeId: parentNode.id,
++                  driver: "antigravity",
++                  providerInstanceId: ctx.subagent.providerInstanceId,
++                  occurredAt: now,
++                  payload: { ...parentNode, status: nextStatus, completedAt },
++                });
++              }
++              if (childRootNode !== undefined) {
++                events.push({
++                  id: EventId.make(yield* randomUuidV4),
++                  type: "node.updated",
++                  threadId: ctx.thread.id,
++                  nodeId: childRootNode.id,
++                  driver: "antigravity",
++                  providerInstanceId: ctx.subagent.providerInstanceId,
++                  occurredAt: now,
++                  payload: { ...childRootNode, status: nextStatus, completedAt },
++                });
++              }
++              const parentTurnItem = parentRecords.turnItems.find(
++                (item): item is Extract<OrchestrationV2TurnItem, { readonly type: "subagent" }> =>
++                  item.type === "subagent" && item.subagentId === ctx.subagent.id,
++              );
++              if (parentTurnItem !== undefined) {
++                const { progress: _itemProgress, ...itemRest } = parentTurnItem;
++                events.push({
++                  id: EventId.make(yield* randomUuidV4),
++                  type: "turn-item.updated",
++                  threadId: ctx.parentThreadId,
++                  ...(parentTurnItem.runId === null ? {} : { runId: parentTurnItem.runId }),
++                  ...(parentTurnItem.nodeId === null ? {} : { nodeId: parentTurnItem.nodeId }),
++                  driver: "antigravity",
++                  providerInstanceId: ctx.subagent.providerInstanceId,
++                  occurredAt: now,
++                  payload: {
++                    ...itemRest,
++                    status: nextStatus,
++                    result: nextResult,
++                    completedAt,
++                    updatedAt: now,
++                    ...(nextProgress === undefined ? {} : { progress: nextProgress }),
++                  },
++                });
++              }
++            }
++          }
++
++          if (events.length > 0) {
++            yield* eventSink.value.write({ events });
++          }
++        }),
++      );
++    },
++    (effect) => effect.pipe(Effect.ignore),
++  );
++
++  return NativeChildWorkQuery.of({ getNativeChildWork, hydrateNativeChildThread });
+ });
+ 
+ export const layer = Layer.effect(NativeChildWorkQuery, make);
+diff -ruN --no-dereference -x .repos -x node_modules -x dist -x .vite-temp -x .vite -x 'pnpm*' -x .tsbuildinfo a/apps/server/src/provider/acp/AntigravityChildWork.test.ts b/apps/server/src/provider/acp/AntigravityChildWork.test.ts
+--- a/apps/server/src/provider/acp/AntigravityChildWork.test.ts	1970-01-01 09:00:01.000000000 +0900
++++ b/apps/server/src/provider/acp/AntigravityChildWork.test.ts	2026-11-26 04:09:34.238450488 +0900
+@@ -3,6 +3,8 @@
+ 
+ import * as NodeServices from "@effect/platform-node/NodeServices";
+ import { expect, it } from "@effect/vitest";
++import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
++import * as DateTime from "effect/DateTime";
+ import * as Effect from "effect/Effect";
+ import * as FileSystem from "effect/FileSystem";
+ import * as Path from "effect/Path";
+@@ -13,6 +15,7 @@
+   describeAntigravitySubagentLaunches,
+   readAntigravityChildrenAtWork,
+   readAntigravityChildWork,
++  readAntigravityDetachedSubagentSync,
+ } from "./AntigravityChildWork.ts";
+ import { sanitizeAntigravityToolPayload } from "./AntigravityProtocol.ts";
+ import {
+@@ -505,16 +508,172 @@
+       yield* child(CHILD, "SUBAGENT_STATE_ALIVE", "call_alive");
+       yield* child(killed, "SUBAGENT_STATE_KILLED", "call_killed");
+ 
++      const idleId = "1b692499-d9d9-439d-a2a0-90932fd25b39";
++      const erroredId = "2c793500-d9d9-439d-a2a0-90932fd25b39";
++      yield* child(idleId, "SUBAGENT_STATE_ALIVE", "call_idle");
++      yield* child(erroredId, "SUBAGENT_STATE_ALIVE", "call_errored");
++      yield* writeJson([ROOT, ".system_generated", "messages", "idle-notice.json"], {
++        sender: "system",
++        content: `Subagent ${idleId} has gone idle. This was the subagent's most recent response: Done.`,
++      });
++      yield* writeJson([ROOT, ".system_generated", "messages", "error-notice.json"], {
++        sender: "system",
++        content: `The subagent NixOS Auditor (research) with id "${erroredId}" encountered an error and has either stopped or failed to start execution: RESOURCE_EXHAUSTED (code 429): Individual quota reached.`,
++      });
++
+       expect(
+         yield* readAntigravityChildrenAtWork({
+           profileDirectory: profile,
+           rootSessionId: ROOT,
+-          toolCallIds: ["call_alive", "call_killed"],
++          toolCallIds: ["call_alive", "call_killed", "call_idle", "call_errored"],
+         }),
+       ).toEqual(["call_alive"]);
+     }),
+   );
+ 
++  it.effect("projects transcript steps and parent notices into child turn items and status", () =>
++    Effect.gen(function* () {
++      const fs = yield* FileSystem.FileSystem;
++      const path = yield* Path.Path;
++      const profile = yield* fs.makeTempDirectoryScoped({ prefix: "t3-agy-timeline-" });
++      const childId = "41bcb0e1-2fe9-4152-9e2d-8a8116029720";
++      const writeJson = (segments: ReadonlyArray<string>, value: unknown) => {
++        const file = path.join(profile, "antigravity-acp", "brain", ...segments);
++        return fs
++          .makeDirectory(path.dirname(file), { recursive: true })
++          .pipe(Effect.andThen(fs.writeFileString(file, JSON.stringify(value))));
++      };
++      yield* writeJson([ROOT, ".system_generated", "subagents", `${childId}.json`], {
++        conversationId: childId,
++        subagentDescriptor: { typeName: "research", role: LAUNCH.role },
++        state: "SUBAGENT_STATE_ALIVE",
++      });
++      yield* writeJson([childId, ".system_generated", "messages", "launch.json"], {
++        sender: ROOT,
++        content: LAUNCH.prompt,
++        sourceMetadata: {
++          tool: { conversationId: ROOT, toolCall: { id: "call_timeline", name: "invoke_subagent" } },
++        },
++      });
++      yield* writeJson([ROOT, ".system_generated", "messages", "err.json"], {
++        sender: "system",
++        content: `The subagent NixOS Auditor (research) with id "${childId}" encountered an error and has either stopped or failed to start execution: RESOURCE_EXHAUSTED (code 429): Individual quota reached.`,
++      });
++      const transcriptPath = path.join(
++        profile,
++        "antigravity-acp",
++        "brain",
++        childId,
++        ".system_generated",
++        "logs",
++        "transcript.jsonl",
++      );
++      yield* fs.makeDirectory(path.dirname(transcriptPath), { recursive: true });
++      const lines = [
++        JSON.stringify({
++          step_index: 0,
++          type: "SYSTEM_MESSAGE",
++          status: "DONE",
++          content: LAUNCH.prompt,
++        }),
++        JSON.stringify({
++          step_index: 1,
++          type: "PLANNER_RESPONSE",
++          status: "DONE",
++          created_at: "2026-11-25T15:04:31Z",
++          model: "gemini-pro-orchestrator",
++          thinking: "Let me check flake.nix first.",
++          tool_calls: [
++            { name: "read_file", args: { Path: '"/project/flake.nix"' } },
++            {
++              name: "run_command",
++              args: { CommandLine: '"git status"', toolSummary: '"Check git status"' },
++            },
++            {
++              name: "edit_file",
++              args: { Path: '"/project/a.txt"', Target: '"old"', Replacement: '"new"' },
++            },
++            { name: "search_web", args: { query: '"nixos flake"' } },
++          ],
++        }),
++        JSON.stringify({
++          step_index: 2,
++          type: "GENERIC",
++          status: "DONE",
++          created_at: "2026-11-25T15:04:32Z",
++          content: "Created At: 2026-11-25T15:04:31Z\nCompleted At: 2026-11-25T15:04:32Z\n{ inputs = {}; }",
++        }),
++        JSON.stringify({
++          step_index: 3,
++          type: "GENERIC",
++          status: "ERROR",
++          created_at: "2026-11-25T15:04:33Z",
++          error: "permission denied",
++          content:
++            "Created At: 2026-11-25T15:04:32Z\nCompleted At: 2026-11-25T15:04:33Z\nEncountered error: permission denied",
++        }),
++        JSON.stringify({
++          step_index: 4,
++          type: "GENERIC",
++          status: "DONE",
++          created_at: "2026-11-25T15:04:34Z",
++          content: "Created At: 2026-11-25T15:04:33Z\nUpdated",
++        }),
++        JSON.stringify({
++          step_index: 5,
++          type: "GENERIC",
++          status: "DONE",
++          created_at: "2026-11-25T15:04:35Z",
++          content: "Created At: 2026-11-25T15:04:34Z\nResult snippet",
++        }),
++        "{corrupted json line",
++      ].join("\n") + "\n";
++      yield* fs.writeFileString(transcriptPath, lines);
++
++      const fallback = DateTime.makeUnsafe("2026-11-25T15:04:30Z");
++      const synced = yield* readAntigravityDetachedSubagentSync({
++        profileDirectory: profile,
++        rootSessionId: ROOT,
++        subagents: [
++          {
++            nativeTaskId: "call_timeline",
++            childThreadId: "thread-child-1" as never,
++            childRootNodeId: "node-child-root" as never,
++            providerThreadId: null,
++            prompt: LAUNCH.prompt,
++            fallbackTimestamp: fallback,
++            deriveTurnItemId: (nativeItemId) =>
++              IdAllocator.derive.turnItemFromProviderItem({ driver: "antigravity", nativeItemId }),
++            deriveMessageId: (nativeItemId) =>
++              IdAllocator.derive.messageFromProviderItem({ driver: "antigravity", nativeItemId }),
++          },
++        ],
++      });
++      expect(synced).toHaveLength(1);
++      const entry = synced[0]!;
++      expect(entry.model).toBe("gemini-pro-orchestrator");
++      expect(entry.status).toBe("failed");
++      const types = entry.turnItems.map((item) => item.type);
++      expect(types).toEqual([
++        "reasoning",
++        "dynamic_tool",
++        "command_execution",
++        "file_change",
++        "web_search",
++        "error",
++      ]);
++      const readItem = entry.turnItems[1] as Extract<typeof entry.turnItems[number], { type: "dynamic_tool" }>;
++      expect(readItem.toolName).toBe("Read");
++      expect(readItem.output).toBe("{ inputs = {}; }");
++      const cmdItem = entry.turnItems[2] as Extract<typeof entry.turnItems[number], { type: "command_execution" }>;
++      expect(cmdItem.status).toBe("failed");
++      expect(cmdItem.outputIndicatesFailure).toBe(true);
++      const errorItem = entry.turnItems[5] as Extract<typeof entry.turnItems[number], { type: "error" }>;
++      expect(errorItem.failure.class).toBe("usage_limit");
++      expect(errorItem.failure.code).toBe("RESOURCE_EXHAUSTED");
++    }),
++  );
++
+   it.effect("shares one transcript budget across the batch", () =>
+     Effect.gen(function* () {
+       const filler = JSON.stringify({
+diff -ruN --no-dereference -x .repos -x node_modules -x dist -x .vite-temp -x .vite -x 'pnpm*' -x .tsbuildinfo a/apps/server/src/provider/acp/AntigravityChildWork.ts b/apps/server/src/provider/acp/AntigravityChildWork.ts
+--- a/apps/server/src/provider/acp/AntigravityChildWork.ts	1970-01-01 09:00:01.000000000 +0900
++++ b/apps/server/src/provider/acp/AntigravityChildWork.ts	2026-11-26 04:09:32.584433756 +0900
+@@ -5,9 +5,24 @@
+ import * as NodeURL from "node:url";
+ 
+ import type {
++  MessageId,
++  NodeId,
++  OrchestrationV2ConversationMessage,
++  OrchestrationV2FileChangeDetail,
++  OrchestrationV2FileSearchResult,
+   OrchestrationV2NativeChildStep,
+   OrchestrationV2NativeChildWork,
++  OrchestrationV2ProviderFailure,
++  OrchestrationV2TurnItem,
++  OrchestrationV2WebSearchResult,
++  ProviderThreadId,
++  ThreadId,
++  TurnItemId,
+ } from "@t3tools/contracts";
++import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
++import { makeSubagentConversationArtifacts } from "@t3tools/provider-core/server/subagentProjection";
++import { formatReadToolLabel, formatSearchToolLabel } from "@t3tools/shared/toolActivity";
++import * as DateTime from "effect/DateTime";
+ import * as Effect from "effect/Effect";
+ import * as Option from "effect/Option";
+ import * as Predicate from "effect/Predicate";
+@@ -32,9 +47,12 @@
+ const MAX_SCAN_BYTES = 8 * 1024 * 1024;
+ const MAX_CHILDREN = 16;
+ const TRANSCRIPT_BYTE_CAP = 256 * 1024;
++const TIMELINE_TRANSCRIPT_BYTE_CAP = 512 * 1024;
+ const BATCH_TRANSCRIPT_BYTES = 512 * 1024;
+ const STEP_TEXT_CAP = 4_000;
++const TIMELINE_TEXT_CAP = 32_000;
+ const TOOL_INPUT_CAP = 1_000;
++const MAX_TIMELINE_CACHE_ENTRIES = 64;
+ const MAX_MESSAGE_FILES = 256;
+ const MAX_DETACHED_CHILDREN = 64;
+ 
+@@ -308,14 +326,20 @@
+ 
+ const TranscriptLine = Schema.Struct({
+   step_index: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
++  source: Schema.optional(Schema.String),
+   type: Schema.String,
+   status: Schema.optional(Schema.String),
++  created_at: Schema.optional(Schema.String),
++  model: Schema.optional(Schema.String),
++  thinking: Schema.optional(Schema.String),
+   content: Schema.optional(Schema.String),
+   error: Schema.optional(Schema.String),
++  exit_code: Schema.optional(Schema.Int),
+   tool_calls: Schema.optional(
+     Schema.Array(Schema.Struct({ name: Schema.String, args: Schema.optional(Schema.Unknown) })),
+   ),
+ });
++type ParsedTranscriptLine = typeof TranscriptLine.Type;
+ const decodeTranscriptLine = Schema.decodeUnknownOption(Schema.fromJsonString(TranscriptLine));
+ 
+ // The runtime records each tool argument value as JSON text.
+@@ -330,50 +354,35 @@
+       )
+     : (args ?? {});
+ 
+-const capText = (value: string, limit: number) =>
+-  value.length <= limit ? value : `${value.slice(0, limit)}…`;
++const capText = (value: string, limit: number) => {
++  if (value.length <= limit) return value;
++  const code = value.charCodeAt(limit - 1);
++  const end = code >= 0xd800 && code <= 0xdbff ? limit - 1 : limit;
++  return `${value.slice(0, end)}…`;
++};
+ 
+-/** Skips the runtime's opening envelope around the launch prompt the view already shows. */
+-function transcriptSteps(
+-  contents: string,
+-  prompt: string,
+-): ReadonlyArray<OrchestrationV2NativeChildStep> {
+-  const launchPrompt = prompt.trim();
+-  return contents.split("\n").flatMap((line) =>
+-    Option.match(decodeTranscriptLine(line), {
+-      onNone: () => [],
+-      onSome: (step) =>
+-        step.step_index === 0 &&
+-        step.type === "SYSTEM_MESSAGE" &&
+-        launchPrompt !== "" &&
+-        step.content?.includes(launchPrompt) === true
+-          ? []
+-          : [
+-              {
+-                index: step.step_index,
+-                type: step.type,
+-                status: step.status ?? null,
+-                text:
+-                  step.content !== undefined || step.error !== undefined
+-                    ? capText(step.content ?? step.error ?? "", STEP_TEXT_CAP)
+-                    : null,
+-                toolCalls: (step.tool_calls ?? []).map((call) => ({
+-                  name: call.name,
+-                  input: capText(JSON.stringify(toolArguments(call.args)), TOOL_INPUT_CAP),
+-                })),
+-              },
+-            ],
+-    }),
+-  );
+-}
++const rawTranscriptCache = new Map<
++  string,
++  {
++    readonly mtimeMs: number;
++    readonly size: number;
++    readonly rawSteps: ReadonlyArray<ParsedTranscriptLine>;
++    readonly truncated: boolean;
++  }
++>();
+ 
+-/** Reads the tail of the transcript at the named child's own unlinked profile path. */
+-async function readChildTranscript(
++/** Reads and parses lines from `transcript.jsonl`, reusing unchanged tail snapshots across polls. */
++async function readRawTranscript(
+   profileRoot: string,
+   child: InvokeRecord["children"][number],
+-  prompt: string,
+   byteCap: number,
+-) {
++): Promise<
++  | {
++      readonly rawSteps: ReadonlyArray<ParsedTranscriptLine>;
++      readonly truncated: boolean;
++    }
++  | undefined
++> {
+   const expected = (
+     await antigravityManagedPath(
+       profileRoot,
+@@ -405,6 +414,11 @@
+   try {
+     const stat = await handle.stat();
+     if (!stat.isFile()) return undefined;
++    const cacheKey = `${expected}\u0000${byteCap}`;
++    const cached = rawTranscriptCache.get(cacheKey);
++    if (cached !== undefined && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
++      return { rawSteps: cached.rawSteps, truncated: cached.truncated };
++    }
+     const length = Math.min(stat.size, byteCap);
+     const buffer = Buffer.alloc(length);
+     const { bytesRead } = await handle.read(buffer, 0, length, stat.size - length);
+@@ -412,12 +426,686 @@
+     let contents = buffer.subarray(0, bytesRead).toString("utf8");
+     // A tail read starts mid-line.
+     if (truncated) contents = contents.slice(contents.indexOf("\n") + 1);
+-    return { steps: transcriptSteps(contents, prompt), truncated };
++    const rawSteps = contents
++      .split("\n")
++      .flatMap((line) => Option.toArray(decodeTranscriptLine(line)));
++    if (rawTranscriptCache.size >= MAX_TIMELINE_CACHE_ENTRIES) {
++      const oldest = rawTranscriptCache.keys().next().value;
++      if (oldest !== undefined) rawTranscriptCache.delete(oldest);
++    }
++    rawTranscriptCache.set(cacheKey, {
++      mtimeMs: stat.mtimeMs,
++      size: stat.size,
++      rawSteps,
++      truncated,
++    });
++    return { rawSteps, truncated };
+   } finally {
+     await handle.close();
+   }
+ }
+ 
++/** Skips the runtime's opening envelope around the launch prompt the view already shows. */
++function formatTranscriptSteps(
++  rawSteps: ReadonlyArray<ParsedTranscriptLine>,
++  prompt: string,
++): ReadonlyArray<OrchestrationV2NativeChildStep> {
++  const launchPrompt = prompt.trim();
++  return rawSteps.flatMap((step) =>
++    step.step_index === 0 &&
++    step.type === "SYSTEM_MESSAGE" &&
++    launchPrompt !== "" &&
++    step.content?.includes(launchPrompt) === true
++      ? []
++      : [
++          {
++            index: step.step_index,
++            type: step.type,
++            status: step.status ?? null,
++            text:
++              step.content !== undefined || step.error !== undefined
++                ? capText(step.content ?? step.error ?? "", STEP_TEXT_CAP)
++                : null,
++            toolCalls: (step.tool_calls ?? []).map((call) => ({
++              name: call.name,
++              input: capText(JSON.stringify(toolArguments(call.args)), TOOL_INPUT_CAP),
++            })),
++          },
++        ],
++  );
++}
++
++/** Reads the tail of the transcript at the named child's own unlinked profile path. */
++async function readChildTranscript(
++  profileRoot: string,
++  child: InvokeRecord["children"][number],
++  prompt: string,
++  byteCap: number,
++) {
++  const raw = await readRawTranscript(profileRoot, child, byteCap);
++  if (raw === undefined) return undefined;
++  return { steps: formatTranscriptSteps(raw.rawSteps, prompt), truncated: raw.truncated };
++}
++
++export interface AntigravityChildTimelineInput {
++  readonly nativeTaskId: string;
++  readonly childThreadId: ThreadId;
++  readonly childRootNodeId: NodeId;
++  readonly providerThreadId: ProviderThreadId | null;
++  readonly prompt: string;
++  readonly fallbackTimestamp: DateTime.Utc;
++  readonly deriveTurnItemId: (nativeItemId: string) => TurnItemId;
++  readonly deriveMessageId: (nativeItemId: string) => MessageId;
++}
++
++export interface AntigravityDetachedSubagentSyncEntry {
++  readonly nativeTaskId: string;
++  readonly childSessionId: string | null;
++  readonly model: string | null;
++  readonly status: "running" | "idle" | "completed" | "failed" | "cancelled" | null;
++  readonly progress: string | null;
++  readonly result: string | null;
++  readonly messages: ReadonlyArray<OrchestrationV2ConversationMessage>;
++  readonly turnItems: ReadonlyArray<OrchestrationV2TurnItem>;
++}
++
++export interface AntigravityChildTimelineResult extends AntigravityDetachedSubagentSyncEntry {
++  readonly conversationId: string;
++  readonly truncated: boolean;
++}
++
++const QUOTA_ERROR_TEXT = /QUOTA_EXHAUSTED|RESOURCE_EXHAUSTED|\(code 429\)|\bError 429\b/iu;
++const STATUS_OR_API_ERROR =
++  /(RESOURCE_EXHAUSTED|UNAUTHENTICATED|PERMISSION_DENIED|INTERNAL|UNAVAILABLE|DEADLINE_EXCEEDED|INVALID_ARGUMENT) \(code (\d{3})\):\s*([^\r\n]+)/u;
++const CHILD_RESET_TIMESTAMP =
++  /(?:"quotaResetTimeStamp"\s*:\s*"([^"\s]+)"|\bquotaResetTimeStamp:([^\s\],}]+))/u;
++const CHILD_GO_DURATION_PART = /(\d+(?:\.\d+)?)(ns|us|µs|μs|ms|h|m|s)/g;
++const CHILD_GO_DURATION_MS: Record<string, number> = {
++  ns: 1e-6,
++  us: 1e-3,
++  µs: 1e-3,
++  μs: 1e-3,
++  ms: 1,
++  s: 1_000,
++  m: 60_000,
++  h: 3_600_000,
++};
++const CHILD_RESETS_IN =
++  /\b(?:Resets in|retryDelay[:=]\s*"?)\s*((?:\d+(?:\.\d+)?(?:ns|us|µs|μs|ms|h|m|s))+)/u;
++
++function parseChildResetAt(text: string, referenceTime: DateTime.Utc): string | null {
++  const tsMatch = CHILD_RESET_TIMESTAMP.exec(text);
++  const rawTs = tsMatch?.[1] ?? tsMatch?.[2];
++  if (rawTs !== undefined && Option.isSome(DateTime.make(rawTs))) {
++    return rawTs;
++  }
++  const delayStr = CHILD_RESETS_IN.exec(text)?.[1];
++  if (delayStr === undefined) return null;
++  let delayMs = 0;
++  for (const [, amount, unit] of delayStr.matchAll(CHILD_GO_DURATION_PART)) {
++    delayMs += Number(amount) * (CHILD_GO_DURATION_MS[unit!] ?? 0);
++  }
++  if (!(delayMs > 0)) return null;
++  return DateTime.formatIso(DateTime.add(referenceTime, { milliseconds: Math.ceil(delayMs) }));
++}
++
++function parseAntigravityChildFailure(
++  errorText: string,
++  referenceTime: DateTime.Utc,
++): OrchestrationV2ProviderFailure {
++  const trimmed = errorText.trim();
++  const statusMatch = STATUS_OR_API_ERROR.exec(trimmed);
++  const isQuota = QUOTA_ERROR_TEXT.test(trimmed);
++  const code = statusMatch?.[1] ?? (isQuota ? "RESOURCE_EXHAUSTED" : null);
++  const detail = statusMatch?.[3]?.trim() ?? trimmed;
++  return makeProviderFailure({
++    class: isQuota ? "usage_limit" : "provider_error",
++    message: capText(detail.length > 0 ? detail : "Antigravity subagent failed.", STEP_TEXT_CAP),
++    code,
++    retryable: isQuota || statusMatch?.[2]?.startsWith("5") === true ? true : null,
++    resetAt: isQuota ? parseChildResetAt(trimmed, referenceTime) : null,
++  });
++}
++
++function stripStepTimestampHeader(value: string): string {
++  return value.replace(/^(?:(?:Created|Completed) At:[^\n]*\r?\n)+/u, "").trim();
++}
++
++function asTrimmedString(value: unknown): string | undefined {
++  if (typeof value !== "string") return undefined;
++  const trimmed = value.trim();
++  return trimmed.length > 0 ? trimmed : undefined;
++}
++
++function parseStepDateTime(raw: string | undefined, fallback: DateTime.Utc): DateTime.Utc {
++  if (raw === undefined) return fallback;
++  return Option.getOrElse(DateTime.make(raw), () => fallback);
++}
++
++interface ParentInboxChildSummary {
++  readonly reportedText?: string;
++  readonly idleText?: string;
++  readonly errorText?: string;
++}
++
++/** Projects a child's `transcript.jsonl` + parent inbox state into typed V2 thread items and status. */
++function buildAntigravityChildTimeline(input: {
++  readonly target: AntigravityChildTimelineInput;
++  readonly rootSessionId: string;
++  readonly childConversationId: string;
++  readonly rawSteps: ReadonlyArray<ParsedTranscriptLine>;
++  readonly truncated: boolean;
++  readonly parentNotice?: ParentInboxChildSummary;
++  readonly subagentState?: string;
++}): AntigravityChildTimelineResult {
++  const { target, rawSteps, parentNotice, subagentState } = input;
++  const messages: Array<OrchestrationV2ConversationMessage> = [];
++  const turnItems: Array<OrchestrationV2TurnItem> = [];
++  const consumedIndices = new Set<number>();
++
++  let latestModel: string | null = null;
++  let latestProgress: string | null = null;
++  let latestAssistantText: string | null = null;
++  let sentMessageToParent: string | null = null;
++  let lastMeaningfulStep: ParsedTranscriptLine | undefined;
++
++  const nextOrdinal = () => 101 + turnItems.length;
++  const baseItem = (
++    nativeId: string,
++    status: OrchestrationV2TurnItem["status"],
++    title: string | null,
++    startedAt: DateTime.Utc,
++    completedAt: DateTime.Utc | null,
++  ) => ({
++    id: target.deriveTurnItemId(nativeId),
++    threadId: target.childThreadId,
++    runId: null,
++    nodeId: target.childRootNodeId,
++    providerThreadId: target.providerThreadId,
++    providerTurnId: null,
++    nativeItemRef: { driver: "antigravity" as const, nativeId, strength: "weak" as const },
++    parentItemId: null,
++    ordinal: nextOrdinal(),
++    status,
++    title,
++    startedAt,
++    completedAt,
++    updatedAt: completedAt ?? startedAt,
++  });
++
++  const nonToolStepTypes = new Set([
++    "PLANNER_RESPONSE",
++    "SYSTEM_MESSAGE",
++    "CHECKPOINT",
++    "USER_INPUT",
++    "ERROR_MESSAGE",
++  ]);
++
++  for (let index = 0; index < rawSteps.length; index++) {
++    const step = rawSteps[index]!;
++    if (consumedIndices.has(index)) continue;
++    if (step.type === "SYSTEM_MESSAGE" || step.type === "CHECKPOINT" || step.type === "USER_INPUT") {
++      continue;
++    }
++    lastMeaningfulStep = step;
++    const stepTime = parseStepDateTime(step.created_at, target.fallbackTimestamp);
++
++    if (step.type === "ERROR_MESSAGE") {
++      const errorText = step.error?.trim() || step.content?.trim() || "Antigravity subagent error.";
++      const failure = parseAntigravityChildFailure(errorText, stepTime);
++      turnItems.push({
++        ...baseItem(
++          `${target.nativeTaskId}:step:${step.step_index}:error`,
++          "failed",
++          failure.class === "usage_limit" ? "Usage limit reached" : "Provider error",
++          stepTime,
++          stepTime,
++        ),
++        type: "error",
++        failure,
++      });
++      continue;
++    }
++
++    if (step.type !== "PLANNER_RESPONSE") {
++      const cleaned = step.content !== undefined ? stripStepTimestampHeader(step.content) : "";
++      const errText = step.error?.trim();
++      if (errText) {
++        const failure = parseAntigravityChildFailure(errText, stepTime);
++        turnItems.push({
++          ...baseItem(
++            `${target.nativeTaskId}:step:${step.step_index}:error`,
++            "failed",
++            failure.class === "usage_limit" ? "Usage limit reached" : "Provider error",
++            stepTime,
++            stepTime,
++          ),
++          type: "error",
++          failure,
++        });
++      } else if (cleaned.length > 0) {
++        turnItems.push({
++          ...baseItem(
++            `${target.nativeTaskId}:step:${step.step_index}:step`,
++            step.status === "ERROR"
++              ? "failed"
++              : step.status === "RUNNING"
++                ? "running"
++                : "completed",
++            step.type,
++            stepTime,
++            step.status === "RUNNING" ? null : stepTime,
++          ),
++          type: "dynamic_tool",
++          toolName: step.type,
++          input: {},
++          output: capText(cleaned, TIMELINE_TEXT_CAP),
++        });
++      }
++      continue;
++    }
++
++    const stepModel = asTrimmedString(step.model);
++    if (stepModel !== undefined) latestModel = stepModel;
++
++    const thinking = step.thinking?.trim();
++    if (thinking !== undefined && thinking.length > 0) {
++      const streaming = step.status === "RUNNING";
++      turnItems.push({
++        ...baseItem(
++          `${target.nativeTaskId}:step:${step.step_index}:reasoning`,
++          streaming ? "running" : "completed",
++          null,
++          stepTime,
++          streaming ? null : stepTime,
++        ),
++        type: "reasoning",
++        text: capText(thinking, TIMELINE_TEXT_CAP),
++        streaming,
++      });
++    }
++
++    const calls = step.tool_calls ?? [];
++    if (calls.length > 0) {
++      const pairedSteps: Array<ParsedTranscriptLine> = [];
++      for (let nextIndex = index + 1; nextIndex < rawSteps.length; nextIndex++) {
++        const candidate = rawSteps[nextIndex]!;
++        if (candidate.type === "PLANNER_RESPONSE") break;
++        if (nonToolStepTypes.has(candidate.type)) continue;
++        pairedSteps.push(candidate);
++        consumedIndices.add(nextIndex);
++        if (pairedSteps.length >= calls.length) break;
++      }
++
++      for (let callIndex = 0; callIndex < calls.length; callIndex++) {
++        const call = calls[callIndex]!;
++        const resultStep = pairedSteps[callIndex];
++        const args = toolArguments(call.args);
++        const argsRecord: Record<string, unknown> =
++          Predicate.isObject(args) && !Array.isArray(args)
++            ? (args as Record<string, unknown>)
++            : {};
++        const toolSummary = asTrimmedString(argsRecord.toolSummary);
++        const completedAt =
++          resultStep === undefined || resultStep.status === "RUNNING"
++            ? null
++            : parseStepDateTime(resultStep.created_at, stepTime);
++        const itemStatus: OrchestrationV2TurnItem["status"] =
++          resultStep === undefined || resultStep.status === "RUNNING"
++            ? "running"
++            : resultStep.status === "ERROR"
++              ? "failed"
++              : "completed";
++        const cleanedContent =
++          resultStep?.content !== undefined ? stripStepTimestampHeader(resultStep.content) : "";
++        const resultError = asTrimmedString(resultStep?.error);
++        const combinedOutput =
++          cleanedContent.length > 0 && resultError !== undefined && !cleanedContent.includes(resultError)
++            ? `${cleanedContent}\n${resultError}`
++            : cleanedContent.length > 0
++              ? cleanedContent
++              : (resultError ?? "");
++        const boundedOutput =
++          combinedOutput.length > 0 ? capText(combinedOutput, TIMELINE_TEXT_CAP) : undefined;
++        const nativeItemId = `${target.nativeTaskId}:step:${step.step_index}:tool:${callIndex}`;
++
++        let turnItem: OrchestrationV2TurnItem;
++        switch (call.name) {
++          case "read_file":
++          case "view_file": {
++            const targetPath =
++              asTrimmedString(argsRecord.Path) ??
++              asTrimmedString(argsRecord.AbsolutePath) ??
++              asTrimmedString(argsRecord.path);
++            const title = targetPath !== undefined ? formatReadToolLabel(targetPath) : (toolSummary ?? "Read file");
++            const inputValue =
++              targetPath === undefined ||
++              ["path", "filePath", "file_path"].some((key) => argsRecord[key] === targetPath)
++                ? argsRecord
++                : { ...argsRecord, path: targetPath };
++            turnItem = {
++              ...baseItem(nativeItemId, itemStatus, title, stepTime, completedAt),
++              type: "dynamic_tool",
++              toolName: "Read",
++              input: inputValue,
++              ...(boundedOutput === undefined ? {} : { output: boundedOutput }),
++            };
++            break;
++          }
++          case "run_command": {
++            const commandInput =
++              asTrimmedString(argsRecord.CommandLine) ??
++              asTrimmedString(argsRecord.command) ??
++              toolSummary ??
++              "Run command";
++            const exitCode = resultStep?.exit_code;
++            turnItem = {
++              ...baseItem(
++                nativeItemId,
++                itemStatus,
++                toolSummary ?? commandInput,
++                stepTime,
++                completedAt,
++              ),
++              type: "command_execution",
++              input: commandInput,
++              ...(boundedOutput === undefined ? {} : { output: boundedOutput }),
++              ...(exitCode === undefined ? {} : { exitCode }),
++              ...(itemStatus === "failed" ? { outputIndicatesFailure: true } : {}),
++            };
++            break;
++          }
++          case "edit_file":
++          case "replace_file_content":
++          case "multi_replace_file_content":
++          case "write_file":
++          case "write_to_file": {
++            const fileName =
++              asTrimmedString(argsRecord.Path) ??
++              asTrimmedString(argsRecord.TargetFile) ??
++              asTrimmedString(argsRecord.path) ??
++              "File change";
++            const isWrite = call.name === "write_file" || call.name === "write_to_file";
++            const changes: ReadonlyArray<OrchestrationV2FileChangeDetail> = [
++              { operation: isWrite ? "create" : "update", path: fileName },
++            ];
++            const oldStr =
++              typeof argsRecord.Target === "string"
++                ? argsRecord.Target
++                : typeof argsRecord.TargetContent === "string"
++                  ? argsRecord.TargetContent
++                  : undefined;
++            const newStr =
++              typeof argsRecord.Replacement === "string"
++                ? argsRecord.Replacement
++                : typeof argsRecord.ReplacementContent === "string"
++                  ? argsRecord.ReplacementContent
++                  : typeof argsRecord.Content === "string"
++                    ? argsRecord.Content
++                    : typeof argsRecord.CodeContent === "string"
++                      ? argsRecord.CodeContent
++                      : undefined;
++            turnItem = {
++              ...baseItem(
++                nativeItemId,
++                itemStatus,
++                toolSummary ?? (isWrite ? `Write ${fileName}` : `Edit ${fileName}`),
++                stepTime,
++                completedAt,
++              ),
++              type: "file_change",
++              fileName,
++              changes,
++              ...(oldStr === undefined ? {} : { oldStr: capText(oldStr, TIMELINE_TEXT_CAP) }),
++              ...(newStr === undefined ? {} : { newStr: capText(newStr, TIMELINE_TEXT_CAP) }),
++              ...(itemStatus === "failed" && boundedOutput !== undefined
++                ? { diffStr: boundedOutput }
++                : {}),
++            };
++            break;
++          }
++          case "search_web":
++          case "read_url_content": {
++            const queryOrUrl =
++              call.name === "search_web"
++                ? (asTrimmedString(argsRecord.query) ?? asTrimmedString(argsRecord.Query))
++                : (asTrimmedString(argsRecord.Url) ?? asTrimmedString(argsRecord.url));
++            const url = call.name === "read_url_content" ? queryOrUrl : undefined;
++            const title =
++              call.name === "search_web"
++                ? queryOrUrl !== undefined
++                  ? `Web search: ${queryOrUrl}`
++                  : (toolSummary ?? "Web search")
++                : queryOrUrl !== undefined
++                  ? `Fetch: ${queryOrUrl}`
++                  : (toolSummary ?? "Read URL");
++            const results: ReadonlyArray<OrchestrationV2WebSearchResult> | undefined =
++              boundedOutput !== undefined
++                ? [
++                    {
++                      ...(queryOrUrl === undefined ? {} : { title: queryOrUrl }),
++                      ...(url === undefined ? {} : { url }),
++                      snippet: capText(boundedOutput, STEP_TEXT_CAP),
++                    },
++                  ]
++                : undefined;
++            turnItem = {
++              ...baseItem(nativeItemId, itemStatus, title, stepTime, completedAt),
++              type: "web_search",
++              ...(queryOrUrl === undefined ? {} : { patterns: [queryOrUrl] }),
++              ...(results === undefined ? {} : { results }),
++            };
++            break;
++          }
++          case "grep_search":
++          case "find_by_name":
++          case "list_dir": {
++            const pattern =
++              asTrimmedString(argsRecord.Query) ??
++              asTrimmedString(argsRecord.Pattern) ??
++              asTrimmedString(argsRecord.pattern) ??
++              asTrimmedString(argsRecord.SearchPath) ??
++              asTrimmedString(argsRecord.SearchDirectory) ??
++              asTrimmedString(argsRecord.DirectoryPath);
++            const targetFile =
++              asTrimmedString(argsRecord.SearchPath) ??
++              asTrimmedString(argsRecord.SearchDirectory) ??
++              asTrimmedString(argsRecord.DirectoryPath) ??
++              pattern;
++            const title =
++              formatSearchToolLabel({
++                rawInput: argsRecord,
++                input: argsRecord,
++                ...(pattern === undefined ? {} : { pattern }),
++              }) ??
++              toolSummary ??
++              call.name;
++            const results: ReadonlyArray<OrchestrationV2FileSearchResult> | undefined =
++              targetFile !== undefined
++                ? [
++                    {
++                      fileName: targetFile,
++                      ...(boundedOutput === undefined
++                        ? {}
++                        : { preview: capText(boundedOutput, STEP_TEXT_CAP) }),
++                    },
++                  ]
++                : undefined;
++            turnItem = {
++              ...baseItem(nativeItemId, itemStatus, title, stepTime, completedAt),
++              type: "file_search",
++              ...(pattern === undefined ? {} : { pattern }),
++              ...(results === undefined ? {} : { results }),
++            };
++            break;
++          }
++          case "call_mcp_tool": {
++            const serverName = asTrimmedString(argsRecord.ServerName);
++            const mcpTool = asTrimmedString(argsRecord.ToolName);
++            const title =
++              toolSummary ??
++              (serverName !== undefined && mcpTool !== undefined
++                ? `${serverName}: ${mcpTool}`
++                : (mcpTool ?? call.name));
++            turnItem = {
++              ...baseItem(nativeItemId, itemStatus, title, stepTime, completedAt),
++              type: "dynamic_tool",
++              toolName: mcpTool ?? call.name,
++              input: argsRecord.Arguments ?? argsRecord,
++              ...(boundedOutput === undefined ? {} : { output: boundedOutput }),
++            };
++            break;
++          }
++          default: {
++            if (call.name === "send_message") {
++              const recipient = asTrimmedString(argsRecord.Recipient);
++              const sentText = asTrimmedString(argsRecord.Message);
++              if (sentText !== undefined && (recipient === input.rootSessionId || recipient === "coordinator")) {
++                sentMessageToParent = sentText;
++              }
++            }
++            turnItem = {
++              ...baseItem(
++                nativeItemId,
++                itemStatus,
++                toolSummary ?? call.name,
++                stepTime,
++                completedAt,
++              ),
++              type: "dynamic_tool",
++              toolName: call.name,
++              input: argsRecord,
++              ...(boundedOutput === undefined ? {} : { output: boundedOutput }),
++            };
++            break;
++          }
++        }
++        turnItems.push(turnItem);
++        latestProgress = turnItem.title ?? latestProgress;
++      }
++    }
++
++    const assistantText = step.content?.trim();
++    if (assistantText !== undefined && assistantText.length > 0) {
++      const nativeItemId = `${target.nativeTaskId}:step:${step.step_index}:assistant`;
++      const artifacts = makeSubagentConversationArtifacts({
++        messageId: target.deriveMessageId(nativeItemId),
++        turnItemId: target.deriveTurnItemId(nativeItemId),
++        threadId: target.childThreadId,
++        rootNodeId: target.childRootNodeId,
++        providerThreadId: target.providerThreadId,
++        providerTurnId: null,
++        nativeItemRef: { driver: "antigravity", nativeId: nativeItemId, strength: "weak" },
++        role: "assistant",
++        text: assistantText,
++        ordinal: nextOrdinal(),
++        now: stepTime,
++      });
++      messages.push(artifacts.message);
++      turnItems.push(artifacts.turnItem);
++      latestAssistantText = assistantText;
++    }
++
++    const plannerError = step.error?.trim();
++    if (plannerError !== undefined && plannerError.length > 0) {
++      const failure = parseAntigravityChildFailure(plannerError, stepTime);
++      turnItems.push({
++        ...baseItem(
++          `${target.nativeTaskId}:step:${step.step_index}:planner-error`,
++          "failed",
++          failure.class === "usage_limit" ? "Usage limit reached" : "Provider error",
++          stepTime,
++          stepTime,
++        ),
++        type: "error",
++        failure,
++      });
++    } else if (step.status === "ERROR") {
++      const failure = parseAntigravityChildFailure("Antigravity subagent failed.", stepTime);
++      turnItems.push({
++        ...baseItem(
++          `${target.nativeTaskId}:step:${step.step_index}:planner-error`,
++          "failed",
++          "Provider error",
++          stepTime,
++          stepTime,
++        ),
++        type: "error",
++        failure,
++      });
++    }
++  }
++
++  let status: AntigravityDetachedSubagentSyncEntry["status"] = null;
++  let result: string | null = latestAssistantText ?? sentMessageToParent;
++
++  if (parentNotice?.errorText !== undefined) {
++    const failure = parseAntigravityChildFailure(parentNotice.errorText, target.fallbackTimestamp);
++    turnItems.push({
++      ...baseItem(
++        `${target.nativeTaskId}:notice:error`,
++        "failed",
++        failure.class === "usage_limit" ? "Usage limit reached" : "Provider error",
++        target.fallbackTimestamp,
++        target.fallbackTimestamp,
++      ),
++      type: "error",
++      failure,
++    });
++    status = "failed";
++    result = failure.message;
++  } else if (subagentState === "SUBAGENT_STATE_KILLED") {
++    status = "cancelled";
++  } else if (parentNotice?.reportedText !== undefined || parentNotice?.idleText !== undefined) {
++    status = "idle";
++    const noticeReply =
++      (parentNotice.reportedText?.length ?? 0) > 0
++        ? parentNotice.reportedText!
++        : (parentNotice.idleText?.length ?? 0) > 0
++          ? parentNotice.idleText!
++          : undefined;
++    if (noticeReply !== undefined) {
++      result = noticeReply;
++      if (latestAssistantText === null) {
++        const nativeItemId = `${target.nativeTaskId}:notice:reply`;
++        const artifacts = makeSubagentConversationArtifacts({
++          messageId: target.deriveMessageId(nativeItemId),
++          turnItemId: target.deriveTurnItemId(nativeItemId),
++          threadId: target.childThreadId,
++          rootNodeId: target.childRootNodeId,
++          providerThreadId: target.providerThreadId,
++          providerTurnId: null,
++          nativeItemRef: { driver: "antigravity", nativeId: nativeItemId, strength: "weak" },
++          role: "assistant",
++          text: noticeReply,
++          ordinal: nextOrdinal(),
++          now: target.fallbackTimestamp,
++        });
++        messages.push(artifacts.message);
++        turnItems.push(artifacts.turnItem);
++      }
++    }
++  } else if (lastMeaningfulStep?.type === "ERROR_MESSAGE") {
++    status = "failed";
++    const errText =
++      lastMeaningfulStep.error?.trim() || lastMeaningfulStep.content?.trim() || "Provider error";
++    result = parseAntigravityChildFailure(errText, target.fallbackTimestamp).message;
++  }
++
++  return {
++    nativeTaskId: target.nativeTaskId,
++    childSessionId: input.childConversationId,
++    conversationId: input.childConversationId,
++    model: latestModel,
++    status,
++    progress: status === null ? latestProgress : null,
++    result,
++    messages,
++    turnItems,
++    truncated: input.truncated,
++  };
++}
++
+ class AntigravityChildWorkReadError extends Schema.TaggedError<AntigravityChildWorkReadError>()(
+   "AntigravityChildWorkReadError",
+   { cause: Schema.Defect() },
+@@ -645,11 +1333,58 @@
+   return matches.length === 1 ? match : undefined;
+ }
+ 
++const SYSTEM_IDLE_NOTICE =
++  /^Subagent ([\w-]+) has gone idle\.(?:\s*This was the subagent's most recent response:\s*([\s\S]*))?$/u;
++const SYSTEM_ERROR_NOTICE =
++  /^The subagent\b[\s\S]*?\bwith id "([\w-]+)" encountered an error[^:]*:\s*([\s\S]+)$/u;
++
++type ParentInboxNotice =
++  | { readonly kind: "reported"; readonly childId: string; readonly text: string }
++  | { readonly kind: "idle"; readonly childId: string; readonly text: string }
++  | { readonly kind: "error"; readonly childId: string; readonly text: string };
++
++function parseParentInboxNotice(message: ChildMessage): ParentInboxNotice | undefined {
++  if (message.sender !== "system") {
++    return NATIVE_ID.test(message.sender)
++      ? { kind: "reported", childId: message.sender, text: message.content?.trim() ?? "" }
++      : undefined;
++  }
++  const content = message.content?.trim() ?? "";
++  const errorMatch = SYSTEM_ERROR_NOTICE.exec(content);
++  if (errorMatch?.[1] !== undefined && NATIVE_ID.test(errorMatch[1])) {
++    return { kind: "error", childId: errorMatch[1], text: errorMatch[2]?.trim() ?? content };
++  }
++  const idleMatch = SYSTEM_IDLE_NOTICE.exec(content);
++  if (idleMatch?.[1] !== undefined && NATIVE_ID.test(idleMatch[1])) {
++    return { kind: "idle", childId: idleMatch[1], text: idleMatch[2]?.trim() ?? "" };
++  }
++  return undefined;
++}
++
++function summarizeParentInbox(messages: ReadonlyArray<ChildMessage>) {
++  const reported = new Set<string>();
++  const byChild = new Map<string, ParentInboxChildSummary>();
++  for (const message of messages) {
++    const notice = parseParentInboxNotice(message);
++    if (notice === undefined) continue;
++    reported.add(notice.childId);
++    const current = byChild.get(notice.childId) ?? {};
++    if (notice.kind === "reported") {
++      byChild.set(notice.childId, { ...current, reportedText: notice.text });
++    } else if (notice.kind === "idle") {
++      byChild.set(notice.childId, { ...current, idleText: notice.text });
++    } else {
++      byChild.set(notice.childId, { ...current, errorText: notice.text });
++    }
++  }
++  return { reported, byChild };
++}
++
+ /**
+  * agy 1.5 children outlive their `invoke_subagent` call and the agent reports no end for them:
+- * a child is done, or waits for guidance, once its message is in the parent's inbox or its record
+- * says it was killed. Returns the launching tool call ids of children with neither; none when the
+- * records prove nothing.
++ * a child is done, or waits for guidance, once its message (or a system idle/error notice for it)
++ * is in the parent's inbox or its record says it was killed. Returns the launching tool call ids
++ * of children with neither; none when the records prove nothing.
+  */
+ export const readAntigravityChildrenAtWork = Effect.fn("readAntigravityChildrenAtWork")(
+   function* (input: {
+@@ -665,8 +1400,8 @@
+           ? undefined
+           : await listDetachedChildIds(profileRoot, input.rootSessionId);
+       if (profileRoot === undefined || childIds === undefined) return [];
+-      const reported = new Set(
+-        (await readInbox(profileRoot, input.rootSessionId)).map((message) => message.sender),
++      const { reported } = summarizeParentInbox(
++        await readInbox(profileRoot, input.rootSessionId),
+       );
+       const atWork: Array<string> = [];
+       for (const childId of childIds) {
+@@ -689,3 +1424,137 @@
+     }).pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []));
+   },
+ );
++
++/**
++ * Syncs detached agy 1.5 child transcripts and parent inbox notices for live subagents of a session.
++ */
++export const readAntigravityDetachedSubagentSync = Effect.fn(
++  "readAntigravityDetachedSubagentSync",
++)(function* (input: {
++  readonly profileDirectory: string;
++  readonly rootSessionId: string;
++  readonly subagents: ReadonlyArray<AntigravityChildTimelineInput>;
++}) {
++  if (!NATIVE_ID.test(input.rootSessionId) || input.subagents.length === 0) return [];
++  const read = async (): Promise<ReadonlyArray<AntigravityDetachedSubagentSyncEntry>> => {
++    const profileRoot = await antigravityProfileRoot(input.profileDirectory);
++    if (profileRoot === undefined) return [];
++    const childIds = await listDetachedChildIds(profileRoot, input.rootSessionId);
++    if (childIds === undefined || childIds.length === 0) return [];
++    const targetsByTaskId = new Map(input.subagents.map((target) => [target.nativeTaskId, target]));
++    const { byChild: inboxByChild } = summarizeParentInbox(
++      await readInbox(profileRoot, input.rootSessionId).catch(() => []),
++    );
++    const claims = new Map<
++      string,
++      Array<{
++        readonly childId: string;
++        readonly state: string | undefined;
++      }>
++    >();
++    for (const childId of childIds) {
++      const messages = await readInbox(profileRoot, childId).catch(() => undefined);
++      if (messages === undefined) continue;
++      for (const message of messages) {
++        const launch = detachedLaunchCall(message, input.rootSessionId);
++        if (launch === undefined || !targetsByTaskId.has(launch.id)) continue;
++        const subagent = await readDetachedSubagent(profileRoot, input.rootSessionId, childId);
++        const list = claims.get(launch.id) ?? [];
++        list.push({ childId, state: subagent?.state });
++        claims.set(launch.id, list);
++      }
++    }
++    const entries: Array<AntigravityDetachedSubagentSyncEntry> = [];
++    for (const target of input.subagents) {
++      const matches = claims.get(target.nativeTaskId);
++      const match = matches?.length === 1 ? matches[0] : undefined;
++      if (match === undefined) continue;
++      const transcript = await readRawTranscript(
++        profileRoot,
++        { conversationId: match.childId },
++        TIMELINE_TRANSCRIPT_BYTE_CAP,
++      ).catch(() => undefined);
++      entries.push(
++        buildAntigravityChildTimeline({
++          target,
++          rootSessionId: input.rootSessionId,
++          childConversationId: match.childId,
++          rawSteps: transcript?.rawSteps ?? [],
++          truncated: transcript?.truncated ?? false,
++          parentNotice: inboxByChild.get(match.childId),
++          subagentState: match.state,
++        }),
++      );
++    }
++    return entries;
++  };
++  return yield* Effect.tryPromise({
++    try: read,
++    catch: (cause) => new AntigravityChildWorkReadError({ cause }),
++  }).pipe(Effect.orElseSucceed((): ReadonlyArray<AntigravityDetachedSubagentSyncEntry> => []));
++});
++
++/** Reads a single subagent child's native transcript + status as V2 thread items for hydration. */
++export const readAntigravityChildTimeline = Effect.fn("readAntigravityChildTimeline")(
++  function* (input: {
++    readonly profileDirectory: string;
++    readonly rootSessionId: string;
++    readonly nativeTaskId: string;
++    readonly launch: BatchLaunch;
++    readonly siblings: ReadonlyArray<BatchLaunch & { readonly nativeTaskId: string }>;
++    readonly target: AntigravityChildTimelineInput;
++  }) {
++    if (!NATIVE_ID.test(input.rootSessionId)) return undefined;
++    return yield* Effect.tryPromise({
++      try: async (): Promise<AntigravityChildTimelineResult | undefined> => {
++        const profileRoot = await antigravityProfileRoot(input.profileDirectory);
++        if (profileRoot === undefined) return undefined;
++        let record = await findDetachedInvokeRecord(
++          profileRoot,
++          input.rootSessionId,
++          input.nativeTaskId,
++        );
++        const isDetached = record !== undefined;
++        if (record === undefined) {
++          const databasePath = (
++            await antigravityManagedPath(
++              profileRoot,
++              ["antigravity-acp", "conversations", `${input.rootSessionId}.db`],
++              "file",
++            )
++          )?.path;
++          if (databasePath === undefined) return undefined;
++          const database = new NodeSqlite.DatabaseSync(databasePath, { readOnly: true });
++          try {
++            record = findInvokeRecord(database, input);
++          } finally {
++            database.close();
++          }
++        }
++        if (record === undefined || record.children.length !== 1) return undefined;
++        const child = record.children[0]!;
++        const { byChild } = isDetached
++          ? summarizeParentInbox(await readInbox(profileRoot, input.rootSessionId).catch(() => []))
++          : { byChild: new Map<string, ParentInboxChildSummary>() };
++        const detachedRecord = isDetached
++          ? await readDetachedSubagent(profileRoot, input.rootSessionId, child.conversationId)
++          : undefined;
++        const transcript = await readRawTranscript(
++          profileRoot,
++          child,
++          TIMELINE_TRANSCRIPT_BYTE_CAP,
++        ).catch(() => undefined);
++        return buildAntigravityChildTimeline({
++          target: input.target,
++          rootSessionId: input.rootSessionId,
++          childConversationId: child.conversationId,
++          rawSteps: transcript?.rawSteps ?? [],
++          truncated: transcript?.truncated ?? false,
++          parentNotice: byChild.get(child.conversationId),
++          subagentState: detachedRecord?.state,
++        });
++      },
++      catch: (cause) => new AntigravityChildWorkReadError({ cause }),
++    });
++  },
++);
+diff -ruN --no-dereference -x .repos -x node_modules -x dist -x .vite-temp -x .vite -x 'pnpm*' -x .tsbuildinfo a/apps/server/src/server.ts b/apps/server/src/server.ts
+--- a/apps/server/src/server.ts	1970-01-01 09:00:01.000000000 +0900
++++ b/apps/server/src/server.ts	2026-11-26 03:45:38.830436962 +0900
+@@ -628,7 +628,7 @@
+ 
+ const layerOrchestrationApplication = Layer.merge(
+   CheckpointDiffQuery.layer,
+-  NativeChildWorkQuery.layer,
++  NativeChildWorkQuery.layer.pipe(Layer.provide(RuntimeLayer.layerEventSink)),
+ ).pipe(Layer.provideMerge(layerCheckpointStore), Layer.provideMerge(layerOrchestrationV2Runtime));
+ 
+ const layerThreadSettlementWorker = Layer.effectDiscard(
+diff -ruN --no-dereference -x .repos -x node_modules -x dist -x .vite-temp -x .vite -x 'pnpm*' -x .tsbuildinfo a/apps/server/src/ws.test.ts b/apps/server/src/ws.test.ts
+--- a/apps/server/src/ws.test.ts	1970-01-01 09:00:01.000000000 +0900
++++ b/apps/server/src/ws.test.ts	2026-11-26 03:45:40.222452686 +0900
+@@ -831,7 +831,9 @@
+   Layer.mock(AntigravityInstallation.AntigravityInstallation)({ managedDirectory: "/unused" }),
+   Layer.mock(BackgroundPolicy.BackgroundPolicy)({}),
+   Layer.mock(CheckpointDiffQuery.CheckpointDiffQuery)({}),
+-  Layer.mock(NativeChildWorkQuery.NativeChildWorkQuery)({}),
++  Layer.mock(NativeChildWorkQuery.NativeChildWorkQuery)({
++    hydrateNativeChildThread: () => Effect.void,
++  }),
+   Layer.mock(CommandOutputHub.CommandOutputHub)({}),
+   ThreadViewers.layer,
+   Layer.mock(CodexInstallation.CodexInstallation)({ managedDirectory: "/unused" }),
+diff -ruN --no-dereference -x .repos -x node_modules -x dist -x .vite-temp -x .vite -x 'pnpm*' -x .tsbuildinfo a/apps/server/src/ws.ts b/apps/server/src/ws.ts
+--- a/apps/server/src/ws.ts	1970-01-01 09:00:01.000000000 +0900
++++ b/apps/server/src/ws.ts	2026-11-26 03:46:33.813058126 +0900
+@@ -2158,6 +2158,7 @@
+           ).pipe(Effect.map(({ threads }) => ({ threadIds: threads.map((thread) => thread.id) }))),
+         [ORCHESTRATION_V2_WS_METHODS.getThreadProjection]: (input) =>
+           Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
++            Effect.andThen(nativeChildWork.hydrateNativeChildThread(input.threadId).pipe(Effect.ignore)),
+             Effect.andThen(
+               // Bound compatibility snapshots so pre-pagination clients cannot materialize unlimited transcripts.
+               threadManagement
+@@ -2325,6 +2326,7 @@
+           Stream.unwrap(
+             Effect.annotateCurrentSpan({ "orchestration_v2.thread_id": input.threadId }).pipe(
+               Effect.andThen(threadViewers.view(input.threadId)),
++              Effect.andThen(nativeChildWork.hydrateNativeChildThread(input.threadId).pipe(Effect.ignore)),
+               Effect.andThen(subscribeOrchestrationV2Thread(input)),
+             ),
+           ),
+diff -ruN --no-dereference -x .repos -x node_modules -x dist -x .vite-temp -x .vite -x 'pnpm*' -x .tsbuildinfo a/packages/provider-acp/src/server/adapter.ts b/packages/provider-acp/src/server/adapter.ts
+--- a/packages/provider-acp/src/server/adapter.ts	2026-11-26 03:36:48.919140150 +0900
++++ b/packages/provider-acp/src/server/adapter.ts	2026-11-26 03:52:34.685137874 +0900
+@@ -537,6 +537,19 @@
+     readonly sessionId: string;
+     readonly nativeTaskIds: ReadonlyArray<string>;
+   }) => Effect.Effect<ReadonlyArray<string>>;
++  readonly syncDetachedSubagents?: (input: {
++    readonly sessionId: string;
++    readonly subagents: ReadonlyArray<{
++      readonly nativeTaskId: string;
++      readonly childThreadId: ThreadId;
++      readonly childRootNodeId: OrchestrationV2ExecutionNode["id"];
++      readonly providerThreadId: ProviderThreadId | null;
++      readonly prompt: string;
++      readonly fallbackTimestamp: DateTime.Utc;
++      readonly deriveTurnItemId: (nativeItemId: string) => OrchestrationV2TurnItem["id"];
++      readonly deriveMessageId: (nativeItemId: string) => OrchestrationV2ConversationMessage["id"];
++    }>;
++  }) => Effect.Effect<ReadonlyArray<AcpDetachedSubagentSyncEntry>>;
+   readonly supportsCompaction?: boolean;
+   /** Sends `/compact` as a prompt, only to sessions whose advertised commands include `compact`. */
+   readonly compactViaAdvertisedCommand?: boolean;
+@@ -741,6 +754,17 @@
+       readonly prompt: string;
+     };
+ 
++export interface AcpDetachedSubagentSyncEntry {
++  readonly nativeTaskId: string;
++  readonly childSessionId: string | null;
++  readonly model: string | null;
++  readonly status: "running" | "idle" | "completed" | "failed" | "cancelled" | null;
++  readonly progress: string | null;
++  readonly result: string | null;
++  readonly messages: ReadonlyArray<OrchestrationV2ConversationMessage>;
++  readonly turnItems: ReadonlyArray<OrchestrationV2TurnItem>;
++}
++
+ export interface AcpAdapterV2SubagentUpdate {
+   readonly nativeTaskId: string;
+   readonly prompt: string;
+@@ -755,6 +779,7 @@
+     | "interrupted"
+     | "cancelled";
+   readonly childSessionId: string | null;
++  readonly progress?: string | null;
+   readonly result: string | null;
+   readonly suppressNormalTool?: boolean;
+ }
+@@ -1689,6 +1714,9 @@
+   /** Clock millis of the prompt's last progress, for `promptInactivityTimeout`. */
+   lastProgressAt: number;
+   inactivityWatchdog: Fiber.Fiber<void> | undefined;
++  detachedSyncTimer: ReturnType<typeof setInterval> | undefined;
++  detachedSyncInFlight: boolean;
++  readonly detachedSyncPermit: Semaphore.Semaphore;
+ }
+ 
+ type AcpRuntimeTeardownState =
+@@ -1862,6 +1890,8 @@
+   // ACP has no interrupted tool status; keep forced interruption across late updates.
+   readonly interruptedToolIds: Set<string>;
+   readonly toolSessionIds: Map<string, string>;
++  readonly detachedItemSignatures: Map<string, string>;
++  readonly detachedMessageSignatures: Map<string, string>;
+ }
+ 
+ interface AcpNativeChildSession {
+@@ -2562,6 +2592,15 @@
+         const stoppedRunQuarantine = yield* Ref.make(false);
+         // Native subagents can outlive interrupts; carry lineage forward to finish their original turn items.
+         const carryoverSubagents = yield* Ref.make<AcpCarryoverSubagents | null>(null);
++        const sessionRunFork = Effect.runForkWith(yield* Effect.context<never>());
++        const stopDetachedSubagentPoller = (context: ActiveAcpTurn): void => {
++          const timer = context.detachedSyncTimer;
++          if (timer !== undefined) {
++            clearInterval(timer);
++            context.detachedSyncTimer = undefined;
++          }
++        };
++        let ensureDetachedSubagentPoller: ((context: ActiveAcpTurn) => void) | undefined;
+         const handledBackgroundTaskIdsInActiveTurn = yield* Ref.make<ReadonlySet<string>>(
+           new Set(),
+         );
+@@ -3629,26 +3668,33 @@
+           const turnItemOrdinal =
+             existing?.turnItemOrdinal ?? (yield* resolveItemOrdinal(context, nativeTaskId));
+           const taskStatus = update.status;
++          const progress = acpSubagentStatusIsTerminal(taskStatus)
++            ? undefined
++            : update.progress !== undefined
++              ? (update.progress ?? undefined)
++              : existing?.task.progress;
++          const { progress: _droppedTaskProgress, ...existingTaskRest } = existing?.task ?? {
++            id: nodeId,
++            threadId: context.input.threadId,
++            runId: context.input.runId,
++            parentNodeId: context.input.rootNodeId,
++            origin: "provider_native" as const,
++            createdBy: "agent" as const,
++            driver,
++            providerInstanceId: context.input.modelSelection.instanceId,
++            providerThreadId: null,
++            childThreadId,
++            nativeTaskRef: nativeItemRef,
++            prompt: update.prompt,
++            title: update.title,
++            result: null,
++            startedAt: now,
++          };
+           const task: OrchestrationV2Subagent = {
+-            ...(existing?.task ?? {
+-              id: nodeId,
+-              threadId: context.input.threadId,
+-              runId: context.input.runId,
+-              parentNodeId: context.input.rootNodeId,
+-              origin: "provider_native" as const,
+-              createdBy: "agent" as const,
+-              driver,
+-              providerInstanceId: context.input.modelSelection.instanceId,
+-              providerThreadId: null,
+-              childThreadId,
+-              nativeTaskRef: nativeItemRef,
+-              prompt: update.prompt,
+-              title: update.title,
+-              result: null,
+-              startedAt: now,
+-            }),
++            ...existingTaskRest,
+             model: update.model?.trim() || existing?.task.model || null,
+             status: taskStatus,
++            ...(progress === undefined ? {} : { progress }),
+             result: update.result ?? existing?.task.result ?? null,
+             completedAt: acpSubagentStatusIsTerminal(taskStatus) ? now : null,
+             updatedAt: now,
+@@ -3675,6 +3721,8 @@
+             },
+             interruptedToolIds: new Set(),
+             toolSessionIds: new Map(),
++            detachedItemSignatures: new Map(),
++            detachedMessageSignatures: new Map(),
+           };
+           subagent.task = task;
+           context.subagents.set(nativeTaskId, subagent);
+@@ -3778,9 +3826,11 @@
+             yield* emitSubagentAssistant(subagent, update.result);
+           }
+           const result = update.result ?? subagent.task.result ?? (subagent.assistantText || null);
++          const { progress: _droppedUpdatedProgress, ...subagentTaskRest } = subagent.task;
+           subagent.task = {
+-            ...subagent.task,
++            ...subagentTaskRest,
+             status: taskStatus,
++            ...(progress === undefined ? {} : { progress }),
+             result,
+             completedAt: acpSubagentStatusIsTerminal(taskStatus) ? now : null,
+             updatedAt: now,
+@@ -3854,11 +3904,14 @@
+               providerInstanceId: context.input.modelSelection.instanceId,
+               childThreadId,
+               prompt: subagent.task.prompt,
++              ...(progress === undefined ? {} : { progress }),
+               result,
+             },
+           });
+           if (acpSubagentStatusIsTerminal(taskStatus)) {
+             subagent.terminalStatusProjected = true;
++          } else if (acpSubagentStatusBlocksTurnSettlement(taskStatus)) {
++            ensureDetachedSubagentPoller?.(context);
+           }
+         });
+ 
+@@ -4242,10 +4295,156 @@
+           return false;
+         };
+ 
++        const syncDetachedSubagents = Effect.fn("AcpAdapterV2.syncDetachedSubagents")(function* (
++          context: ActiveAcpTurn,
++          syncOptions?: { readonly includeFinalized?: boolean },
++        ) {
++          const syncHook = flavor.syncDetachedSubagents;
++          if (syncHook === undefined) return;
++          if (syncOptions?.includeFinalized !== true && context.finalized) return;
++          yield* context.detachedSyncPermit.withPermits(1)(
++            Effect.gen(function* () {
++              if (syncOptions?.includeFinalized !== true && context.finalized) return;
++              const targets = [...context.subagents.values()].flatMap((subagent) => {
++                const nativeTaskId = subagent.task.nativeTaskRef?.nativeId;
++                if (nativeTaskId === undefined) return [];
++                if (
++                  syncOptions?.includeFinalized !== true &&
++                  !acpSubagentStatusBlocksTurnSettlement(subagent.task.status)
++                ) {
++                  return [];
++                }
++                return [
++                  {
++                    subagent,
++                    nativeTaskId,
++                    childThreadId: subagent.childThreadId,
++                    childRootNodeId: subagent.childRootNodeId,
++                    providerThreadId: subagent.task.providerThreadId,
++                    prompt: subagent.task.prompt,
++                    fallbackTimestamp: subagent.task.startedAt ?? subagent.task.updatedAt,
++                    deriveTurnItemId: providerTurnItemId,
++                    deriveMessageId: providerMessageId,
++                  },
++                ];
++              });
++              if (targets.length === 0) {
++                stopDetachedSubagentPoller(context);
++                return;
++              }
++              context.detachedSyncInFlight = true;
++              const entries = yield* syncHook({
++                sessionId: context.nativeThreadId,
++                subagents: targets.map(({ subagent: _subagent, ...rest }) => rest),
++              }).pipe(
++                Effect.catchCause(() =>
++                  Effect.succeed<ReadonlyArray<AcpDetachedSubagentSyncEntry>>([]),
++                ),
++                Effect.ensuring(
++                  Effect.sync(() => {
++                    context.detachedSyncInFlight = false;
++                  }),
++                ),
++              );
++              if (syncOptions?.includeFinalized !== true && context.finalized) return;
++              for (const entry of entries) {
++                const subagent = context.subagents.get(entry.nativeTaskId);
++                if (subagent === undefined) continue;
++                for (const message of entry.messages) {
++                  const signature = JSON.stringify({ ...message, createdAt: 0, updatedAt: 0 });
++                  if (subagent.detachedMessageSignatures.get(String(message.id)) === signature) {
++                    continue;
++                  }
++                  subagent.detachedMessageSignatures.set(String(message.id), signature);
++                  yield* emitProviderEvent({
++                    type: "message.updated",
++                    driver,
++                    message,
++                  });
++                }
++                for (const turnItem of entry.turnItems) {
++                  const signature = JSON.stringify({ ...turnItem, ordinal: 0, updatedAt: 0 });
++                  if (subagent.detachedItemSignatures.get(String(turnItem.id)) === signature) {
++                    continue;
++                  }
++                  subagent.detachedItemSignatures.set(String(turnItem.id), signature);
++                  let ordinal = subagent.childItemOrdinals.get(String(turnItem.id));
++                  if (ordinal === undefined) {
++                    ordinal = subagent.nextChildOrdinal;
++                    subagent.nextChildOrdinal += 1;
++                    subagent.childItemOrdinals.set(String(turnItem.id), ordinal);
++                  }
++                  yield* emitProviderEvent({
++                    type: "turn_item.updated",
++                    driver,
++                    turnItem: { ...turnItem, ordinal },
++                  });
++                }
++                const currentStatus = subagent.task.status;
++                const nextStatus =
++                  entry.status !== null &&
++                  (!acpSubagentStatusIsTerminal(currentStatus) ||
++                    acpSubagentStatusIsTerminal(entry.status))
++                    ? entry.status
++                    : currentStatus;
++                const nextModel = subagent.task.model ?? entry.model;
++                const nextProgress = acpSubagentStatusIsTerminal(nextStatus)
++                  ? undefined
++                  : nextStatus === "idle"
++                    ? undefined
++                    : (entry.progress ?? subagent.task.progress);
++                const nextResult = entry.result ?? subagent.task.result;
++                if (
++                  nextStatus !== currentStatus ||
++                  nextModel !== subagent.task.model ||
++                  nextProgress !== subagent.task.progress ||
++                  nextResult !== subagent.task.result
++                ) {
++                  yield* emitSubagent(context, {
++                    nativeTaskId: entry.nativeTaskId,
++                    prompt: subagent.task.prompt,
++                    title: subagent.task.title,
++                    model: nextModel,
++                    status: nextStatus,
++                    childSessionId: subagent.childSessionId,
++                    progress: nextProgress ?? null,
++                    result: nextResult,
++                  });
++                }
++              }
++              if (
++                ![...context.subagents.values()].some((subagent) =>
++                  acpSubagentStatusBlocksTurnSettlement(subagent.task.status),
++                )
++              ) {
++                stopDetachedSubagentPoller(context);
++              }
++            }),
++          );
++        });
++
++        ensureDetachedSubagentPoller = (context: ActiveAcpTurn): void => {
++          if (
++            flavor.syncDetachedSubagents === undefined ||
++            context.finalized ||
++            context.detachedSyncTimer !== undefined
++          ) {
++            return;
++          }
++          const timer = setInterval(() => {
++            if (context.finalized || context.detachedSyncInFlight) return;
++            sessionRunFork(syncDetachedSubagents(context).pipe(Effect.ignore));
++          }, 1_500);
++          timer.unref?.();
++          context.detachedSyncTimer = timer;
++        };
++
+         const idleReportedSubagents = Effect.fn("AcpAdapterV2.idleReportedSubagents")(function* (
+           context: ActiveAcpTurn,
+         ) {
+           if (flavor.subagentsOutlivingPrompt === undefined) return;
++          yield* syncDetachedSubagents(context);
++          if (context.finalized) return;
+           const nativeTaskId = (subagent: ActiveAcpSubagent) =>
+             subagent.task.nativeTaskRef?.nativeId ?? String(subagent.task.id);
+           const running = [...context.subagents.values()].filter((subagent) =>
+@@ -4270,6 +4469,7 @@
+               model: subagent.task.model,
+               status: "idle",
+               childSessionId: subagent.childSessionId,
++              progress: null,
+               result: null,
+             });
+           }
+@@ -8492,6 +8692,11 @@
+             readonly threadDisposition?: "reusable" | "broken";
+           },
+         ): Effect.fn.Return<void> {
++          stopDetachedSubagentPoller(context);
++          if (context.finalized) return;
++          if (!context.interrupted && context.subagents.size > 0 && flavor.syncDetachedSubagents !== undefined) {
++            yield* syncDetachedSubagents(context, { includeFinalized: true }).pipe(Effect.ignore);
++          }
+           if (context.finalized) return;
+           const settledStatus = context.interrupted ? "interrupted" : status;
+           const threadDisposition = options?.threadDisposition ?? "reusable";
+@@ -9371,6 +9576,9 @@
+               nativePromptId: undefined,
+               lastProgressAt: 0,
+               inactivityWatchdog: undefined,
++              detachedSyncTimer: undefined,
++              detachedSyncInFlight: false,
++              detachedSyncPermit: Semaphore.makeUnsafe(1),
+             };
+             const carryover = yield* Ref.getAndSet(carryoverSubagents, null);
+             let rehydratedCarryoverSubagents: ReadonlyArray<ActiveAcpSubagent> = [];
+@@ -9445,6 +9653,13 @@
+             // queued provider continuation owns wake traffic. A user turn may
+             // start before that continuation and must leave its buffer intact.
+             yield* projectDeferredCarryoverTerminals(rehydratedCarryoverSubagents);
++            if (
++              [...context.subagents.values()].some((subagent) =>
++                acpSubagentStatusBlocksTurnSettlement(subagent.task.status),
++              )
++            ) {
++              ensureDetachedSubagentPoller?.(context);
++            }
+             // Retain projected terminals during wake drain so monotonic guards reject replayed spawns.
+             const continuationOutcome = yield* Ref.getAndSet(pendingContinuationOutcome, null);
+             if (isContinuationTurn) {
+@@ -9700,6 +9915,7 @@
+             );
+             // A session released mid-prompt (worktree handoff) never sees its prompt settle.
+             const openTurn = yield* Ref.get(activeTurn);
++            if (openTurn !== null) stopDetachedSubagentPoller(openTurn);
+             if (openTurn !== null && !openTurn.finalized) {
+               openTurn.interrupted = true;
+               yield* finalizeTurn(openTurn, "interrupted");

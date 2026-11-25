@@ -64,7 +64,10 @@ stdenv.mkDerivation (
       hash = "sha256-oI8gyTWFgtTmVK+0cVQaEcfO8EzxUUOW5s8JFG/z/U8=";
     };
 
-    patches = [ ./antigravity-quota-auto-resume.patch ];
+    patches = [
+      ./antigravity-quota-auto-resume.patch
+      ./antigravity-subagent-details.patch
+    ];
 
     postPatch = ''
       substituteInPlace apps/web/vite.config.ts \
