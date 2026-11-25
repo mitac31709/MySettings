@@ -177,7 +177,10 @@ in
   # Distinct per-host hostname (chromebook / vaio) avoids Avahi/mDNS, Tailscale,
   # RQuickShare, and Chromium SingletonLock collisions across machines.
   networking.hostName = lib.mkDefault flakeTarget;
-  networking.networkmanager.enable = true;
+  networking.networkmanager = {
+    enable = true;
+    wifi.backend = "iwd";
+  };
 
   # Avoid leaving networking down if activation stops NM then fails mid-switch
   # (seen with switch-to-configuration exit 101).
