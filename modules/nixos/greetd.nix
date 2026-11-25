@@ -164,8 +164,6 @@ let
   '';
 in
 {
-  fonts.packages = [ pkgs.nerd-fonts.jetbrains-mono ];
-
   # Keep the greeter's Hyprland isolated from user@<greeter>.service so it does not
   # start hyprland-session.target / graphical-session.target or D-Bus portals / AT-SPI
   # under the read-only /var/empty greeter user.
