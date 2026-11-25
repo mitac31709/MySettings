@@ -237,6 +237,17 @@ let
     '';
   };
   capsomniaPkg = pkgs.callPackage ../pkgs/capsomnia { };
+  # nixpkgs' hyprtasking pin (2026-09-20) predates Hyprland 0.57 CHLWorkspace API
+  # changes; track upstream PR #140 (Hyprland 0.57 support, 2026-11-10).
+  hyprtaskingPkg = pkgs.hyprlandPlugins.hyprtasking.overrideAttrs (_old: {
+    version = "0-unstable-2026-11-10";
+    src = pkgs.fetchFromGitHub {
+      owner = "raybbian";
+      repo = "hyprtasking";
+      rev = "04d2365d37f032af537b8d5c55efbfe15f01adc7";
+      hash = "sha256-KzxmA0lqTvZKq/AHdSu2juugkfXwLC6ywR4BeAfiIIg=";
+    };
+  });
 
   # Presentation marker toggled with `toggle-keep-screen-on` or Capsomnia Keep Display Awake.
   # XDG_RUNTIME_DIR is session-scoped so it clears automatically on logout.
@@ -802,6 +813,11 @@ let
       section = "起動・終了";
       label = "ウィンドウを閉じる";
       keys = "Super+Q / Super+Shift+Q";
+    }
+    {
+      section = "起動・終了";
+      label = "ワークスペース俯瞰 (Hyprtasking: 左ドラッグ移動 / 右クリック選択 / 1-9ジャンプ / Esc終了)";
+      keys = "Alt+Tab / Alt+Shift+Tab / 4本指上スワイプ";
     }
     {
       section = "起動・終了";
@@ -2320,6 +2336,7 @@ in
     portalPackage = null; # Provided by NixOS xdg.portal
     systemd.enable = false; # UWSM manages graphical-session.target
     xwayland.enable = true;
+    plugins = [ hyprtaskingPkg ];
 
     settings = {
       monitor = {
@@ -2668,6 +2685,61 @@ in
       hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd(${builtins.toJSON "${brightnessctl} set +5%"}), { locked = true, repeating = true })
       hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd(${builtins.toJSON "${brightnessctl} set 5%-"}), { locked = true, repeating = true })
       hl.bind(mod .. " + Escape",      hl.dsp.exec_cmd(${builtins.toJSON "${idleDpmsOffCmd}"}), { locked = true })
+
+      -- Hyprtasking: workspace overview (Alt+Tab / Alt+Shift+Tab, Esc to close)
+      hl.config({
+        plugin = {
+          hyprtasking = {
+            layout = "grid",
+            gap_size = 10,
+            bg_color = 0xff${p.bgHex},
+            border_size = 2,
+            exit_on_hovered = false,
+            warp_on_move_window = 1,
+            close_overview_on_reload = true,
+            drag_button = 0x110,
+            select_button = 0x111,
+            jump = {
+              enabled = true,
+              show_workspace_names = false,
+              label_color = 0xff${p.fgHex},
+              label_background = 0xcc${p.surfaceHex},
+              label_size = 32,
+            },
+            gestures = {
+              enabled = true,
+              move_fingers = 3,
+              move_distance = 300,
+              open_fingers = 4,
+              open_distance = 300,
+              open_positive = true,
+            },
+            grid = {
+              rows = 3,
+              cols = 3,
+              loop = false,
+              layers = 1,
+              loop_layers = true,
+              gaps_use_aspect_ratio = true,
+            },
+          },
+        },
+      })
+      hl.bind("ALT + TAB", function()
+        if hl.plugin and hl.plugin.hyprtasking then
+          hl.plugin.hyprtasking.toggle("cursor")
+        end
+      end)
+      hl.bind("ALT + SHIFT + TAB", function()
+        if hl.plugin and hl.plugin.hyprtasking then
+          hl.plugin.hyprtasking.toggle("all")
+        end
+      end)
+      hl.bind("escape", function()
+        if hl.plugin and hl.plugin.hyprtasking and hl.plugin.hyprtasking.is_active() then
+          hl.plugin.hyprtasking.toggle("all")
+        end
+      end, { non_consuming = true })
 
       -- Interactive resize submap
       hl.define_submap("resize", "escape", function()

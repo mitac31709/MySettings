@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "tuigreet-hyprlock-ux" ];
+  system.nixos.tags = [ "hyprtasking-overview" ];
 }
