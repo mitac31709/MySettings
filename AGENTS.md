@@ -38,4 +38,5 @@ Nix is on PATH and the daemon normally runs. If a `nix` command errors with `can
   - `nix-eval-avoid-options` — see above.
   - `cheatsheet-expand` — for reusable answers, also update `cheatsheetEntries` in `home/hyprland.nix`.
   - `backup-staging` — prefer declarative Nix/agenix (`secrets/*.age`); only machine-specific non-secret state goes in `modules/nixos/backup.nix` (`systemStagingSources`), with `scripts/restore-on-nixos.sh` + `README.md` updated too.
+  - `declarative-agent-skills` — manage AI agent skills/plugins declaratively via `flake.nix` (`flake = false` inputs) + `home/agent-skills.nix` instead of imperative-only installs.
   - `avoid-premature-workarounds`, `investigate-before-conclude`, `prefer-native-tools`, `communication-style`, `skip-build-on-completion` — investigate root causes, read logs before concluding, prefer native CLI over ad-hoc Python, answer concisely.

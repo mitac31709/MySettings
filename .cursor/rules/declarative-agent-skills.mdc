@@ -1,0 +1,25 @@
+---
+description: AI エージェントのスキル・プラグインは flake.nix と home/agent-skills.nix で宣言的に管理する
+alwaysApply: true
+---
+
+# AI エージェントのスキル・プラグインは宣言的に管理する
+
+AI エージェント用のスキルやプラグインを導入・更新・削除するときは、`npx skills` や手動 `git clone`、各エージェントのコマンドでローカル環境だけを変更して終わらせず、`flake.nix` と `home/agent-skills.nix` に宣言して別ホスト（`chromebook` / `vaio`）でも再現できるようにする。
+
+## 手順
+
+1. **`flake.nix` の `inputs` に `flake = false` で追加する**
+   - `nix flake update <input>` で `flake.lock` にピン留めする（以降の更新は `flake-update` に乗る）
+2. **`home/agent-skills.nix` の `declaredSkills` にスキルを登録する**
+   - ここに登録したスキルは `~/.agents/skills`・`~/.claude/skills`・`~/.gemini/config/skills`・`~/.hermes/skills`・T3 Code の Antigravity `config/skills` へ自動展開される
+3. **エージェント固有のプラグイン・フック設定も `home/agent-skills.nix` に書く**
+   - read-only のまま置けるプラグインディレクトリは `home.file` で Nix store を直接参照する（例: `.hermes/plugins/ponytail`、`.gemini/config/plugins/ponytail`）
+   - アプリ自身が書き換える設定ファイル（`~/.cursor/hooks.json`、`~/.config/opencode/opencode.json`、`~/.claude/settings.json`、`~/.codex/config.toml`、`~/.hermes/config.yaml`）は、`syncScript` で既存設定を壊さずマージする
+   - 過去に手動導入した実ディレクトリと衝突して `.backup` が走査ディレクトリに残らないよう、`managedDirs` に含める
+4. **`modules/nixos/release.nix` の世代タグを更新する**（`generation-tags` ルールに従う）
+
+## やらないこと
+
+- 手動の `npx skills add`・`git clone`・プラグイン CLI 実行だけで完結させること（ローカル確認用に入れても、最終的には `home/agent-skills.nix` へ宣言化する）
+- writable な設定ファイル（`settings.json`、`config.toml`、`config.yaml`、`hooks.json`、`opencode.json`）を `home.file` で read-only シンボリックリンクにすること
