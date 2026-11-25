@@ -149,17 +149,14 @@ in
     ./secrets.nix
   ];
 
-  boot.loader.systemd-boot = {
+  boot.loader.limine = {
     enable = true;
-    # Keep the menu responsive on the firmware console. With the default
-    # unlimited configurationLimit every rebuild adds an entry, and a large
-    # menu makes each arrow-key redraw (and the initial scan of loader/entries)
-    # stall for several seconds on the Chromebook/VAIO UEFI console.
-    configurationLimit = 10;
-    # Force the standard 80x25 text mode instead of "keep": rendering the menu
-    # into a high-resolution firmware GOP framebuffer makes redraws after a
-    # keypress noticeably slow. Mode 0 is required by the UEFI spec.
-    consoleMode = "0";
+    efiSupport = true;
+    # Keep the latest 10 generations in the boot menu (and cap ESP usage).
+    # Limine renders its own framebuffer menu instead of relying on UEFI
+    # SimpleTextOutput/SimpleTextInputEx, avoiding the multi-second arrow-key
+    # stalls seen with systemd-boot on Phoenix UEFI (VAIO).
+    maxGenerations = 10;
   };
   boot.loader.efi.canTouchEfiVariables = true;
 

@@ -1,5 +1,5 @@
 # Optional milestone label for this configuration.
-# Appears in the systemd-boot menu and in `nixos-rebuild list-generations`
+# Appears in the boot menu and in `nixos-rebuild list-generations`
 # as part of system.nixos.label (e.g. rofi-cheatsheet-26.11....).
 #
 # Empty (the NixOS default) keeps the plain version label.
@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "nm-wifi-iwd-2026-11-25" ];
+  system.nixos.tags = [ "limine-bootloader" ];
 }
