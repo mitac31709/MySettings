@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "tuigreet-classic" ];
+  system.nixos.tags = [ "ops-advisor-skill" ];
 }

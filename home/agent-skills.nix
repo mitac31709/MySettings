@@ -42,7 +42,26 @@ let
       "state-machine"
       "upskill"
       "variant"
-    ] (name: "${inputs.jakubkrehel-skills}/skills/${name}"));
+    ] (name: "${inputs.jakubkrehel-skills}/skills/${name}"))
+    // {
+      "ops-advisor" = ./skills/ops-advisor;
+    };
+
+  opsAdvisorCollect = pkgs.writeShellApplication {
+    name = "ops-advisor-collect";
+    runtimeInputs = with pkgs; [
+      coreutils
+      curl
+      findutils
+      gawk
+      gnugrep
+      gnused
+      jq
+      ripgrep
+      sqlite
+    ];
+    text = builtins.readFile ./skills/ops-advisor/scripts/collect.sh;
+  };
 
   skillNames = builtins.attrNames declaredSkills;
 
@@ -292,6 +311,8 @@ let
   };
 in
 {
+  home.packages = [ opsAdvisorCollect ];
+
   home.file = skillFiles // {
     # Hermes Agent & Antigravity CLI native plugin directories from the pinned flake input.
     ".local/share/hermes/plugins/ponytail" = {
