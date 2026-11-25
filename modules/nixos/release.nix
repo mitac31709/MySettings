@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "colorshell-pywal-no-term-seq" ];
+  system.nixos.tags = [ "agent-run-card" ];
 }

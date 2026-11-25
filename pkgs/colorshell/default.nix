@@ -8,6 +8,7 @@
 # - 2-4: Unified Keep Screen On + Capsomnia (bar KeepAwake pill + Control Center TileKeepAwake & PageKeepAwake)
 # - 2-5: Startup sound bar indicator (state watcher + menu / toggle / play)
 # - 2-6: Direct bar launchers (Cheatsheet `?`, CPU/Mem -> btop, Network right-click & PageNetwork -> nmtui)
+# - 2-7: T3 Code agent-run pill + card (watches XDG_RUNTIME_DIR/agent-run-status.json)
 {
   baseColorshell,
   glib,
@@ -25,6 +26,7 @@ baseColorshell.overrideAttrs (old: {
     cp ${./src/modules/jquake.ts} src/modules/jquake.ts
     cp ${./src/modules/startup-sound.ts} src/modules/startup-sound.ts
     cp ${./src/modules/sysstats.ts} src/modules/sysstats.ts
+    cp ${./src/modules/agent-run.ts} src/modules/agent-run.ts
 
     cp ${./src/window/bar/widgets/Cheatsheet.tsx} src/window/bar/widgets/Cheatsheet.tsx
     cp ${./src/window/bar/widgets/Clock.tsx} src/window/bar/widgets/Clock.tsx
@@ -36,6 +38,9 @@ baseColorshell.overrideAttrs (old: {
     cp ${./src/window/bar/widgets/Status.tsx} src/window/bar/widgets/Status.tsx
     cp ${./src/window/bar/widgets/SystemStats.tsx} src/window/bar/widgets/SystemStats.tsx
     cp ${./src/window/bar/widgets/Updates.tsx} src/window/bar/widgets/Updates.tsx
+    cp ${./src/window/bar/widgets/AgentRun.tsx} src/window/bar/widgets/AgentRun.tsx
+    mkdir -p src/window/agent-run
+    cp ${./src/window/agent-run/index.tsx} src/window/agent-run/index.tsx
 
     cp ${./src/window/center-window/index.tsx} src/window/center-window/index.tsx
 
@@ -53,16 +58,24 @@ baseColorshell.overrideAttrs (old: {
         '}" -t --cols16 ' \
         '}" -s -t -n -e --cols16 '
 
+    substituteInPlace src/windows.ts \
+      --replace-fail \
+        'import { OSD } from "./window/osd";' \
+        $'import { OSD } from "./window/osd";\nimport { AgentRunCard } from "./window/agent-run";' \
+      --replace-fail \
+        '"osd": OSD,' \
+        $'"osd": OSD,\n    "agent-run": AgentRunCard,'
+
     substituteInPlace src/window/bar/index.tsx \
       --replace-fail \
         'import { Tray } from "./widgets/Tray";' \
-        $'import { Tray } from "./widgets/Tray";\nimport { Cheatsheet } from "./widgets/Cheatsheet";\nimport { ResticBackup } from "./widgets/ResticBackup";\nimport { SystemStats } from "./widgets/SystemStats";\nimport { KeepAwake } from "./widgets/KeepAwake";\nimport { Services } from "./widgets/Services";\nimport { JQuake } from "./widgets/JQuake";\nimport { StartupSound } from "./widgets/StartupSound";\nimport { Updates } from "./widgets/Updates";' \
+        $'import { Tray } from "./widgets/Tray";\nimport { Cheatsheet } from "./widgets/Cheatsheet";\nimport { ResticBackup } from "./widgets/ResticBackup";\nimport { SystemStats } from "./widgets/SystemStats";\nimport { KeepAwake } from "./widgets/KeepAwake";\nimport { Services } from "./widgets/Services";\nimport { JQuake } from "./widgets/JQuake";\nimport { StartupSound } from "./widgets/StartupSound";\nimport { Updates } from "./widgets/Updates";\nimport { AgentRun } from "./widgets/AgentRun";' \
       --replace-fail \
         '<Apps />' \
         $'<Apps />\n                    <Cheatsheet />' \
       --replace-fail \
         '<Tray />' \
-        $'<ResticBackup />\n                    <SystemStats />\n                    <KeepAwake />\n                    <Services />\n                    <JQuake />\n                    <StartupSound />\n                    <Updates />\n                    <Tray />'
+        $'<AgentRun />\n                    <ResticBackup />\n                    <SystemStats />\n                    <KeepAwake />\n                    <Services />\n                    <JQuake />\n                    <StartupSound />\n                    <Updates />\n                    <Tray />'
 
     substituteInPlace src/window/control-center/index.tsx \
       --replace-fail \
@@ -96,6 +109,8 @@ baseColorshell.overrideAttrs (old: {
 
     printf '\n' >> data/css/main.css
     cat ${./css/main-extra.css} >> data/css/main.css
+    printf '\n' >> data/css/main.css
+    cat ${./css/agent-run-extra.css} >> data/css/main.css
 
     printf '\n' >> data/css/osd.css
     cat ${./css/osd-extra.css} >> data/css/osd.css
