@@ -337,7 +337,7 @@ else
   echo "==> dsh-tui: ${npm_global_dir} に未導入のためスキップ"
 fi
 
-echo "==> Refreshing waybar update status"
+echo "==> Refreshing update status"
 check_cmd="${MITAC_FLAKE_UPDATE_CHECK:-$root/scripts/flake-update-check.sh}"
 if [[ -x "$check_cmd" ]]; then
   "$check_cmd" "$root" || true

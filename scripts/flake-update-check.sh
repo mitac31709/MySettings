@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Compare pinned .deb versions, custom pkgs/, installed npm globals (dsh-tui),
 # and flake inputs (GitHub + git) to upstream tips.
-# Writes $XDG_RUNTIME_DIR/flake-update-status for waybar (does not mutate the flake).
+# Writes $XDG_RUNTIME_DIR/flake-update-status for Colorshell (does not mutate the flake).
 set -u
 
 # Packaged command passes the checkout. A direct ./scripts run uses this tree.
@@ -289,7 +289,6 @@ fi
 
 tmp="${status_file}.tmp.$$"
 printf '%s\n' "$json_out" >"$tmp" && mv -f "$tmp" "$status_file"
-pkill -SIGRTMIN+9 -x waybar >/dev/null 2>&1 || true
 
 # Notify Colorshell / desktop session when a background check discovers new updates.
 if ((n > 0)) && [[ ! -t 1 ]] && command -v notify-send >/dev/null 2>&1; then
