@@ -1,5 +1,5 @@
-# greetd + ReGreet on minimal Hyprland (Lua 0.57+ config) with receive-only Lan Mouse
-# for remote login across vaio / chromebook.
+# greetd + tuigreet (inside fullscreen foot on minimal Hyprland) with receive-only
+# Lan Mouse for remote login across vaio / chromebook.
 {
   config,
   pkgs,
@@ -11,12 +11,9 @@ let
   lanMouse = import ../../lib/lan-mouse.nix;
   theme = import ../../lib/theme.nix;
   p = theme.palette;
-  wallpaperPng = theme.mkWallpaper pkgs;
   # Local-only cursor themes (theme.cursor.package = null) live under the
   # user's home, which the greeter user cannot read; fall back to Adwaita.
   greeterCursorName = if theme.cursor.package == null then "Adwaita" else theme.cursor.name;
-  cursorPkg =
-    if theme.cursor.package == null then pkgs.adwaita-icon-theme else theme.cursor.package pkgs;
   cursorSizeStr = toString theme.cursor.size;
 
   greeterLanMouseConfig = (pkgs.formats.toml { }).generate "greeter-lan-mouse.toml" {
@@ -28,15 +25,117 @@ let
   greeterCertPath =
     config.age.secrets."lan-mouse-greeter-pem".path or "/run/agenix/lan-mouse-greeter-pem";
 
-  greeterRunner = pkgs.writeShellScript "regreet-with-lan-mouse" ''
-    set -u
+  # Fullscreen Wayland-native terminal hosting tuigreet in the Nocturne Slate palette.
+  greeterFootConfig = pkgs.writeText "greeter-foot.ini" ''
+    [main]
+    font=${theme.font.mono}:size=13
+    pad=0x0 center
+    bold-text-in-bright=yes
 
-    # Ensure ReGreet sees NixOS desktop sessions (Hyprland UWSM) and GTK themes/icons.
-    export XDG_DATA_DIRS="${config.services.displayManager.sessionData.desktops}/share:/run/current-system/sw/share''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
+    [bell]
+    urgent=no
+    notify=no
+
+    [scrollback]
+    lines=0
+
+    [cursor]
+    style=beam
+    color=${p.bgHex} ${p.accentHex}
+
+    [colors]
+    background=${p.bgHex}
+    foreground=${p.fgHex}
+    regular0=${p.bgHex}
+    regular1=${p.dangerHex}
+    regular2=${p.successHex}
+    regular3=${p.warningHex}
+    regular4=${p.accentAltHex}
+    regular5=c099ff
+    regular6=${p.accentHex}
+    regular7=${p.fgSecondaryHex}
+    bright0=${p.fgMutedHex}
+    bright1=${p.dangerHex}
+    bright2=${p.successHex}
+    bright3=${p.warningHex}
+    bright4=${p.accentAltHex}
+    bright5=c099ff
+    bright6=${p.accentHex}
+    bright7=${p.fgHex}
+  '';
+
+  greeterTuigreetConfig = (pkgs.formats.toml { }).generate "greeter-tuigreet.toml" {
+    session = {
+      sessions_dirs = [
+        "${config.services.displayManager.sessionData.desktops}/share/wayland-sessions"
+      ];
+    };
+    display = {
+      show_time = true;
+      time_format = "%Y-%m-%d (%a)  %H:%M:%S";
+      battery = true;
+      greeting = "Welcome · ${config.networking.hostName}";
+      align_greeting = "center";
+    };
+    remember = {
+      username = true;
+      user_session = true;
+    };
+    secret = {
+      mode = "characters";
+      characters = "•";
+    };
+    layout = {
+      width = 72;
+      window_padding = 2;
+      container_padding = 2;
+      prompt_padding = 1;
+      widgets = {
+        battery_position = "right";
+        status_bar = {
+          show_reset = true;
+          show_command = true;
+          show_session = true;
+          show_power = true;
+          show_background = false;
+          show_session_status = true;
+          show_caps_lock = true;
+        };
+      };
+    };
+    power = {
+      shutdown = "${pkgs.systemd}/bin/systemctl poweroff";
+      reboot = "${pkgs.systemd}/bin/systemctl reboot";
+    };
+    theme = {
+      border = p.border;
+      text = p.fg;
+      prompt = p.accent;
+      time = p.fgSecondary;
+      action = p.accentAlt;
+      button = p.accent;
+      container = p.surface;
+      input = p.fg;
+      greet = p.accent;
+      title = p.fgSecondary;
+    };
+  };
+
+  # Power-save on the login screen: turn off display after 3 minutes of inactivity.
+  greeterHypridleConfig = pkgs.writeText "greeter-hypridle.conf" ''
+    listener {
+      timeout = 180
+      on-timeout = ${pkgs.hyprland}/bin/hyprctl dispatch 'hl.dsp.dpms({ action = "off" })'
+      on-resume = ${pkgs.hyprland}/bin/hyprctl dispatch 'hl.dsp.dpms({ action = "on" })'
+    }
+  '';
+
+  greeterRunner = pkgs.writeShellScript "tuigreet-with-lan-mouse" ''
+    set -u
 
     cert_path=${lib.escapeShellArg greeterCertPath}
     if [ ! -r "$cert_path" ]; then
-      cert_path="/var/lib/regreet/lan-mouse.pem"
+      cert_path="/var/lib/tuigreet/lan-mouse.pem"
     fi
 
     # Receive-only in greeter: skip portal capture so lan-mouse never spawns xdg-desktop-portal.
@@ -48,8 +147,15 @@ let
       daemon &
     lm_pid=$!
 
+    ${lib.getExe pkgs.hypridle} --config ${greeterHypridleConfig} >/dev/null 2>&1 &
+    idle_pid=$!
+
     cleanup() {
-      # Wait for the greeter daemon to exit so UDP port 4242 is free before the user session starts.
+      # Stop hypridle and wait for lan-mouse to exit so UDP port 4242 is free before the user session starts.
+      if kill -0 "$idle_pid" 2>/dev/null; then
+        kill "$idle_pid" 2>/dev/null || true
+        wait "$idle_pid" 2>/dev/null || true
+      fi
       if kill -0 "$lm_pid" 2>/dev/null; then
         kill "$lm_pid" 2>/dev/null || true
         wait "$lm_pid" 2>/dev/null || true
@@ -58,7 +164,12 @@ let
     }
     trap cleanup EXIT INT TERM
 
-    ${lib.getExe config.services.displayManager.regreet.package}
+    ${lib.getExe pkgs.foot} \
+      --fullscreen \
+      --config=${greeterFootConfig} \
+      ${lib.getExe pkgs.tuigreet} \
+      --config ${greeterTuigreetConfig} \
+      --cmd "${pkgs.uwsm}/bin/uwsm start -e -D Hyprland hyprland.desktop"
   '';
 
   greeterHyprlandConfig = pkgs.writeText "greeter-hyprland.lua" ''
@@ -80,15 +191,21 @@ let
       hl.exec_cmd(${builtins.toJSON "${greeterRunner}"})
     end)
 
+    hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe pkgs.brightnessctl} set +5%"}), { repeating = true })
+    hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe pkgs.brightnessctl} set 5%-"}), { repeating = true })
+
     hl.config({
       misc = {
         disable_hyprland_logo = true,
         disable_splash_rendering = true,
         force_default_wallpaper = 0,
         background_color = "rgb(${p.bgHex})",
+        mouse_move_enables_dpms = true,
+        key_press_enables_dpms = true,
       },
       input = {
         kb_layout = "jp",
+        kb_options = "caps:none",
         numlock_by_default = true,
         follow_mouse = 1,
         touchpad = {
@@ -119,127 +236,25 @@ let
   '';
 in
 {
-  services.displayManager.regreet = {
-    enable = true;
-    # nixpkgs regreet bundles vendored glycin without libglycin hooks/loaders, so
-    # glycin::Loader fails and ReGreet falls back to looping the static PNG
-    # through GStreamer gtk::MediaFile at ~150% CPU until GTK4 hangs.
-    package = pkgs.regreet.overrideAttrs (old: {
-      nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ pkgs.libglycin.patchVendorHook ];
-      buildInputs = (old.buildInputs or [ ]) ++ [
-        pkgs.libglycin.setupHook
-        pkgs.glycin-loaders
-      ];
-    });
-    cursorTheme = {
-      package = cursorPkg;
-      name = greeterCursorName;
-    };
-    font = {
-      package = pkgs.nerd-fonts.jetbrains-mono;
-      name = theme.font.mono;
-      size = 12;
-    };
-    settings = {
-      GTK = {
-        application_prefer_dark_theme = true;
-      };
-      background = {
-        path = "${wallpaperPng}";
-        fit = "Cover";
-      };
-      appearance = {
-        greeting_msg = "Welcome · ${config.networking.hostName}";
-      };
-      commands = {
-        reboot = [
-          "${pkgs.systemd}/bin/systemctl"
-          "reboot"
-        ];
-        poweroff = [
-          "${pkgs.systemd}/bin/systemctl"
-          "poweroff"
-        ];
-      };
-      widget.clock = {
-        format = "%Y-%m-%d (%a)  %H:%M:%S";
-        locale = "ja_JP";
-        resolution = "1s";
-        timezone = "Asia/Tokyo";
-      };
-    };
-    extraCss = ''
-      window {
-        background-color: ${p.bg};
-        color: ${p.fg};
-        font-family: "${theme.font.mono}", sans-serif;
-      }
-
-      box, grid {
-        color: ${p.fg};
-      }
-
-      frame, .background > box {
-        border-radius: ${toString theme.radius.popup}px;
-      }
-
-      entry {
-        background-color: rgba(${p.surfaceRgb}, 0.90);
-        color: ${p.fg};
-        border: 1px solid ${p.border};
-        border-radius: ${toString theme.radius.control}px;
-        padding: 8px 12px;
-        caret-color: ${p.accent};
-      }
-
-      entry:focus {
-        border-color: ${p.accent};
-        box-shadow: 0 0 0 1px rgba(${p.accentRgb}, 0.35);
-      }
-
-      button {
-        background-color: rgba(${p.surfaceAltRgb}, 0.92);
-        color: ${p.fg};
-        border: 1px solid ${p.border};
-        border-radius: ${toString theme.radius.control}px;
-        padding: 7px 14px;
-        transition: background-color 140ms ease, border-color 140ms ease;
-      }
-
-      button:hover {
-        background-color: ${p.surfaceHover};
-        border-color: ${p.accent};
-      }
-
-      button.suggested-action {
-        background-color: ${p.accentSoft};
-        color: ${p.accent};
-        border-color: ${p.accent};
-      }
-
-      button.destructive-action {
-        background-color: ${p.dangerSoft};
-        color: ${p.danger};
-        border-color: ${p.danger};
-      }
-
-      combobox button {
-        background-color: rgba(${p.surfaceRgb}, 0.90);
-        border: 1px solid ${p.border};
-        border-radius: ${toString theme.radius.control}px;
-      }
-
-      label {
-        color: ${p.fg};
-      }
-    '';
-  };
+  fonts.packages = [ pkgs.nerd-fonts.jetbrains-mono ];
 
   # Keep the greeter's Hyprland isolated from user@<greeter>.service so it does not
   # start hyprland-session.target / graphical-session.target or D-Bus portals / AT-SPI
   # under the read-only /var/empty greeter user.
-  services.greetd.settings.default_session.command =
-    "${pkgs.coreutils}/bin/env -u DBUS_SESSION_BUS_ADDRESS HYPRLAND_NO_SD_NOTIFY=1 HYPRLAND_NO_SD_VARS=1 HYPRLAND_NO_SD_TARGET=1 GDK_DEBUG=no-portals GTK_A11Y=none NO_AT_BRIDGE=1 ${pkgs.hyprland}/bin/Hyprland --config ${greeterHyprlandConfig}";
+  services.greetd = {
+    enable = true;
+    settings.default_session = {
+      user = "greeter";
+      command = "${pkgs.coreutils}/bin/env -u DBUS_SESSION_BUS_ADDRESS HYPRLAND_NO_SD_NOTIFY=1 HYPRLAND_NO_SD_VARS=1 HYPRLAND_NO_SD_TARGET=1 GDK_DEBUG=no-portals GTK_A11Y=none NO_AT_BRIDGE=1 ${pkgs.hyprland}/bin/Hyprland --config ${greeterHyprlandConfig}";
+    };
+  };
+
+  # Persistent cache for tuigreet (--remember / --remember-user-session) and
+  # fallback cert directory for lan-mouse.
+  systemd.tmpfiles.rules = [
+    "d /var/cache/tuigreet 0750 greeter greeter -"
+    "d /var/lib/tuigreet 0750 greeter greeter -"
+  ];
 
   # UniClipboard (and other libsecret apps) need an unlocked Secret Service.
   # KWallet's ksecretd rejects UniClipboard's binary probe; use gnome-keyring.

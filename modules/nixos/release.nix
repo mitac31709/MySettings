@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "tailscale-autoconnect-colorshell" ];
+  system.nixos.tags = [ "tuigreet-hyprlock-ux" ];
 }

@@ -244,7 +244,7 @@ let
     if ${pkgs.procps}/bin/pgrep -x hyprlock >/dev/null 2>&1; then
       exit 0
     fi
-    exec ${hyprlockBin}
+    exec ${hyprlockBin} "$@"
   '';
   idleDimCmd = pkgs.writeShellScript "hypr-idle-dim" ''
     if [ -e "''${XDG_RUNTIME_DIR}/hypr-keep-screen-on" ] || [ -e "''${XDG_RUNTIME_DIR}/capsomnia/keep-display-awake" ]; then
@@ -259,7 +259,15 @@ let
     if [ -e "''${XDG_RUNTIME_DIR}/hypr-keep-screen-on" ] || [ -e "''${XDG_RUNTIME_DIR}/capsomnia/keep-display-awake" ]; then
       exit 0
     fi
-    exec ${lockOnceCmd}
+    exec ${lockOnceCmd} --grace 5
+  '';
+  idleLockDpmsOffCmd = pkgs.writeShellScript "hypr-idle-lock-dpms-off" ''
+    if [ -e "''${XDG_RUNTIME_DIR}/hypr-keep-screen-on" ] || [ -e "''${XDG_RUNTIME_DIR}/capsomnia/keep-display-awake" ]; then
+      exit 0
+    fi
+    if ${pkgs.procps}/bin/pgrep -x hyprlock >/dev/null 2>&1; then
+      exec ${hyprctlBin} dispatch 'hl.dsp.dpms({ action = "off" })'
+    fi
   '';
   idleDpmsOffCmd = pkgs.writeShellScript "hypr-idle-dpms-off" ''
     if [ -e "''${XDG_RUNTIME_DIR}/hypr-keep-screen-on" ] || [ -e "''${XDG_RUNTIME_DIR}/capsomnia/keep-display-awake" ]; then
@@ -270,6 +278,55 @@ let
   idleDpmsOnCmd = pkgs.writeShellScript "hypr-idle-dpms-on" ''
     ${hyprctlBin} dispatch 'hl.dsp.dpms({ action = "on" })' >/dev/null 2>&1 || true
     ${brightnessctl} -r >/dev/null 2>&1 || true
+  '';
+  lockBatteryCmd = pkgs.writeShellScript "hyprlock-battery" ''
+    bat=""
+    for b in /sys/class/power_supply/BAT*; do
+      if [ -r "$b/capacity" ]; then
+        bat="$b"
+        break
+      fi
+    done
+    [ -n "$bat" ] || exit 0
+    cap="$(cat "$bat/capacity" 2>/dev/null || true)"
+    stat="$(cat "$bat/status" 2>/dev/null || true)"
+    [ -n "$cap" ] || exit 0
+    case "$stat" in
+      Charging) icon="󰂄" ;;
+      Full|"Not charging") icon="󰁹" ;;
+      *)
+        if [ "$cap" -ge 80 ]; then icon="󰂁"
+        elif [ "$cap" -ge 50 ]; then icon="󰁾"
+        elif [ "$cap" -ge 20 ]; then icon="󰁻"
+        else icon="󰂃"
+        fi
+        ;;
+    esac
+    printf '%s %s%%' "$icon" "$cap"
+  '';
+  lockMediaCmd = pkgs.writeShellScript "hyprlock-media" ''
+    status="$(${pkgs.playerctl}/bin/playerctl status 2>/dev/null || true)"
+    case "$status" in
+      Playing) icon="󰎈" ;;
+      Paused) icon="󰏤" ;;
+      *) exit 0 ;;
+    esac
+    meta="$(${pkgs.playerctl}/bin/playerctl metadata --format '{{artist}} - {{title}}' 2>/dev/null || true)"
+    meta="''${meta# - }"
+    meta="''${meta% - }"
+    [ -n "$meta" ] || exit 0
+    if [ "''${#meta}" -gt 52 ]; then
+      meta="''${meta:0:51}…"
+    fi
+    printf '%s %s' "$icon" "$meta"
+  '';
+  lockStatusCmd = pkgs.writeShellScript "hyprlock-status" ''
+    ssid="$(${pkgs.networkmanager}/bin/nmcli -t -f ACTIVE,SSID dev wifi 2>/dev/null | ${pkgs.gnugrep}/bin/grep '^yes:' | ${pkgs.coreutils}/bin/head -n1 | ${pkgs.coreutils}/bin/cut -d: -f2- || true)"
+    if [ -n "$ssid" ]; then
+      printf '%s · %s  󰖩 %s' "${config.home.username}" "${flakeTarget}" "$ssid"
+    else
+      printf '%s · %s' "${config.home.username}" "${flakeTarget}"
+    fi
   '';
   toggleKeepScreenOn = pkgs.writeShellApplication {
     name = "toggle-keep-screen-on";
@@ -1166,8 +1223,8 @@ let
     }
     {
       section = "Colorshell・日常";
-      label = "5分暗転 / 10分ロック / 15分消灯 (hypridle)";
-      keys = "無操作";
+      label = "5分暗転 / 10分ロック(5秒猶予) / 15分消灯・ロック中45秒消灯 (hypridle)";
+      keys = "無操作 / ロック中 Super+Esc で即消灯";
     }
     {
       section = "Colorshell・日常";
@@ -1817,7 +1874,7 @@ let
     }
     {
       section = "端末連携";
-      label = "注: vaio 左端 → chromebook (ReGreet ログイン画面も可・解除 Ctrl+Shift+Super+Alt)";
+      label = "注: vaio 左端 → chromebook (tuigreet ログイン画面も可・解除 Ctrl+Shift+Super+Alt)";
     }
     {
       section = "端末連携";
@@ -2610,6 +2667,7 @@ in
       hl.bind("XF86AudioMicMute",      hl.dsp.exec_cmd(${builtins.toJSON "${pactl} set-source-mute @DEFAULT_SOURCE@ toggle"}), { locked = true })
       hl.bind("XF86MonBrightnessUp",   hl.dsp.exec_cmd(${builtins.toJSON "${brightnessctl} set +5%"}), { locked = true, repeating = true })
       hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd(${builtins.toJSON "${brightnessctl} set 5%-"}), { locked = true, repeating = true })
+      hl.bind(mod .. " + Escape",      hl.dsp.exec_cmd(${builtins.toJSON "${idleDpmsOffCmd}"}), { locked = true })
 
       -- Interactive resize submap
       hl.define_submap("resize", "escape", function()
@@ -2796,63 +2854,122 @@ in
     enable = true;
     settings = {
       general = {
-        hide_cursor = false;
+        hide_cursor = true;
+        ignore_empty_input = true;
         text_trim = false;
         fractional_scaling = 2;
+      };
+      animations = {
+        enabled = true;
+        bezier = [
+          "smoothOut, 0.22, 1.0, 0.36, 1.0"
+          "quick, 0.15, 0, 0.1, 1"
+        ];
+        animation = [
+          "fadeIn, 1, 3.0, smoothOut"
+          "fadeOut, 1, 2.2, smoothOut"
+          "inputFieldDots, 1, 1.6, quick"
+        ];
       };
       auth = {
         pam.enabled = true;
         fingerprint = {
           enabled = !isChromebook;
-          ready_message = "指紋認証でロック解除可能";
-          present_message = "指紋を読み取り中…";
+          ready_message = "󰈷 指紋認証でロック解除可能";
+          present_message = "󰈷 指紋を読み取り中…";
           retry_delay = 250;
         };
       };
       background = [
         {
           monitor = "";
-          path = "${wallpaperPng}";
-          blur_passes = 3;
+          path = "screenshot";
+          blur_passes = 4;
+          blur_size = 6;
+          brightness = 0.65;
+          contrast = 0.95;
+          vibrancy = 0.15;
           color = "rgb(${p.bgHex})";
         }
       ];
       label = [
         {
           monitor = "";
-          text = ''cmd[update:30000] ${pkgs.coreutils}/bin/date +"%R"'';
-          color = "rgb(${p.fgHex})";
+          text = "cmd[update:15000] ${lockStatusCmd}";
+          color = "rgb(${p.fgSecondaryHex})";
+          font_size = 13;
+          font_family = theme.font.mono;
+          position = "28, -22";
+          halign = "left";
+          valign = "top";
           shadow_passes = 1;
           shadow_size = 2;
           shadow_color = "rgb(${p.bgHex})";
-          shadow_boost = 0.4;
-          font_size = 112;
+          shadow_boost = 0.35;
+        }
+        {
+          monitor = "";
+          text = "cmd[update:30000] ${lockBatteryCmd}";
+          color = "rgb(${p.fgSecondaryHex})";
+          font_size = 13;
+          font_family = theme.font.mono;
+          position = "-28, -22";
+          halign = "right";
+          valign = "top";
+          shadow_passes = 1;
+          shadow_size = 2;
+          shadow_color = "rgb(${p.bgHex})";
+          shadow_boost = 0.35;
+        }
+        {
+          monitor = "";
+          text = "$TIME";
+          color = "rgb(${p.fgHex})";
+          shadow_passes = 2;
+          shadow_size = 4;
+          shadow_color = "rgb(${p.bgHex})";
+          shadow_boost = 0.45;
+          font_size = 108;
           font_family = "Adwaita Sans";
-          position = "0, -60";
+          position = "0, -96";
           halign = "center";
           valign = "top";
         }
         {
           monitor = "";
-          text = ''cmd[update:43200000] ${pkgs.coreutils}/bin/date +"%Y-%m-%d (%a)"'';
+          text = ''cmd[update:60000] ${pkgs.coreutils}/bin/date +"%Y年%-m月%-d日 (%a)"'';
           color = "rgb(${p.fgSecondaryHex})";
           shadow_passes = 1;
-          shadow_size = 2;
+          shadow_size = 3;
           shadow_color = "rgb(${p.bgHex})";
           shadow_boost = 0.4;
           font_size = 20;
           font_family = "Adwaita Sans";
-          position = "0, -220";
+          position = "0, -248";
           halign = "center";
           valign = "top";
         }
         {
           monitor = "";
-          text = "${config.home.username} · ${flakeTarget}";
+          text = "cmd[update:5000] ${lockMediaCmd}";
+          color = "rgb(${p.fgSecondaryHex})";
+          font_size = 13;
+          font_family = "Adwaita Sans";
+          position = "0, 56";
+          halign = "center";
+          valign = "bottom";
+          shadow_passes = 1;
+          shadow_size = 2;
+          shadow_color = "rgb(${p.bgHex})";
+          shadow_boost = 0.35;
+        }
+        {
+          monitor = "";
+          text = "Super+Esc で画面消灯";
           color = "rgb(${p.fgMutedHex})";
           font_size = 11;
           font_family = theme.font.mono;
-          position = "0, 12";
+          position = "0, 18";
           halign = "center";
           valign = "bottom";
         }
@@ -2861,55 +2978,67 @@ in
         {
           monitor = "";
           text = "$FPRINTPROMPT";
-          color = "rgb(${p.fgSecondaryHex})";
-          font_size = 12;
+          color = "rgb(${p.accentHex})";
+          font_size = 14;
           font_family = "Adwaita Sans";
-          position = "0, 98";
+          position = "0, -104";
           halign = "center";
-          valign = "bottom";
+          valign = "center";
+          shadow_passes = 1;
+          shadow_size = 2;
+          shadow_color = "rgb(${p.bgHex})";
+          shadow_boost = 0.35;
         }
       ];
       input-field = [
         {
           monitor = "";
-          size = "220, 40";
+          size = "320, 48";
           outline_thickness = 2;
-          dots_size = 0.2;
-          dots_spacing = 0.4;
+          rounding = -1;
+          dots_size = 0.24;
+          dots_spacing = 0.36;
           dots_center = true;
-          outer_color = "rgb(${p.borderHex})";
-          inner_color = "rgb(${p.surfaceHex})";
+          outer_color = "rgba(${p.accentHex}99) rgba(${p.accentAltHex}99) 45deg";
+          inner_color = "rgba(${p.surfaceHex}cc)";
           font_color = "rgb(${p.fgHex})";
           fade_on_empty = false;
-          placeholder_text = "パスワード…";
+          placeholder_text = ''<span foreground="##${p.fgMutedHex}">パスワードを入力…</span>'';
           hide_input = false;
-          check_color = "rgb(${p.accentAltHex})";
+          check_color = "rgba(${p.accentHex}ee) rgba(${p.accentAltHex}ee) 120deg";
           fail_color = "rgb(${p.dangerHex})";
-          fail_text = "<i>$FAIL <b>($ATTEMPTS)</b></i>";
+          fail_text = "<i>認証失敗 ($ATTEMPTS)</i>";
           capslock_color = "rgb(${p.warningHex})";
-          position = "0, 48";
+          bothlock_color = "rgb(${p.warningHex})";
+          position = "0, -40";
           halign = "center";
-          valign = "bottom";
-          shadow_passes = 1;
-          shadow_size = 2;
+          valign = "center";
+          shadow_passes = 2;
+          shadow_size = 6;
           shadow_color = "rgb(${p.bgHex})";
-          shadow_boost = 0.2;
+          shadow_boost = 0.35;
         }
       ];
     };
   };
 
-  # Hypridle: 5m dim -> 10m lock -> 15m DPMS off (all respect keep-screen-on).
+  # Hypridle: 45s DPMS off while locked, 5m dim -> 10m lock (5s grace) -> 15m DPMS off.
   services.hypridle = {
     enable = true;
     settings = {
       general = {
         lock_cmd = "${lockOnceCmd}";
-        before_sleep_cmd = "${lockOnceCmd}";
+        before_sleep_cmd = "${pkgs.systemd}/bin/loginctl lock-session";
         after_sleep_cmd = "${idleDpmsOnCmd}";
+        inhibit_sleep = 3;
         ignore_dbus_inhibit = false;
       };
       listener = [
+        {
+          timeout = 45;
+          on-timeout = "${idleLockDpmsOffCmd}";
+          on-resume = "${idleDpmsOnCmd}";
+        }
         {
           timeout = 300;
           on-timeout = "${idleDimCmd}";
