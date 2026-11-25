@@ -5,7 +5,6 @@
   imports = [
     ./flake-tools.nix
     ./agent-skills.nix
-    ./antigravity.nix
     ./local-llm.nix
     ./hermes.nix
     ./secrets.nix
@@ -20,7 +19,6 @@
     ./rquickshare.nix
     ./taildrop.nix
     ./uniclipboard.nix
-    ./vivaldi-chatgpt-extension.nix
     ./vivaldi-extensions-repair.nix
     ./vivaldi-pwa-desktop.nix
     ./jquake.nix

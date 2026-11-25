@@ -636,8 +636,8 @@ in
         '';
         inherit (t3code) meta;
       })
-      # Google Antigravity CLI (`agy` / `antigravity`; pkgs/antigravity) is installed
-      # via home/antigravity.nix (alongside antigravity-cli-daemon).
+      # Google Antigravity CLI (`agy` / `antigravity`; pkgs/antigravity).
+      antigravity
       # ChatGPT desktop (Codex included). App menu: ChatGPT.
       chatgpt
       # Grok Bot desktop agent. App menu: Grok Bot (`grok-bot`).

@@ -369,7 +369,7 @@ in
   users.users.mitac = {
     isNormalUser = true;
     description = "mitac";
-    # Keep systemd --user (and antigravity-cli-daemon.service) running from boot before graphical login
+    # Keep systemd --user (default.target services) running from boot before graphical login
     linger = true;
     extraGroups = [
       "networkmanager"

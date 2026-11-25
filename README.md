@@ -189,9 +189,7 @@ GUI インストーラを経由せず、USB のターミナルから直接この
    - **新規でバックアップを初期構築する場合**: 「`/home の暗号化バックアップ` → `初回セットアップ`」に従い、GCP OAuth クライアント作成 → `backup setup` を実行して `secrets/rclone-conf.age` と `secrets/restic-home-password.age` を agenix へ登録し、`rebuild` 後 `backup run` を実行する。
 5. **ヒラギノフォント（任意）**:
    `/home/mitac/.local/share/fonts/hiragino-otf/` に OTF ファイルを配置し、`rebuild` を実行する（ディレクトリが存在すると `rebuild` が自動で `--impure` を付けて同梱します）。
-6. **Vivaldi × ChatGPT 拡張（利用する場合）**:
-   Vivaldi で Web Store 版を入れた後、`vivaldi-chatgpt-extension-patch` が `~/.local/share/vivaldi-chatgpt-extension` を生成するため、`vivaldi://extensions` で Store 版を無効化し、Developer mode → Load unpacked で同ディレクトリを読み込む。
-7. **その他の任意設定と実機確認**:
+6. **その他の任意設定と実機確認**:
    - **リモートビルダー**（`modules/nixos/remote-builder.nix`）: `id-wsl-builder.age` を登録済みなら `/run/agenix/id-wsl-builder-root`（`nix-daemon` 用）と `/run/agenix/id-wsl-builder-user`（`ssh` / `~/.ssh/id_wsl_builder`）が自動展開されます（公開鍵は `galleria-mitac` 側へ登録）。未配置でもタイムアウト後にローカルビルドへフォールバック。待ち時間を省くなら `sudo nixos-rebuild switch --flake .#vaio --option builders ""` を実行。
    - **dsh-TUI**: `npm i -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui`
    - **ハードウェア確認**: 下記「VAIO オーディオ確認」「Chromebook オーディオ確認」「VA-API / Parsec 確認」を実行する。
@@ -342,11 +340,10 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **Claude Code** — Anthropic のターミナルエージェント（`claude`、nixpkgs `claude-code`）
 - **T3 Code** — 複数コーディングエージェントを束ねるデスクトップ／CLI（`pkgs/t3code` で **0.1.11** へオーバーライド + Antigravity 1.5 クォータ自動再開パッチ適用、`t3` / `t3code-desktop`）。Claude・Cursor・OpenCode・Antigravity を PATH に載せて起動し、`home/t3code.nix` で `~/.local/share/t3/userdata/settings.json` の `antigravity.config.binaryPath` を `"antigravity"` に同期（同梱ランタイム 1.4.5 ではなく CLI 1.5+ を使い Orchestrator モデル表示・Antigravity 1.5 サブエージェント表示・制限到達時の自動再開に対応）。Colorshell の右上に実行中のカードが出る（`pkgs/agent-run-status` が `~/.local/share/t3/userdata/server-runtime.json` のサーバへ RPC でつなぎ、`$XDG_RUNTIME_DIR/agent-run-status.json` を書く）。対象は `pkgs/t3code` の **0.1.11** だけ。版が変わると評価が止まるので、橋を合わせてから上げる。T3 を起動せず見た目だけ確認するときは `systemctl --user stop agent-run-status` のあと `agent-run-status mock running`（`approval` / `done` / `multi`）。消すときは `agent-run-status mock clear` して `systemctl --user start agent-run-status`
 - **Hermes** — Nous Research のエージェント（`hermes` / `hermes-acp`）。flake 入力 `hermes-agent` + `home/hermes.nix`（CLI + ACP。gateway / Desktop は無し）。状態は `~/.local/share/hermes`。初回は `hermes setup` でプロバイダ認証し、T3 の Providers で Hermes / Local ACP を有効化。ACP 確認は `hermes acp --check`
-- **Antigravity** — Google のターミナルエージェント（`agy` / `antigravity`、`pkgs/antigravity` で CLI バイナリをピン留め、`home/antigravity.nix` で導入と Remote Control 常駐デーモン `antigravity-cli-daemon` を管理）
+- **Antigravity** — Google のターミナルエージェント（`agy` / `antigravity`、`pkgs/antigravity` で CLI バイナリをピン留め）
 - **Local LLM (`llama.cpp` + `Qwen3.5-4B`)** — `home/local-llm.nix` により `pkgs.llama-cpp`（`llama-cli` / `llama-server` / `llama-bench`）とオンデマンドランチャー `local-llm`（`scripts/local-llm.py`）を導入。初回に `unsloth/Qwen3.5-4B-GGUF`（`Q4_K_M`、約 2.55 GiB、SHA-256 検証付き）を `~/.cache/local-llm/` へ自動取得し、CPU 物理コア数・`ctx=8192`・KV 量子化 `q8_0`・思考モード既定 OFF（`--thinking` で切替可）で `127.0.0.1:18922` に OpenAI 互換 API（`/v1`）と内蔵 WebUI を起動し、無通信 600 秒で自動停止して RAM を解放する。`local-llm web`（アプリメニュー `Local LLM (Qwen3.5-4B)`）/ `chat` / `ask` / `status` / `stop` に加え、`local-llm acp` で **T3 Code** 向け ACP v1（プローブ時は RAM 0、`qwen3.5:4b` / `qwen3.5:4b-thinking`、`code` / `ask` モード、`/clear` / `/stop` / `/status`）を提供
 - **dsh-TUI** — DeepSeek Harness の TUI（`dsh-tui` / `dst`）。Node のグローバル npm（`~/.local/share/npm-global`、`~/.config/npm/npmrc` の `prefix`）へ `npm i -g @deepseek-ai/dsh @deepseek-harness-tui/dsh-tui`。初回起動でプロファイルを初期化（`pnpm` 必須）。モデル利用は `DEEPSEEK_API_KEY` または `/auth`
 - **ChatGPT** — 公式 Linux デスクトップ（Codex 含む、`pkgs/chatgpt`、`.deb`）。アプリメニュー / `chatgpt`。起動時に Vivaldi 等向け Native Messaging（`com.openai.codexextension`）を入れ、ブラウザ拡張の Browser Use を有効化する
-- **Vivaldi × ChatGPT 拡張** — Vivaldi は `chrome.sidePanel.setOptions` を無視するため、Web Store 版は side panel が真っ白になる（VB-120826）。`vivaldi-chatgpt-extension-patch` が `~/.local/share/vivaldi-chatgpt-extension` に `default_path=codex-work-sidepanel.html` の unpacked 版を作る。初回だけ `vivaldi://extensions` で Store 版を無効化し、Developer mode → Load unpacked でそのディレクトリを読み込む
 - **Node.js / pnpm** — `node` / `npm` / `pnpm`（グローバル npm は `~/.local/share/npm-global`）
 - **Parsec** — `parsec-bin`（Intel VA-API / `intel-media-driver` でハードウェアエンコード）。ホテル等で `-6023/-11010` になるときは Tailscale 経由（下記）
 - **Steam** — `programs.steam.enable`

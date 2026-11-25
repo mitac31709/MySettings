@@ -1294,22 +1294,6 @@ let
       run = "vivaldi-extensions-repair";
       mode = "term";
     }
-    {
-      section = "Colorshell・日常";
-      label = "Vivaldi ChatGPT 拡張が真っ白";
-      keys = "setOptions 非対応 → パッチ版を Load unpacked";
-    }
-    {
-      section = "Colorshell・日常";
-      label = "ChatGPT 拡張パッチ再生成";
-      run = "vivaldi-chatgpt-extension-patch";
-      mode = "term";
-    }
-    {
-      section = "Colorshell・日常";
-      label = "パッチ版パス (~/.local/share/…)";
-      keys = "vivaldi-chatgpt-extension";
-    }
     # Cursor 進捗（他アプリ使用中）
     {
       section = "Cursor 進捗";
@@ -1512,34 +1496,6 @@ let
       label = "Local LLM サーバー停止（RAM解放）";
       run = "local-llm stop";
       mode = "term";
-    }
-    {
-      section = "開発";
-      label = "Antigravity（Remote Control 有効で起動）";
-      run = "agy --remote-control";
-      mode = "term";
-    }
-    {
-      section = "開発";
-      label = "Antigravity Remote Control 状態確認";
-      run = "agy remote-control status";
-      mode = "term";
-    }
-    {
-      section = "開発";
-      label = "Antigravity Remote Control デーモン再起動";
-      run = "systemctl --user restart antigravity-cli-daemon";
-      mode = "term";
-    }
-    {
-      section = "開発";
-      label = "Antigravity Remote Control ログ確認";
-      run = "journalctl --user -u antigravity-cli-daemon -n 50 --no-pager";
-      mode = "term";
-    }
-    {
-      section = "開発";
-      label = "注: 対話中は /remote-control でも接続可 / 別端末は https://antigravity.google.com を開く";
     }
     {
       section = "開発";

@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "ops-advisor-skill" ];
+  system.nixos.tags = [ "prune-autostart-services" ];
 }

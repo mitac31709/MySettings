@@ -7,7 +7,6 @@
 }:
 
 let
-  chatgptExtId = "hehggadaopoacecdllhhajmbjkdcmajg";
   repairScript = pkgs.writeShellApplication {
     name = "vivaldi-extensions-repair";
     runtimeInputs = [
@@ -17,22 +16,19 @@ let
     ];
     text = ''
       set -euo pipefail
-      export CHATGPT_EXT_ID='${chatgptExtId}'
       # Quit Vivaldi first if the user left it running (Preferences overwrite).
       if pgrep -x vivaldi-bin >/dev/null 2>&1; then
         echo "Vivaldi is running; quit it first, then re-run." >&2
         exit 1
       fi
       python3 - <<'PY'
-      import hashlib, io, json, os, shutil, subprocess, zipfile
+      import hashlib, io, json, shutil, subprocess, zipfile
       from pathlib import Path
 
       home = Path.home()
       cache = home / ".config/vivaldi/extensions_crx_cache"
       ext_root = home / ".config/vivaldi/Default/Extensions"
       pref_path = home / ".config/vivaldi/Default/Preferences"
-      patched = home / ".local/share/vivaldi-chatgpt-extension"
-      chatgpt_id = os.environ["CHATGPT_EXT_ID"]
       prod = "131.0.0.0"
 
       if not pref_path.is_file():
@@ -142,59 +138,6 @@ let
               continue
           restored += 1
           print(f"OK → {out_rel}", flush=True)
-
-      # 3) Patched ChatGPT side-panel copy
-      if patched.is_dir() and (patched / "manifest.json").is_file():
-          man = json.loads((patched / "manifest.json").read_text(encoding="utf-8"))
-          man.setdefault("side_panel", {})["default_path"] = "codex-work-sidepanel.html"
-          man.pop("update_url", None)
-          ver = man.get("version", "0")
-          rel = f"{chatgpt_id}/{ver}_0"
-          dest = ext_root / rel
-          if dest.exists():
-              shutil.rmtree(dest)
-          shutil.copytree(patched, dest)
-          (dest / "manifest.json").write_text(
-              json.dumps(man, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-          )
-          entry = settings.get(chatgpt_id)
-          if not isinstance(entry, dict) or not entry:
-              entry = {
-                  "account_extension_type": 0,
-                  "active_permissions": {
-                      "api": man.get("permissions", []),
-                      "explicit_host": man.get("host_permissions", []),
-                      "manifest_permissions": man.get("permissions", []),
-                      "scriptable_host": [],
-                  },
-                  "commands": {},
-                  "content_settings": [],
-                  "creation_flags": 1,
-                  "disable_reasons": [],
-                  "from_webstore": False,
-                  "granted_permissions": {
-                      "api": man.get("permissions", []),
-                      "explicit_host": man.get("host_permissions", []),
-                      "manifest_permissions": man.get("permissions", []),
-                      "scriptable_host": [],
-                  },
-                  "incognito_content_settings": [],
-                  "incognito_preferences": {},
-                  "location": 1,
-                  "preferences": {},
-                  "regular_only_preferences": {},
-                  "was_installed_by_default": False,
-                  "was_installed_by_oem": False,
-                  "withholding_permissions": False,
-              }
-          entry["manifest"] = man
-          entry["path"] = rel
-          entry["location"] = 1
-          entry["from_webstore"] = False
-          entry["disable_reasons"] = []
-          settings[chatgpt_id] = entry
-          restored += 1
-          print(f"fix {chatgpt_id} → {rel} (patched ChatGPT)", flush=True)
 
       pref_path.write_text(
           json.dumps(pref, ensure_ascii=False, separators=(",", ":")),
