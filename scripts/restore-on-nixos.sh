@@ -1748,6 +1748,7 @@ scrub_new_device_stage() {
       ".local/state/app.uniclipboard.desktop"
       ".config/lan-mouse/lan-mouse.pem"
       ".local/share/org.localsend.localsend_app/shared_preferences.json"
+      ".local/share/dev.mandre.rquickshare/.settings.json"
       ".local/share/dev.mandre.rquickshare/storage"
       ".local/share/dev.mandre.rquickshare/mediakeys"
       ".parsec-persistent"

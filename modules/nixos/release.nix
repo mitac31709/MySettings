@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "t3code-antigravity-subagent-details" ];
+  system.nixos.tags = [ "cc-click-rqs-minimized" ];
 }

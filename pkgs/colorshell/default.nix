@@ -115,13 +115,18 @@ baseColorshell.overrideAttrs (old: {
 
     # Fix Control Center sub-page overlay sizing so tall pages (e.g. Network Wi-Fi list)
     # scroll inside the card instead of pushing the header out of view.
+    # FILL + vexpand makes the closed Revealer cover the whole Pages widget, so
+    # keep canTarget=false while closed or tile/slider clicks never reach the child.
     substituteInPlace src/window/control-center/widgets/pages/index.tsx \
       --replace-fail \
         $'        this.#stack = new Gtk.Stack({\n            visible: true,' \
         $'        this.#stack = new Gtk.Stack({\n            visible: true,\n            vhomogeneous: false,' \
       --replace-fail \
         $'            vexpand: false,\n            hexpand: false,\n            valign: Gtk.Align.CENTER,' \
-        $'            vexpand: true,\n            hexpand: false,\n            valign: Gtk.Align.FILL,'
+        $'            vexpand: true,\n            hexpand: false,\n            valign: Gtk.Align.FILL,\n            canTarget: false,' \
+      --replace-fail \
+        $'                if(this.isOpen) {\n                    !this.has_css_class("overlay-open") &&\n                        this.add_css_class("overlay-open");\n\n                    if(this.child)\n                        this.child.canTarget = false;\n                } else {\n                    this.remove_css_class("overlay-open");\n                    if(this.child)\n                        this.child.canTarget = true;\n                }' \
+        $'                if(this.isOpen) {\n                    !this.has_css_class("overlay-open") &&\n                        this.add_css_class("overlay-open");\n\n                    this.#revealer.canTarget = true;\n                    if(this.child)\n                        this.child.canTarget = false;\n                } else {\n                    this.remove_css_class("overlay-open");\n                    this.#revealer.canTarget = false;\n                    if(this.child)\n                        this.child.canTarget = true;\n                }'
 
     substituteInPlace src/window/control-center/widgets/Page.tsx \
       --replace-fail \
