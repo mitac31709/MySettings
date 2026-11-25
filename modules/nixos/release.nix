@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "xdg-home-cleanup" ];
+  system.nixos.tags = [ "declarative-agent-skills" ];
 }

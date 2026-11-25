@@ -23,6 +23,19 @@
       url = "github:WeirdTreeThing/alsa-ucm-conf-cros/standalone";
       flake = false;
     };
+    # Declarative AI agent skills & plugins (updated by `flake-update`).
+    ponytail = {
+      url = "github:DietrichGebert/ponytail";
+      flake = false;
+    };
+    agent-desktop-skills = {
+      url = "github:vercel-labs/agent-desktop";
+      flake = false;
+    };
+    jakubkrehel-skills = {
+      url = "github:jakubkrehel/skills";
+      flake = false;
+    };
     # Fresher nixpkgs solely for Cursor packages (avoid bumping the whole system).
     # flake-update does not move this input; flake-update-cursor does.
     nixpkgs-cursor.url = "github:NixOS/nixpkgs/nixos-unstable";

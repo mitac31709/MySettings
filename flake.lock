@@ -20,6 +20,22 @@
         "type": "github"
       }
     },
+    "agent-desktop-skills": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1795458892,
+        "narHash": "sha256-YkEz38MOzF7JlU5zsUvqhR+USxHO7h6lrRAebRAvl7s=",
+        "owner": "vercel-labs",
+        "repo": "agent-desktop",
+        "rev": "ce2ddf07226346818de2a1c6bae9869cfad142df",
+        "type": "github"
+      },
+      "original": {
+        "owner": "vercel-labs",
+        "repo": "agent-desktop",
+        "type": "github"
+      }
+    },
     "alsa-ucm-conf-cros": {
       "flake": false,
       "locked": {
@@ -287,6 +303,22 @@
         "type": "github"
       }
     },
+    "jakubkrehel-skills": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1795061490,
+        "narHash": "sha256-gKruv6vNgrpAaGCe9Vg2EWv4GfsQQi05Wp7zJ4MyRB8=",
+        "owner": "jakubkrehel",
+        "repo": "skills",
+        "rev": "672ae44ace6aaed65b86cbb1e2fd6fbea0e79578",
+        "type": "github"
+      },
+      "original": {
+        "owner": "jakubkrehel",
+        "repo": "skills",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1790578696,
@@ -366,6 +398,22 @@
         "type": "github"
       }
     },
+    "ponytail": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1795314718,
+        "narHash": "sha256-5m6JW3U6EMYUg4YVLh7nRRTWGY3shrFQ0wK0bediVFc=",
+        "owner": "DietrichGebert",
+        "repo": "ponytail",
+        "rev": "ebd8654c2c627f721eb8f9c0d1bd4090a29f9e10",
+        "type": "github"
+      },
+      "original": {
+        "owner": "DietrichGebert",
+        "repo": "ponytail",
+        "type": "github"
+      }
+    },
     "pyproject-build-systems": {
       "inputs": {
         "nixpkgs": [
@@ -419,6 +467,7 @@
     "root": {
       "inputs": {
         "agenix": "agenix",
+        "agent-desktop-skills": "agent-desktop-skills",
         "alsa-ucm-conf-cros": "alsa-ucm-conf-cros",
         "bootvine": "bootvine",
         "chatgpt-deb": "chatgpt-deb",
@@ -426,8 +475,10 @@
         "grok-bot-deb": "grok-bot-deb",
         "hermes-agent": "hermes-agent",
         "home-manager": "home-manager_2",
+        "jakubkrehel-skills": "jakubkrehel-skills",
         "nixpkgs": "nixpkgs_3",
         "nixpkgs-cursor": "nixpkgs-cursor",
+        "ponytail": "ponytail",
         "uniclipboard-deb": "uniclipboard-deb"
       }
     },
