@@ -352,7 +352,7 @@ flake-update-cursor   # Cursor (nixpkgs-cursor) だけ更新
 - **Steam** — `programs.steam.enable`
 - **VirtualBox** — `virtualisation.virtualbox.host.enable`（Extension Pack 有効、`mitac` を `vboxusers` グループへ追加）
 - **ActivityWatch** — `home/activitywatch.nix` で `aw-server`（Web UI: `http://127.0.0.1:5600`）と Hyprland 向け Wayland watcher（`awatcher`、`graphical-session.target` 起動）を常駐
-- **WhatPulse** — `pkgs/whatpulse`（7.0.1 AppImage ラッパー）＋ `pkgs/whatpulse-pcap-service`（通信量計測用 systemd サービス）。打鍵・マウス計測のため `mitac` を `input` グループへ追加済み
+- **WhatPulse** — `pkgs/whatpulse`（7.0.1 AppImage ラッパー）＋ `pkgs/whatpulse-pcap-service`（通信量計測用 systemd サービス）。`home/whatpulse.nix` の `whatpulse.service` でログイン時にトレイ常駐（`--minimized`）し、打鍵・マウス計測のため `mitac` を `input` グループへ追加済み
 - **Screenpipe** — `pkgs/screenpipe`（2.7.145 AppImage ラッパー）。画面キャプチャ + OCR + 音声文字起こしのローカル検索タイムライン
 - **Bottles** — Wine プレフィックス管理（一般の Windows アプリ用）。`home.packages`
 - **Vivaldi** — `vivaldi`

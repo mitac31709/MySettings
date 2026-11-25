@@ -26,6 +26,7 @@
     ./jquake.nix
     ./capsomnia.nix
     ./activitywatch.nix
+    ./whatpulse.nix
     ./hyprland.nix
     ./niri.nix
   ];

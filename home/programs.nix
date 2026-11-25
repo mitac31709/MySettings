@@ -670,8 +670,7 @@ in
       chawan
       # On-screen keystroke overlay (useful for demos / Chromebook Fn keys).
       showmethekey
-      # Activity / work history trackers (ActivityWatch is in home/activitywatch.nix).
-      whatpulse
+      # Activity / work history trackers (ActivityWatch: home/activitywatch.nix, WhatPulse: home/whatpulse.nix).
       screenpipe
       # Google Quick Share / Nearby Share client for Linux.
       rquickshare
