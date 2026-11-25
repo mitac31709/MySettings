@@ -9,6 +9,7 @@
 {
   imports = [
     ./hyprland.nix
+    ./niri.nix
     ./greetd.nix
     ./console-gui.nix
   ];

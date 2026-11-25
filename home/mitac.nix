@@ -27,6 +27,7 @@
     ./capsomnia.nix
     ./activitywatch.nix
     ./hyprland.nix
+    ./niri.nix
   ];
 
   home.username = "mitac";

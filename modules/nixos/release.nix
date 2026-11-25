@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "declarative-agent-skills" ];
+  system.nixos.tags = [ "niri-side-by-side" ];
 }
