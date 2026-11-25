@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "hyprendfield" ];
+  system.nixos.tags = [ "tuigreet-classic" ];
 }

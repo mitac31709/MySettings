@@ -10,7 +10,6 @@
 let
   lanMouse = import ../../lib/lan-mouse.nix;
   theme = import ../../lib/theme.nix;
-  p = theme.palette;
   # Local-only cursor themes (theme.cursor.package = null) live under the
   # user's home, which the greeter user cannot read; fall back to Adwaita.
   greeterCursorName = if theme.cursor.package == null then "Adwaita" else theme.cursor.name;
@@ -25,7 +24,7 @@ let
   greeterCertPath =
     config.age.secrets."lan-mouse-greeter-pem".path or "/run/agenix/lan-mouse-greeter-pem";
 
-  # Fullscreen Wayland-native terminal hosting tuigreet in the Nocturne Slate palette.
+  # Fullscreen Wayland-native terminal hosting tuigreet in classic TTY-style black/white.
   greeterFootConfig = pkgs.writeText "greeter-foot.ini" ''
     [main]
     font=${theme.font.mono}:size=13
@@ -39,87 +38,10 @@ let
     [scrollback]
     lines=0
 
-    [cursor]
-    style=beam
-    color=${p.bgHex} ${p.accentHex}
-
     [colors]
-    background=${p.bgHex}
-    foreground=${p.fgHex}
-    regular0=${p.bgHex}
-    regular1=${p.dangerHex}
-    regular2=${p.successHex}
-    regular3=${p.warningHex}
-    regular4=${p.accentAltHex}
-    regular5=c099ff
-    regular6=${p.accentHex}
-    regular7=${p.fgSecondaryHex}
-    bright0=${p.fgMutedHex}
-    bright1=${p.dangerHex}
-    bright2=${p.successHex}
-    bright3=${p.warningHex}
-    bright4=${p.accentAltHex}
-    bright5=c099ff
-    bright6=${p.accentHex}
-    bright7=${p.fgHex}
+    background=000000
+    foreground=ffffff
   '';
-
-  greeterTuigreetConfig = (pkgs.formats.toml { }).generate "greeter-tuigreet.toml" {
-    session = {
-      sessions_dirs = [
-        "${config.services.displayManager.sessionData.desktops}/share/wayland-sessions"
-      ];
-    };
-    display = {
-      show_time = true;
-      time_format = "%Y-%m-%d (%a)  %H:%M:%S";
-      battery = true;
-      greeting = "Welcome · ${config.networking.hostName}";
-      align_greeting = "center";
-    };
-    remember = {
-      username = true;
-      user_session = true;
-    };
-    secret = {
-      mode = "characters";
-      characters = "•";
-    };
-    layout = {
-      width = 72;
-      window_padding = 2;
-      container_padding = 2;
-      prompt_padding = 1;
-      widgets = {
-        battery_position = "right";
-        status_bar = {
-          show_reset = true;
-          show_command = true;
-          show_session = true;
-          show_power = true;
-          show_background = false;
-          show_session_status = true;
-          show_caps_lock = true;
-        };
-      };
-    };
-    power = {
-      shutdown = "${pkgs.systemd}/bin/systemctl poweroff";
-      reboot = "${pkgs.systemd}/bin/systemctl reboot";
-    };
-    theme = {
-      border = p.border;
-      text = p.fg;
-      prompt = p.accent;
-      time = p.fgSecondary;
-      action = p.accentAlt;
-      button = p.accent;
-      container = p.surface;
-      input = p.fg;
-      greet = p.accent;
-      title = p.fgSecondary;
-    };
-  };
 
   # Power-save on the login screen: turn off display after 3 minutes of inactivity.
   greeterHypridleConfig = pkgs.writeText "greeter-hypridle.conf" ''
@@ -168,7 +90,13 @@ let
       --fullscreen \
       --config=${greeterFootConfig} \
       ${lib.getExe pkgs.tuigreet} \
-      --config ${greeterTuigreetConfig} \
+      --time \
+      --time-format '%Y-%m-%d %H:%M:%S' \
+      --asterisks \
+      --remember \
+      --remember-session \
+      --user-menu \
+      --sessions "${config.services.displayManager.sessionData.desktops}/share/wayland-sessions" \
       --cmd "${pkgs.uwsm}/bin/uwsm start -e -D Hyprland hyprland.desktop"
   '';
 
@@ -199,7 +127,7 @@ let
         disable_hyprland_logo = true,
         disable_splash_rendering = true,
         force_default_wallpaper = 0,
-        background_color = "rgb(${p.bgHex})",
+        background_color = "rgb(000000)",
         mouse_move_enables_dpms = true,
         key_press_enables_dpms = true,
       },
