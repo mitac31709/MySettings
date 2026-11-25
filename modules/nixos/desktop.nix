@@ -1,4 +1,4 @@
-# Graphical desktop stack: Hyprland (UWSM) + greetd/ReGreet + console-gui + portals.
+# Graphical desktop stack: Hyprland (UWSM) + Niri + greetd/tuigreet + console-gui + portals.
 {
   config,
   lib,

@@ -139,7 +139,7 @@
                     };
                     # Meltype Linux preview as Fcitx5 addon (not in nixpkgs).
                     meltype = final.callPackage ./pkgs/meltype { };
-                    # Official ChatGPT Linux desktop (Codex included); overrides darwin-only nixpkgs attr.
+                    # Official ChatGPT Linux desktop (.deb + Wayland/Meltype IME + Vivaldi NativeMessagingHosts).
                     chatgpt = final.callPackage ./pkgs/chatgpt {
                       src = inputs.chatgpt-deb;
                       version = chatgptVersion;
@@ -151,7 +151,7 @@
                     };
                     # 1.8.4 + Hyprland/XWayland AWT / sounds / no-update-prompt wrapper.
                     jquake = final.callPackage ./pkgs/jquake { jquake = prev.jquake; };
-                    # OpenCode 2 CLI (nixpkgs still ships 1.x; pin npm linux-x64 binary).
+                    # OpenCode 2 CLI (pin upstream @opencode/cli-linux-x64 npm binary for flake-update).
                     opencode = final.callPackage ./pkgs/opencode { };
                     # Google Antigravity CLI (`agy`; binary from antigravity-public).
                     antigravity = final.callPackage ./pkgs/antigravity { };

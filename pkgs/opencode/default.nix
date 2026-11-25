@@ -1,8 +1,7 @@
 # OpenCode 2 CLI (anomalyco/opencode).
 #
-# nixpkgs `opencode` is still the 1.x line; the upstream V2 terminal client is
-# published as `@opencode/cli-linux-x64` on npm (same binary the
-# https://opencode.ai/v2/install script installs under ~/.opencode/bin).
+# Pin the upstream V2 prebuilt `@opencode/cli-linux-x64` npm binary tracked by
+# `flake-update` (same binary https://opencode.ai/v2/install installs under ~/.opencode/bin).
 #
 # Do not autoPatchelf: the Bun-compiled binary breaks (runs as bare `bun`).
 # NixOS provides /lib64/ld-linux-x86-64.so.2, which is enough for this build.

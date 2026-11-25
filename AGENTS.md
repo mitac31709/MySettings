@@ -2,7 +2,7 @@
 
 ## What this repo is
 
-NixOS flake for `mitac`: greetd + Hyprland (UWSM) desktop, two hosts — `.#chromebook` (ASUS CX5500FE "delbin") and `.#vaio` (Intel 8th+ gen); `.#mitac` is a legacy alias of chromebook. Not an app/server: "running" it means nix eval/build. Real application is `sudo nixos-rebuild switch --flake .#chromebook|.#vaio` on the target machine (see `README.md`). No CI, no test suite, no `opencode.json`.
+NixOS flake for `mitac`: greetd/tuigreet + Hyprland (UWSM, default) & optional Niri desktop, two hosts — `.#chromebook` (ASUS CX5500FE "delbin") and `.#vaio` (Intel 8th+ gen); `.#mitac` is a legacy alias of chromebook. Not an app/server: "running" it means nix eval/build. Real application is `sudo nixos-rebuild switch --flake .#chromebook|.#vaio` on the target machine (see `README.md`). No CI, no test suite, no `opencode.json`.
 
 Nix is on PATH and the daemon normally runs. If a `nix` command errors with `cannot connect to socket at '/nix/var/nix/daemon-socket/socket'`, start `nix-daemon` in the background and retry.
 
@@ -20,7 +20,7 @@ Nix is on PATH and the daemon normally runs. If a `nix` command errors with `can
 - `rebuild`, `generations`, `secrets`, `flake-update`, `flake-update-cursor` are **Nix-store wrapper commands** defined in `home/shell.nix` / `home/flake-tools.nix`, not the files in `scripts/`. Editing `scripts/` changes nothing until `rebuild`.
 - They act on `repoPath` from `lib/machine.nix` (default `/home/mitac/MySettings`, overridable via `mitac.repoPath`). The `rebuild` target comes from `flakeTarget` / `mitac.flakeHost` (fallback `chromebook`); `rebuild vaio` overrides it.
 - `flake-update` runs `nix flake update` (all inputs) **and** rewrites pinned `.deb` URLs + custom package versions in `flake.nix` (UniClipboard / ChatGPT / Grok Bot / Meltype / OpenCode / Antigravity / wol-pc). Don't substitute a bare `nix flake update` — it skips the version sync. `flake-update-cursor` moves only `nixpkgs-cursor`.
-- OpenCode CLI is pinned to v2 in `pkgs/opencode` (nixpkgs 1.x deliberately unused).
+- OpenCode CLI is pinned to the upstream `@opencode/cli-linux-x64` v2 binary in `pkgs/opencode` (tracked directly by `flake-update`).
 - Home Manager sets `backupFileExtension = "backup"` — colliding files are renamed instead of failing activation.
 
 ## Gotchas

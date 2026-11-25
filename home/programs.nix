@@ -609,7 +609,7 @@ in
       zed-editor
       # Terminal Agent CLI (`cursor-agent`; also aliased as `agent`).
       cursor-cli
-      # OpenCode 2 terminal agent (`opencode`; pkgs/opencode overrides nixpkgs 1.x).
+      # OpenCode 2 terminal agent (`opencode`; pkgs/opencode pins upstream npm binary).
       opencode
       # Anthropic Claude Code CLI (`claude`).
       claude-code
