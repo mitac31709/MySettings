@@ -342,7 +342,7 @@ let
     exec "$@"
   '';
 
-  # Write / clear the waybar status JSON under mitac's XDG_RUNTIME_DIR.
+  # Write / clear the Colorshell status JSON under mitac's XDG_RUNTIME_DIR.
   resticPanel = pkgs.writeShellScript "restic-home-panel" ''
     set -eu
     export PATH="${
@@ -350,7 +350,6 @@ let
         pkgs.coreutils
         pkgs.getent
         pkgs.jq
-        pkgs.procps
         pkgs.util-linux
       ]
     }:$PATH"
@@ -358,15 +357,9 @@ let
     status="/run/user/''${uid}/restic-home-status"
     action="$1"
 
-    signal_waybar() {
-      runuser -u ${user} -- env XDG_RUNTIME_DIR="/run/user/''${uid}" \
-        pkill -SIGRTMIN+8 -x waybar >/dev/null 2>&1 || true
-    }
-
     case "$action" in
       clear)
         rm -f "$status"
-        signal_waybar
         ;;
       set)
         text="$2"
@@ -379,7 +372,6 @@ let
           '{text:$text, tooltip:$tooltip, class:$class}' >"$status"
         chown ${user}:users "$status" 2>/dev/null || chown ${user} "$status" || true
         chmod 644 "$status" || true
-        signal_waybar
         ;;
       *)
         echo "usage: restic-home-panel set <text> [tooltip] [class] | clear" >&2
