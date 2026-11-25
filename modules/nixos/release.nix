@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "nemo-hyprland-fixes" ];
+  system.nixos.tags = [ "tailscale-autoconnect-colorshell" ];
 }

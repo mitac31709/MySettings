@@ -101,6 +101,23 @@ class ServicesMonitor extends GObject.Object {
         }
     }
 
+    async #queryTailscaleState(): Promise<{ backendState: string; ip: string }> {
+        const tsBin = GLib.getenv("COLORSHELL_TAILSCALE_CMD") || "tailscale";
+        try {
+            const out = await execAsync([tsBin, "status", "--json", "--peers=false"]);
+            const data = JSON.parse(out) as {
+                BackendState?: string;
+                TailscaleIPs?: Array<string>;
+            };
+            const backendState = typeof data.BackendState === "string" ? data.BackendState : "";
+            const ips = Array.isArray(data.TailscaleIPs) ? data.TailscaleIPs : [];
+            const ipv4 = ips.find((addr) => addr.includes(".")) || ips[0] || "";
+            return { backendState, ip: ipv4 };
+        } catch {
+            return { backendState: "", ip: "" };
+        }
+    }
+
     #levelFromUnitState(st: string): ServiceLevel {
         if (st === "active") return "active";
         if (st === "activating") return "running";
@@ -133,8 +150,9 @@ class ServicesMonitor extends GObject.Object {
                 "restic-backups-home.timer",
             ]),
             this.#queryResticResult(),
+            this.#queryTailscaleState(),
         ])
-            .then(([ust, sst, rbRes]) => {
+            .then(([ust, sst, rbRes, tsInfo]) => {
                 const ucS = ust[0] || "unknown";
                 const lmS = ust[1] || "unknown";
                 const tdS = ust[2] || "unknown";
@@ -154,13 +172,31 @@ class ServicesMonitor extends GObject.Object {
                     ? "active / active"
                     : `text=${ctS} image=${ciS}`;
 
-                const tsUp = GLib.file_test("/sys/class/net/tailscale0", GLib.FileTest.EXISTS);
-                const tsLevel: ServiceLevel = tsS === "active"
-                    ? (tsUp ? "active" : "warn")
-                    : this.#levelFromUnitState(tsS);
-                const tsStatus = tsS === "active"
-                    ? (tsUp ? "active (tailscale0 UP)" : "active (tailscale0 未接続)")
-                    : tsS;
+                let tsLevel: ServiceLevel;
+                let tsStatus: string;
+                let tsRunning = false;
+                if (tsS !== "active") {
+                    tsLevel = this.#levelFromUnitState(tsS);
+                    tsStatus = tsS;
+                } else if (tsInfo.backendState === "Running") {
+                    tsLevel = "active";
+                    tsStatus = tsInfo.ip ? `Running (${tsInfo.ip})` : "Running";
+                    tsRunning = true;
+                } else if (tsInfo.backendState === "Starting") {
+                    tsLevel = "running";
+                    tsStatus = "Starting";
+                } else if (tsInfo.backendState === "Stopped") {
+                    tsLevel = "warn";
+                    tsStatus = "Stopped (未接続)";
+                } else if (tsInfo.backendState === "NeedsLogin" || tsInfo.backendState === "NeedsMachineAuth") {
+                    tsLevel = "warn";
+                    tsStatus = `${tsInfo.backendState} (要認証)`;
+                } else {
+                    tsLevel = "warn";
+                    tsStatus = tsInfo.backendState
+                        ? `active (${tsInfo.backendState})`
+                        : "active (状態取得失敗)";
+                }
 
                 let rbLevel: ServiceLevel;
                 let rbStatus: string;
@@ -234,8 +270,8 @@ class ServicesMonitor extends GObject.Object {
                         statusText: tsStatus,
                         unitScope: "system",
                         units: ["tailscaled.service"],
-                        isActive: tsS === "active",
-                        canToggle: false,
+                        isActive: tsS === "active" && tsRunning,
+                        canToggle: tsS === "active",
                         extraLabel: "Status",
                         extraAction: () => this.#runTerm("tailscale status"),
                     },
@@ -311,6 +347,14 @@ class ServicesMonitor extends GObject.Object {
 
     public runBackupNow(): void {
         this.#runTerm("sudo backup run");
+    }
+
+    public toggleTailscale(currentlyRunning: boolean): void {
+        const tsBin = GLib.getenv("COLORSHELL_TAILSCALE_CMD") || "tailscale";
+        const subcmd = currentlyRunning ? "down" : "up";
+        execAsync([tsBin, subcmd])
+            .catch((err) => console.warn(`tailscale ${subcmd} failed:`, err))
+            .finally(() => this.refreshNow());
     }
 
     public restartTailscale(): void {

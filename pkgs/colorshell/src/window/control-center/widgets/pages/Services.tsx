@@ -30,6 +30,13 @@ function ServiceCard({ item, svc }: { item: ServiceItem; svc: ServicesMonitor })
                         onClicked={() => svc.toggleUserUnit(item.units[0], item.isActive)}
                     />
                 )}
+                {item.id === "tailscale" && item.canToggle && (
+                    <Gtk.Button
+                        class="svc-btn"
+                        label={item.isActive ? "切断" : "接続"}
+                        onClicked={() => svc.toggleTailscale(item.isActive)}
+                    />
+                )}
                 {item.id === "tailscale" && (
                     <Gtk.Button
                         class="svc-btn"

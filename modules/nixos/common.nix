@@ -425,10 +425,14 @@ in
   };
 
   # Tailscale daemon; Trayscale (GUI) is in home.packages.
-  # --operator lets the login user run `tailscale file get` (Taildrop) without sudo.
+  # --operator lets the login user run `tailscale file get` (Taildrop) and
+  # `tailscale up/down/set` without sudo. Mirror it in extraUpFlags so
+  # `tailscaled-autoconnect.service` (driven by services.tailscale.authKeyFile)
+  # does not fail when reconciling non-default flags on `tailscale up`.
   services.tailscale = {
     enable = true;
     extraSetFlags = [ "--operator=mitac" ];
+    extraUpFlags = [ "--operator=mitac" ];
   };
 
   # Steam needs the NixOS module (32-bit libs, FHS, steam-hardware).

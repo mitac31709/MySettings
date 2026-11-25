@@ -574,6 +574,10 @@ let
             ct_s="$(u_state cliphist-text.service)"
             ci_s="$(u_state cliphist-image.service)"
             ts_s="$(s_state tailscaled.service)"
+            if [ "$ts_s" = "active" ]; then
+              ts_b="$(${pkgs.tailscale}/bin/tailscale status --json --peers=false 2>/dev/null | ${pkgs.jq}/bin/jq -r '.BackendState // empty' 2>/dev/null || true)"
+              [ -n "$ts_b" ] && ts_s="$ts_s / $ts_b"
+            fi
             rb_s="$(s_state restic-backups-home.service)"
             rt_s="$(s_state restic-backups-home.timer)"
 
@@ -2728,6 +2732,7 @@ in
         "COLORSHELL_NMTUI_CMD=${openNmtui}"
         "COLORSHELL_GHOSTTY_CMD=${ghosttyBin}"
         "COLORSHELL_NEMO_CMD=${nemoBin}"
+        "COLORSHELL_TAILSCALE_CMD=${pkgs.tailscale}/bin/tailscale"
         "COLORSHELL_AGENT_RUN_CMD=${agentRunBin}"
         "AGENT_RUN_T3=${t3Bin}"
         "AGENT_RUN_T3_DESKTOP=${t3DesktopBin}"
