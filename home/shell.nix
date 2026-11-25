@@ -138,4 +138,22 @@ in
       }
     '';
   };
+
+  # Structured SQLite shell history (Ctrl+R search + `atuin stats`).
+  # Data stays under XDG via ATUIN_DATA_DIR in home/programs.nix.
+  programs.atuin = {
+    enable = true;
+    enableBashIntegration = true;
+    # Keep Up Arrow on plain bash history and avoid hijacking `?` for Atuin AI.
+    flags = [
+      "--disable-up-arrow"
+      "--disable-ai"
+    ];
+    # Local-only by default (no external sync/update traffic); redact common secrets.
+    settings = {
+      auto_sync = false;
+      update_check = false;
+      secrets_filter = true;
+    };
+  };
 }

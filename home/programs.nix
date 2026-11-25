@@ -46,6 +46,8 @@ let
     CODEX_HOME = "${config.xdg.configHome}/codex";
     DSH_HOME = "${config.xdg.dataHome}/dsh";
     AGENT_DESKTOP_HOME = "${config.xdg.dataHome}/agent-desktop";
+    # Atuin 18.20+ defaults to ~/.atuin/data on fresh installs unless overridden.
+    ATUIN_DATA_DIR = "${config.xdg.dataHome}/atuin";
     PLATFORMIO_CORE_DIR = "${config.xdg.dataHome}/platformio";
     ARDUINO_DIRECTORIES_DATA = "${config.xdg.dataHome}/arduino15";
     ARDUINO_DIRECTORIES_DOWNLOADS = "${config.xdg.cacheHome}/arduino15";

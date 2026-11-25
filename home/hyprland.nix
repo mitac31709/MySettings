@@ -1549,6 +1549,17 @@ let
       run = "kill %1  # 強制: kill -9 %1";
       mode = "show";
     }
+    {
+      section = "開発";
+      label = "シェル履歴検索（Atuin・連打で絞込切替）";
+      keys = "Ctrl+R";
+    }
+    {
+      section = "開発";
+      label = "シェル履歴統計（Atuin）";
+      run = "atuin stats";
+      mode = "term";
+    }
     # ディスク容量
     {
       section = "ディスク容量";

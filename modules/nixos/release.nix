@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "prune-autostart-services" ];
+  system.nixos.tags = [ "atuin-shell-history" ];
 }
