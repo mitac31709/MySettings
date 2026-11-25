@@ -576,7 +576,7 @@ in
       agentDesktop
       # T3 Code: desktop + `t3` CLI; PATH wraps already-installed agents (including raw `antigravity` CLI).
       # The Colorshell agent card (pkgs/agent-run-status) speaks this package's
-      # RPC. home/hyprland.nix rejects any version other than 0.1.8.
+      # RPC. home/hyprland.nix rejects any version other than 0.1.11.
       (symlinkJoin {
         name = "t3code-${t3code.version}";
         paths = [

@@ -1,6 +1,6 @@
-// Fold t3code 0.1.8 orchestration v2 shell + thread RPC items into the
+// Fold t3code 0.1.11 orchestration v2 shell + thread RPC items into the
 // Colorshell status card. Method and command names match
-// packages/contracts/src/orchestrationV2.ts at tag v0.1.8.
+// packages/contracts/src/orchestrationV2.ts at tag v0.1.11.
 
 export const HIDE_AFTER_MS = 8000;
 export const MAX_ROWS = 5;

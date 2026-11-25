@@ -147,6 +147,8 @@
                     screenpipe = final.callPackage ./pkgs/screenpipe { };
                     # Cursor Gothic sans-serif typeface (OpenType extracted from WOFF2).
                     cursor-gothic = final.callPackage ./pkgs/cursor-gothic { };
+                    # T3 Code 0.1.11 (nixpkgs still ships 0.1.8) + Antigravity 1.5 quota auto-resume patch.
+                    t3code = final.callPackage ./pkgs/t3code { };
                     # Tilion Fortress: local stealth Chromium engine + tilion / tilion-mcp CLI.
                     tilion-fortress = final.callPackage ./pkgs/tilion-fortress { };
                   }

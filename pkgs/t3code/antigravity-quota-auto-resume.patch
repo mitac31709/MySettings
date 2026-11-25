@@ -1,0 +1,288 @@
+diff -ruN a/apps/server/src/provider/acp/AntigravityTurnOutcome.ts b/apps/server/src/provider/acp/AntigravityTurnOutcome.ts
+--- a/apps/server/src/provider/acp/AntigravityTurnOutcome.ts	2026-11-25 13:35:49.219062011 +0900
++++ b/apps/server/src/provider/acp/AntigravityTurnOutcome.ts	2026-11-25 13:36:47.360157114 +0900
+@@ -19,15 +19,27 @@
+ const MAX_ERROR_PAYLOAD_BYTES = 16_384;
+ // The Go harness's rendering of a Google API error, as the agent's api_errors.py reads it.
+ const API_ERROR = /Error (\d{3}), Message: (.+?), Status: ([A-Z_]+)/s;
+-const QUOTA_EXHAUSTED = /\breason:QUOTA_EXHAUSTED\b/;
++// Antigravity 1.5 with a Google account writes "STATUS (code NNN): message" in a protobuf string
++// whose length varint (65-90, 95) can be an uppercase ASCII byte immediately before STATUS.
++const STATUS_ERROR =
++  /(CANCELLED|UNKNOWN|INVALID_ARGUMENT|DEADLINE_EXCEEDED|NOT_FOUND|ALREADY_EXISTS|PERMISSION_DENIED|RESOURCE_EXHAUSTED|FAILED_PRECONDITION|ABORTED|OUT_OF_RANGE|UNIMPLEMENTED|INTERNAL|UNAVAILABLE|DATA_LOSS|UNAUTHENTICATED) \(code (\d{3})\): (\P{Cc}+)/u;
++const QUOTA_EXHAUSTED = /(?:"reason"\s*:\s*"QUOTA_EXHAUSTED"|\breason:QUOTA_EXHAUSTED\b)/;
+ // Claude rejects a saved thinking block without a valid signature. It sits in the native
+ // history, so every later prompt to that session fails the same way.
+ const INVALID_THINKING_SIGNATURE =
+   /\bmessages\.\d+\.content\.\d+(?:\.thinking\.signature: Field required|: Invalid `signature` in `thinking` block)/;
+-const RESET_TIMESTAMP = /\bquotaResetTimeStamp:([^\s\]]+)/;
+-const RESET_DELAY = /\bquotaResetDelay:((?:\d+(?:\.\d+)?(?:ns|us|µs|μs|ms|h|m|s))+)(?=[\s\]])/;
++const GO_DURATION = "(?:\\d+(?:\\.\\d+)?(?:ns|us|µs|μs|ms|h|m|s))+";
++const delayPattern = (field: string) =>
++  new RegExp(
++    `(?:"${field}"\\s*:\\s*"(${GO_DURATION})"|\\b${field}:(${GO_DURATION})(?=[\\s\\],}]|$))`,
++  );
++const RESET_TIMESTAMP =
++  /(?:"quotaResetTimeStamp"\s*:\s*"([^"\s]+)"|\bquotaResetTimeStamp:([^\s\],}]+))/;
++const RESET_DELAY = delayPattern("quotaResetDelay");
+ // google.rpc.RetryInfo, which plain rate limits carry instead of a quota reset.
+-const RETRY_DELAY = /\bretryDelay:((?:\d+(?:\.\d+)?(?:ns|us|µs|μs|ms|h|m|s))+)(?=[\s\]])/;
++const RETRY_DELAY = delayPattern("retryDelay");
++// Antigravity 1.5 may state the reset only in the message: "... Resets in 4m42s.".
++const RESETS_IN = /\bResets in ((?:\d+(?:\.\d+)?(?:ns|us|µs|μs|ms|h|m|s))+)(?!\w|\.\d)/;
+ const GO_DURATION_PART = /(\d+(?:\.\d+)?)(ns|us|µs|μs|ms|h|m|s)/g;
+ const GO_DURATION_UNIT_MS: Record<string, number> = {
+   ns: 1e-6,
+@@ -93,17 +105,45 @@
+     return { type: row.type, payload: row.payload instanceof Uint8Array ? row.payload : null };
+   };
+ 
+-function resetAtFrom(text: string, now: DateTime.Utc): string | undefined {
+-  // makeProviderFailure drops a timestamp that does not parse, so fall back to the delay.
+-  const timestamp = RESET_TIMESTAMP.exec(text)?.[1];
+-  if (timestamp !== undefined && Option.isSome(DateTime.make(timestamp))) return timestamp;
+-  const delay = RESET_DELAY.exec(text)?.[1] ?? RETRY_DELAY.exec(text)?.[1];
++function matchedValue(match: RegExpExecArray | null): string | undefined {
++  return match?.[1] ?? match?.[2];
++}
++
++function parsePositiveDelayMs(delay: string | undefined): number | undefined {
+   if (delay === undefined) return undefined;
+   let delayMs = 0;
+   for (const [, amount, unit] of delay.matchAll(GO_DURATION_PART)) {
+     delayMs += Number(amount) * (GO_DURATION_UNIT_MS[unit!] ?? 0);
+   }
+-  return delayMs > 0 ? DateTime.formatIso(DateTime.add(now, { milliseconds: delayMs })) : undefined;
++  return delayMs > 0 ? Math.ceil(delayMs) : undefined;
++}
++
++function resetAtFrom(text: string, now: DateTime.Utc | undefined): string | undefined {
++  // makeProviderFailure drops an unparsable timestamp, and recovery ignores one at or before now.
++  const timestamp = matchedValue(RESET_TIMESTAMP.exec(text));
++  const parsedTimestamp = timestamp === undefined ? Option.none() : DateTime.make(timestamp);
++  if (now === undefined) return Option.isSome(parsedTimestamp) ? timestamp : undefined;
++  if (
++    Option.isSome(parsedTimestamp) &&
++    DateTime.toEpochMillis(parsedTimestamp.value) > DateTime.toEpochMillis(now)
++  ) {
++    return timestamp;
++  }
++  const delayMs =
++    parsePositiveDelayMs(matchedValue(RESET_DELAY.exec(text))) ??
++    parsePositiveDelayMs(matchedValue(RETRY_DELAY.exec(text))) ??
++    parsePositiveDelayMs(RESETS_IN.exec(text)?.[1]);
++  return delayMs !== undefined
++    ? DateTime.formatIso(DateTime.add(now, { milliseconds: delayMs }))
++    : Option.isSome(parsedTimestamp)
++      ? timestamp
++      : undefined;
++}
++
++// Reorders STATUS_ERROR's groups to API_ERROR's: HTTP status, message, status name.
++function statusError(text: string) {
++  const match = STATUS_ERROR.exec(text);
++  return match === null ? null : ([match[0], match[2], match[3], match[1]] as const);
+ }
+ 
+ function turnFailure(
+@@ -123,7 +163,7 @@
+   // The agent maps only the SDK's QUOTA_EXHAUSTED stop reason to `refusal`.
+   if (errorText === undefined && stopReason !== "refusal") return undefined;
+   const text = errorText ?? "";
+-  const apiError = API_ERROR.exec(text);
++  const apiError = API_ERROR.exec(text) ?? statusError(text);
+   const reusable = (failure: OrchestrationV2ProviderFailure) =>
+     ({ failure, threadDisposition: "reusable" }) as const;
+   if (stopReason === "refusal" || QUOTA_EXHAUSTED.test(text)) {
+diff -ruN a/packages/provider-acp/src/server/adapter.ts b/packages/provider-acp/src/server/adapter.ts
+--- a/packages/provider-acp/src/server/adapter.ts	2026-11-25 13:35:49.776154421 +0900
++++ b/packages/provider-acp/src/server/adapter.ts	2026-11-25 13:36:47.385782617 +0900
+@@ -1672,6 +1672,10 @@
+   foregroundIdle: Deferred.Deferred<void>;
+   /** Counts the turn's prompts; only the latest one settles the turn. */
+   promptSequence: number;
++  /** Outcome check armed for the turn's latest prompt or wake, reused if finalization defers. */
++  checkPromptOutcome:
++    | Effect.Success<ReturnType<NonNullable<AcpAdapterV2Flavor["watchPromptOutcome"]>>>
++    | undefined;
+   /** Clock millis just before `session/prompt` was handed to the runtime. */
+   promptSentAt: number | null;
+   /** Completed when an update after dispatch matches `cancelAfterPromptStarts.isStart`. */
+@@ -2286,6 +2290,12 @@
+           flavor.compactSession !== undefined ||
+           flavor.compactViaAdvertisedCommand === true;
+         const runtimeRestartRequired = yield* Ref.make(false);
++        const pendingContinuationOutcome = yield* Ref.make<{
++          readonly sessionId: string;
++          readonly check: Effect.Success<
++            ReturnType<NonNullable<AcpAdapterV2Flavor["watchPromptOutcome"]>>
++          >;
++        } | null>(null);
+         const runtimeTeardownState = yield* Ref.make<AcpRuntimeTeardownState>({ _tag: "Idle" });
+         const runtimeCallbackGeneration = yield* Ref.make(0);
+         const runtimeCallbackGenerationCounter = yield* Ref.make(0);
+@@ -4290,6 +4300,7 @@
+           incoming: AcpToolCallState,
+           projectedStatus?: ProjectedToolStatus,
+           rawPayload?: unknown,
++          options?: { readonly rearmDeferredFinalize?: boolean },
+         ) => Effect.Effect<void> = () => Effect.void;
+ 
+         const markAwaitingBackgroundHydration =
+@@ -4343,6 +4354,7 @@
+           incoming: AcpToolCallState,
+           projectedStatus?: ProjectedToolStatus,
+           rawPayload?: unknown,
++          emitOptions?: { readonly rearmDeferredFinalize?: boolean },
+         ) {
+           if (context.assistant.current?.sourceMessageId == null)
+             yield* closeTextStream(context, "assistant");
+@@ -4875,7 +4887,9 @@
+             }
+           }
+           yield* emitProviderEvent({ type: "turn_item.updated", driver, turnItem });
+-          yield* rearmDeferredFinalize(context);
++          if (emitOptions?.rearmDeferredFinalize !== false) {
++            yield* rearmDeferredFinalize(context);
++          }
+         });
+ 
+         /**
+@@ -7878,6 +7892,7 @@
+           ) {
+             rememberTerminalEnvironment(candidate.sessionId, yield* readMcpContext(threadId));
+             yield* Ref.set(runtimeRestartRequired, false);
++            yield* Ref.set(pendingContinuationOutcome, null);
+             yield* Ref.set(activeSessionId, candidate.sessionId);
+             yield* setActiveSessionSetup(candidate);
+             yield* Ref.set(activeSelection, null);
+@@ -7930,6 +7945,7 @@
+               });
+               itemIdentityVersion = 2;
+               yield* Ref.set(runtimeRestartRequired, false);
++              yield* Ref.set(pendingContinuationOutcome, null);
+               prepareClaimableTerminalEnvironment(yield* readMcpContext(input.threadId));
+               return yield* startAcpRuntime(input.threadId);
+             });
+@@ -8422,7 +8438,7 @@
+             if (!acpCompletedTurnShouldTerminalizeTool(tool, { ...flavor, extractSubagentUpdate }))
+               continue;
+             if (options?.unstartedOnly === true && tool.status !== "pending") continue;
+-            yield* emitTool(context, tool, status);
++            yield* emitTool(context, tool, status, undefined, { rearmDeferredFinalize: false });
+           }
+         });
+ 
+@@ -8647,6 +8663,18 @@
+               });
+             }
+           }
++          yield* Ref.set(
++            pendingContinuationOutcome,
++            postSettleContinuationEnabled &&
++              settledStatus === "completed" &&
++              !directStopQuarantine &&
++              context.checkPromptOutcome !== undefined
++              ? {
++                  sessionId: context.nativeThreadId,
++                  check: context.checkPromptOutcome,
++                }
++              : null,
++          );
+           yield* Ref.set(activeTurn, null);
+           if (settledStatus === "completed" && !directStopQuarantine) {
+             yield* detachBackgroundCommands(context);
+@@ -8678,20 +8706,39 @@
+           if (hasDeferredBackgroundWork(context)) return;
+           context.backgroundFinalizeGeneration += 1;
+           const generation = context.backgroundFinalizeGeneration;
++          const callbackGeneration = yield* Ref.get(runtimeCallbackGeneration);
+           const debounce = context.replyOpen
+             ? ACP_OPEN_REPLY_QUIET_LIMIT
+             : ACP_DEFERRED_FINALIZE_DEBOUNCE;
+           yield* Effect.gen(function* () {
+             yield* Effect.sleep(debounce);
+-            if (
+-              context.finalized ||
+-              context.interrupted ||
+-              context.backgroundFinalizeGeneration !== generation
+-            ) {
++            const stillCurrent = () =>
++              !context.finalized &&
++              !context.interrupted &&
++              context.backgroundFinalizeGeneration === generation &&
++              !hasDeferredBackgroundWork(context);
++            const isCurrent = Effect.gen(function* () {
++              if (!stillCurrent()) return false;
++              if ((yield* Ref.get(runtimeTeardownState))._tag !== "Idle") return false;
++              return (yield* Ref.get(runtimeCallbackGeneration)) === callbackGeneration;
++            });
++            if (!(yield* isCurrent)) return;
++            const status = context.promptSettledStatus ?? "completed";
++            const hiddenFailure =
++              status === "completed" && context.checkPromptOutcome !== undefined
++                ? yield* context.checkPromptOutcome({ stopReason: "end_turn" })
++                : undefined;
++            if (!(yield* isCurrent)) return;
++            if (hiddenFailure !== undefined) {
++              yield* terminalizeOpenForegroundTools(context, "failed");
++              if (!(yield* isCurrent)) return;
++              yield* Ref.set(runtimeRestartRequired, true);
++              yield* finalizeTurn(context, "failed", hiddenFailure.failure, {
++                childTurnsContinue: hasSurvivingBackgroundWork(context),
++                threadDisposition: hiddenFailure.threadDisposition,
++              });
+               return;
+             }
+-            if (hasDeferredBackgroundWork(context)) return;
+-            const status = context.promptSettledStatus ?? "completed";
+             yield* finalizeTurn(context, status);
+           }).pipe(Effect.forkIn(sessionScope), Effect.asVoid);
+           yield* options.testHooks?.onDeferredFinalizeScheduled?.(debounce) ?? Effect.void;
+@@ -8942,6 +8989,7 @@
+           if (!restartRequired) return false;
+           yield* restartAcpRuntime(threadId);
+           yield* Ref.set(runtimeRestartRequired, false);
++          yield* Ref.set(pendingContinuationOutcome, null);
+           yield* Ref.set(activeSessionId, null);
+           yield* Ref.set(activeSessionSetup, null);
+           yield* Ref.set(activeSelection, null);
+@@ -9314,6 +9362,7 @@
+               promptDispatched,
+               foregroundIdle: yield* Deferred.make<void>(),
+               promptSequence: 0,
++              checkPromptOutcome: undefined,
+               promptSentAt: null,
+               promptStarted,
+               promptUsage: undefined,
+@@ -9397,7 +9446,14 @@
+             // start before that continuation and must leave its buffer intact.
+             yield* projectDeferredCarryoverTerminals(rehydratedCarryoverSubagents);
+             // Retain projected terminals during wake drain so monotonic guards reject replayed spawns.
++            const continuationOutcome = yield* Ref.getAndSet(pendingContinuationOutcome, null);
+             if (isContinuationTurn) {
++              context.checkPromptOutcome =
++                continuationOutcome?.sessionId === requestedSessionId
++                  ? continuationOutcome.check
++                  : flavor.watchPromptOutcome === undefined
++                    ? undefined
++                    : yield* flavor.watchPromptOutcome(requestedSessionId);
+               yield* Ref.set(continuationRequested, false);
+               yield* Ref.update(wakeReports, ({ reports, offered }) => ({
+                 reports: new Map([...reports].filter(([key]) => !offered.has(key))),
+@@ -9473,6 +9529,7 @@
+               flavor.watchPromptOutcome === undefined
+                 ? undefined
+                 : yield* flavor.watchPromptOutcome(requestedSessionId);
++            context.checkPromptOutcome = checkPromptOutcome;
+             const promptGeneration = yield* Ref.get(runtimeCallbackGeneration);
+             const promptOptions = {
+               dispatched: context.promptDispatched,
+@@ -9581,6 +9638,7 @@
+                   }
+                   context.promptSettled = false;
+                   context.promptSettledStatus = null;
++                  context.checkPromptOutcome = checkPromptOutcome;
+                   context.backgroundFinalizeGeneration += 1;
+                   context.promptSentAt = yield* Clock.currentTimeMillis;
+                   context.lastProgressAt = context.promptSentAt;

@@ -51,11 +51,11 @@ let
   colorshellPkg = pkgs.callPackage ../pkgs/colorshell {
     baseColorshell = inputs.colorshell.packages.${pkgs.stdenv.hostPlatform.system}.colorshell;
   };
-  # pkgs/agent-run-status speaks the t3code 0.1.8 orchestration v2 RPC. A nixpkgs
+  # pkgs/agent-run-status speaks the t3code 0.1.11 orchestration v2 RPC. A version
   # bump that moves t3code fails evaluation here instead of shipping a silent mismatch.
   agentRunStatus =
-    if pkgs.t3code.version != "0.1.8" then
-      throw "agent-run-status expects t3code 0.1.8, but pkgs.t3code is ${pkgs.t3code.version}. Update pkgs/agent-run-status before bumping t3code."
+    if pkgs.t3code.version != "0.1.11" then
+      throw "agent-run-status expects t3code 0.1.11, but pkgs.t3code is ${pkgs.t3code.version}. Update pkgs/agent-run-status before bumping t3code."
     else
       pkgs.callPackage ../pkgs/agent-run-status { };
   agentRunBin = lib.getExe agentRunStatus;
@@ -2644,7 +2644,7 @@ in
     };
   };
 
-  # T3 Code (v0.1.8) orchestration RPC → $XDG_RUNTIME_DIR/agent-run-status.json.
+  # T3 Code (v0.1.11) orchestration RPC → $XDG_RUNTIME_DIR/agent-run-status.json.
   systemd.user.services.agent-run-status = {
     Unit = {
       Description = "T3 Code agent run status for Colorshell";

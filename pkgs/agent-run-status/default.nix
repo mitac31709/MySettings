@@ -1,7 +1,7 @@
-# Small user service that speaks t3code 0.1.8's orchestration v2 RPC and writes
+# Small user service that speaks t3code 0.1.11's orchestration v2 RPC and writes
 # $XDG_RUNTIME_DIR/agent-run-status.json for the Colorshell agent-run card.
 # The protocol is pinned: home/hyprland.nix refuses to evaluate when
-# pkgs.t3code.version is not 0.1.8.
+# pkgs.t3code.version is not 0.1.11.
 {
   lib,
   stdenvNoCC,
@@ -11,7 +11,7 @@
 
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "agent-run-status";
-  version = "0.1.8";
+  version = "0.1.11";
 
   src = ./src;
 

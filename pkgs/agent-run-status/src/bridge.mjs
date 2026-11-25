@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Bridge between the local T3 Code server (v0.1.8 orchestration v2) and Colorshell.
+// Bridge between the local T3 Code server (v0.1.11 orchestration v2) and Colorshell.
 // The daemon subscribes to orchestration shell/thread streams and writes
 // $XDG_RUNTIME_DIR/agent-run-status.json. One-shot subcommands open their own
 // short-lived socket so Approve / Deny / Stop do not depend on the daemon
@@ -463,7 +463,7 @@ function usage() {
   status
 
 Status file: ${statusPath()}
-Speaks t3code 0.1.8 orchestration RPC (protocol 2) only.
+Speaks t3code 0.1.11 orchestration RPC (protocol 2) only.
 `);
 }
 

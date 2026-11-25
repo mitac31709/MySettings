@@ -10,7 +10,7 @@ function base(now, threads) {
     source: "mock",
     updatedAt: iso(now),
     connected: false,
-    serverVersion: "0.1.8",
+    serverVersion: "0.1.11",
     detail: null,
     threads,
   };

@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "limine-bootloader" ];
+  system.nixos.tags = [ "t3code-0.1.11-antigravity" ];
 }

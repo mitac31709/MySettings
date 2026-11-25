@@ -1,8 +1,8 @@
-// Effect RPC JSON envelopes used by t3code 0.1.8.
+// Effect RPC JSON envelopes used by t3code 0.1.11.
 // The websocket frame is one JSON value. The upgrade URL must carry
 // orchestrationProtocol=2. Streams must be Ack'd or the server latch stays closed.
 
-export const SUPPORTED_T3_VERSION = "0.1.8";
+export const SUPPORTED_T3_VERSION = "0.1.11";
 export const ORCHESTRATION_PROTOCOL = "2";
 
 export const SHELL_METHOD = "orchestration.subscribeShell";

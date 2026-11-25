@@ -84,7 +84,7 @@ test("a running turn becomes a card and older tool rows are past tense", () => {
       runtimeRequests: [],
     },
   });
-  const doc = renderStatus(state, NOW, { connected: true, environmentId: "env_1", serverVersion: "0.1.8" });
+  const doc = renderStatus(state, NOW, { connected: true, environmentId: "env_1", serverVersion: "0.1.11" });
   assert.equal(doc.threads.length, 1);
   const thread = doc.threads[0];
   assert.equal(thread.phase, "running");
@@ -222,7 +222,7 @@ test("newer thread is listed first", () => {
   );
 });
 
-test("rpc frames round-trip and commands match the v0.1.8 contract", () => {
+test("rpc frames round-trip and commands match the v0.1.11 contract", () => {
   const raw = encodeRequest("7", "orchestration.subscribeShell", { requestCompletionMarker: true });
   const request = JSON.parse(raw);
   assert.equal(request._tag, "Request");
@@ -245,7 +245,7 @@ test("rpc frames round-trip and commands match the v0.1.8 contract", () => {
   const stop = interruptCommand("thread_1", "run_1");
   assert.equal(stop.type, "run.interrupt");
   assert.equal(stop.runId, "run_1");
-  assert.equal(versionSupported("0.1.8"), true);
+  assert.equal(versionSupported("0.1.11"), true);
   assert.equal(versionSupported(""), true);
   assert.equal(versionSupported("0.0.42"), false);
 });
@@ -265,7 +265,7 @@ test("server discovery keeps a live loopback record and skips a dead pid", async
       port: 3773,
       origin: "http://127.0.0.1:3773",
       startedAt: "2026-11-22T11:00:00.000Z",
-      serverVersion: "0.1.8",
+      serverVersion: "0.1.11",
     })}\n`,
   );
   await mkdir(join(home, "dev"), { recursive: true });
@@ -277,12 +277,12 @@ test("server discovery keeps a live loopback record and skips a dead pid", async
       port: 1,
       origin: "http://127.0.0.1:1",
       startedAt: "2026-11-22T12:00:00.000Z",
-      serverVersion: "0.1.8",
+      serverVersion: "0.1.11",
     })}\n`,
   );
   const found = await discoverServer({ T3CODE_HOME: home }, home);
   assert.equal(found.http, "http://127.0.0.1:3773");
-  assert.equal(found.serverVersion, "0.1.8");
+  assert.equal(found.serverVersion, "0.1.11");
   const url = new URL(websocketUrl(found.http, "ticket value"));
   assert.equal(url.pathname, "/ws");
   assert.equal(url.searchParams.get("wsTicket"), "ticket value");
