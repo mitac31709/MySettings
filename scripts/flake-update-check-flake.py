@@ -29,7 +29,7 @@ WATCH: dict[str, list[tuple[str, str, str, tuple[str, ...]]]] = {
         ("yazi", "yazi", "\uf07b", ()),
         ("tmux", "tmux", "\uf489", ()),
         ("peazip", "pea", "\uf1c6", ()),
-        ("_7zz", "7z", "\uf1c6", ()),
+        ("_7zip-zstd", "7z", "\uf1c6", ()),
         ("bottles", "botl", "\uf0c3", ()),
         ("discord", "disc", "\uf086", ()),
         ("hyprland", "hypr", "\ue615", ()),
