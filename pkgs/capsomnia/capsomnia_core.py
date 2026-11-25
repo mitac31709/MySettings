@@ -272,6 +272,14 @@ class LidOpenLockTracker:
         self._last_closed: bool | None = None
         self.last_event: LidOpenLockEvent | None = None
 
+    def needs_lock_check(
+        self,
+        *,
+        eligible: bool,
+        clamshell_closed: bool | None,
+    ) -> bool:
+        return bool(eligible and self._last_closed is True and clamshell_closed is False)
+
     def update(
         self,
         *,

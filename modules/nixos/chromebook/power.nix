@@ -39,7 +39,7 @@ in
     description = "Apply Cros EC USB-C power-role policy at boot";
     documentation = [ "file://${./typec-prefer-sink.py}" ];
     wantedBy = [ "multi-user.target" ];
-    after = [ "multi-user.target" ];
+    after = [ "systemd-udev-trigger.service" ];
     unitConfig.ConditionPathExists = "/dev/cros_ec";
     serviceConfig = {
       Type = "oneshot";

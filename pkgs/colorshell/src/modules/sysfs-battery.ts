@@ -142,7 +142,7 @@ function pickBatteryIcon(cap: number, status: string, gaugeAnomaly: boolean): st
     }
     const bucket = Math.min(100, Math.max(0, Math.round(cap / 10) * 10));
     if (status === "Charging") {
-        return `battery-level-${bucket}-charging-symbolic`;
+        return `battery-level-${Math.min(90, bucket)}-charging-symbolic`;
     }
     if (cap <= 10) {
         return "battery-caution-symbolic";

@@ -74,22 +74,14 @@ class ServicesMonitor extends GObject.Object {
 
     async #queryStates(scope: "user" | "system", units: Array<string>): Promise<Array<string>> {
         const argv = scope === "user"
-            ? ["systemctl", "--user", "is-active", ...units]
-            : ["systemctl", "is-active", ...units];
+            ? ["systemctl", "--user", "show", "-p", "ActiveState", "--value", ...units]
+            : ["systemctl", "show", "-p", "ActiveState", "--value", ...units];
         try {
             const out = await execAsync(argv);
-            return out.trim().split("\n");
-        } catch (err: unknown) {
-            // `systemctl is-active` exits non-zero when any unit is inactive/failed,
-            // while still outputting one state line per unit on stdout.
-            const text = typeof err === "string"
-                ? err
-                : (err instanceof Error ? err.message : String(err));
-            const lines = text.trim().split("\n").map((s) => s.trim()).filter(Boolean);
-            if (lines.length >= units.length) {
-                return lines.slice(0, units.length);
-            }
+            const lines = out.split("\n").map((s) => s.trim()).filter(Boolean);
             return units.map((_, idx) => lines[idx] || "unknown");
+        } catch {
+            return units.map(() => "unknown");
         }
     }
 

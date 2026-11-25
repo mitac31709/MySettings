@@ -66,15 +66,21 @@ let
     text = ''
       export _JAVA_AWT_WM_NONREPARENTING="''${_JAVA_AWT_WM_NONREPARENTING:-1}"
       workdir="$(mktemp -d -p /tmp jquake-XXXXXX)"
+      child=""
       trap 'rm -rf "$workdir"' EXIT
+      trap 'if [ -n "$child" ]; then kill -TERM "$child" 2>/dev/null || true; wait "$child" 2>/dev/null || true; fi; exit 143' INT TERM
       ln -sf "${libDir}/sounds" "$workdir/sounds"
       cd "$workdir"
-      exec java \
+      java \
         -Xmx200m -Xms32m -Xmn2m \
         -Djava.net.preferIPv4Stack=true \
         -Dhttp.agent='Mozilla/5.0 (X11; Linux x86_64) JQuake' \
         -jar "${libDir}/JQuake.jar" \
-        "$@" > /dev/null
+        "$@" > /dev/null &
+      child=$!
+      rc=0
+      wait "$child" || rc=$?
+      exit "$rc"
     '';
   };
 in
@@ -87,7 +93,9 @@ symlinkJoin {
     ln -s JQuake "$out/bin/jquake"
   '';
   meta = unwrapped.meta // {
-    description = "${unwrapped.meta.description or "JQuake"} (1.8.4, Hyprland/XWayland fixes, no update prompt)";
+    description = "${
+      unwrapped.meta.description or "JQuake"
+    } (1.8.4, Hyprland/XWayland fixes, no update prompt)";
     mainProgram = "JQuake";
   };
 }

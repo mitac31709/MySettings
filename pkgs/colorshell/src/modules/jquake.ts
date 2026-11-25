@@ -119,25 +119,13 @@ class JQuakeMonitor extends GObject.Object {
         }
         this.#refreshing = true;
 
-        execAsync(["systemctl", "--user", "is-active", ...UNITS])
+        execAsync(["systemctl", "--user", "show", "-p", "ActiveState", "--value", ...UNITS])
             .then((out) => {
-                const lines = out.trim().split("\n");
-                this.#unitStates = [
-                    lines[0] || "unknown",
-                    lines[1] || "unknown",
-                    lines[2] || "unknown",
-                ];
+                const lines = out.split("\n").map((s) => s.trim()).filter(Boolean);
+                this.#unitStates = UNITS.map((_, idx) => lines[idx] || "unknown");
             })
-            .catch((err: unknown) => {
-                const text = typeof err === "string"
-                    ? err
-                    : (err instanceof Error ? err.message : String(err));
-                const lines = text.trim().split("\n").map((s) => s.trim()).filter(Boolean);
-                this.#unitStates = [
-                    lines[0] || "unknown",
-                    lines[1] || "unknown",
-                    lines[2] || "unknown",
-                ];
+            .catch(() => {
+                this.#unitStates = UNITS.map(() => "unknown");
             })
             .finally(() => {
                 this.#refreshing = false;

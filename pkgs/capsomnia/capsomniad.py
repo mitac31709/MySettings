@@ -50,6 +50,7 @@ WAYBAR_SIGNAL_NUM = signal.SIGRTMIN + 15
 POLL_INTERVAL_MS = 250
 SLEEP_VERIFY_INTERVAL_SEC = 10.0
 HELPER_RETRY_INTERVAL_SEC = 5.0
+DPMS_RETRY_COOLDOWN_SEC = 5.0
 HOTSPOT_INTERVAL_SEC = 60.0
 OFF_DEBOUNCE_SEC = 0.35
 USER_BYPASS_EXTERNAL_GUARD_SEC = 3.0
@@ -136,8 +137,17 @@ def run_hypr_eval(lua_code: str, timeout: float = 2.0) -> tuple[bool, str]:
     return True, out
 
 
+def build_dpms_lua(out_name: str, state: str) -> str:
+    return f"hl.dsp.dpms({{ action = {json.dumps(state)}, monitor = {json.dumps(out_name)} }})"
+
+
 def set_output_dpms(out_name: str, state: str) -> tuple[bool, str]:
-    return run_hyprctl("dispatch", f"hl.dsp.dpms({json.dumps(state)}, {json.dumps(out_name)})")
+    ok, out = run_hyprctl("dispatch", build_dpms_lua(out_name, state))
+    if not ok:
+        return False, out
+    if out and out != "ok" and ("error" in out.lower() or "expected" in out.lower()):
+        return False, out
+    return True, out
 
 
 def get_builtin_output_name() -> str | None:
@@ -288,6 +298,7 @@ class CapsomniaDaemon:
         self.inhibit_fd: int | None = None
 
         self.did_power_off_builtin_display = False
+        self.next_dpms_retry_at = 0.0
         self.dimmed_device: str | None = None
         self.applied_xkb_dedicated: bool | None = None
         self.applied_shortcut: str | None = None
@@ -504,19 +515,20 @@ class CapsomniaDaemon:
             self.dimmed_device = None
 
     def sync_keep_display_marker(self) -> None:
-        self.rt_dir.mkdir(parents=True, exist_ok=True)
-        # Unified keep-screen-on: always inhibit hypridle dim/lock/DPMS-off while active.
-        # Closed-lid display behavior (min backlight vs DPMS-off) is handled in sync_display_for_lid.
         if self.awake_on:
-            self.keep_display_marker.touch(exist_ok=True)
-        else:
+            if not self.keep_display_marker.exists():
+                self.rt_dir.mkdir(parents=True, exist_ok=True)
+                self.keep_display_marker.touch(exist_ok=True)
+        elif self.keep_display_marker.exists():
             self.keep_display_marker.unlink(missing_ok=True)
 
-    def sync_display_for_lid(self, lid_closed: bool | None) -> None:
+    def sync_display_for_lid(self, lid_closed: bool | None, now: float | None = None) -> None:
         self.sync_keep_display_marker()
         keep_disp = bool(self.prefs["keep_display_awake"])
+        cur = time.monotonic() if now is None else now
 
         if not self.awake_on:
+            self.next_dpms_retry_at = 0.0
             self.restore_saved_brightness("awake_off")
             if self.did_power_off_builtin_display and lid_closed is False:
                 out_name = get_builtin_output_name()
@@ -526,6 +538,7 @@ class CapsomniaDaemon:
             return
 
         if keep_disp:
+            self.next_dpms_retry_at = 0.0
             if self.did_power_off_builtin_display:
                 out_name = get_builtin_output_name()
                 if out_name:
@@ -547,13 +560,20 @@ class CapsomniaDaemon:
         else:
             self.restore_saved_brightness("keep_display_awake_off")
             if lid_closed is True:
-                if not self.did_power_off_builtin_display:
+                if not self.did_power_off_builtin_display and cur >= getattr(self, "next_dpms_retry_at", 0.0):
                     out_name = get_builtin_output_name()
                     if out_name:
-                        ok, _ = set_output_dpms(out_name, "off")
+                        ok, err = set_output_dpms(out_name, "off")
                         if ok:
                             self.did_power_off_builtin_display = True
+                            self.next_dpms_retry_at = 0.0
+                        else:
+                            log(f"DPMS off failed on {out_name}: {err}")
+                            self.next_dpms_retry_at = cur + DPMS_RETRY_COOLDOWN_SEC
+                    else:
+                        self.next_dpms_retry_at = cur + DPMS_RETRY_COOLDOWN_SEC
             elif lid_closed is False:
+                self.next_dpms_retry_at = 0.0
                 if self.did_power_off_builtin_display:
                     out_name = get_builtin_output_name()
                     if out_name:
@@ -903,10 +923,17 @@ class CapsomniaDaemon:
 
             # Lid monitoring: display sleep/dimming + lock-on-lid-open.
             lid_closed = read_lid_closed()
-            self.sync_display_for_lid(lid_closed)
+            self.sync_display_for_lid(lid_closed, now=now)
 
             eligible_lock = bool(self.awake_on and self.prefs["lock_on_lid_open"])
-            locked_now = is_hyprlock_running() if eligible_lock else None
+            locked_now = (
+                is_hyprlock_running()
+                if self.lid_lock_tracker.needs_lock_check(
+                    eligible=eligible_lock,
+                    clamshell_closed=lid_closed,
+                )
+                else None
+            )
             if self.lid_lock_tracker.update(
                 eligible=eligible_lock,
                 clamshell_closed=lid_closed,

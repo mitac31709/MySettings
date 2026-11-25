@@ -76,6 +76,12 @@ WATCH: dict[str, list[tuple[str, str, str, tuple[str, ...]]]] = {
         ("typstyle", "tyst", "\uf15c", ()),
         ("git", "git", "\uf126", ()),
         ("gh", "gh", "\uf09b", ()),
+        ("t3code", "t3", "\uf121", ()),
+        ("llama-cpp", "llam", "\U000f06a9", ()),
+        ("activitywatch", "aw", "\uf017", ()),
+        ("awatcher", "awat", "\uf017", ()),
+        ("qalculate-qt", "qalc", "\uf1ec", ()),
+        ("chawan", "cha", "\uf0ac", ()),
     ],
     "nixpkgs-cursor": [
         ("code-cursor", "curs", "\ue795", ()),
@@ -89,6 +95,7 @@ FLAKE_META = {
     "bootvine": ("\uf1bb", "vine", "bootvine"),
     "agenix": ("\uf084", "age", "agenix"),
     "colorshell": ("\uf53f", "csh", "colorshell"),
+    "hermes-agent": ("\uf0e0", "hrms", "hermes-agent"),
 }
 
 

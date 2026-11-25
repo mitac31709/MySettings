@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "agent-run-card" ];
+  system.nixos.tags = [ "agent-run-card-afk-2026-11-24" ];
 }
