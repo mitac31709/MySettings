@@ -49,9 +49,9 @@ let
   # Target directories whose entries can be managed directly via home.file.
   skillTargetDirs = [
     ".agents/skills"
-    ".claude/skills"
+    ".config/claude/skills"
     ".gemini/config/skills"
-    ".hermes/skills"
+    ".local/share/hermes/skills"
   ];
 
   skillFiles = lib.foldl' (
@@ -67,7 +67,7 @@ let
   ) { } skillTargetDirs;
 
   managedDirs = (lib.concatMap (dir: map (name: "${dir}/${name}") skillNames) skillTargetDirs) ++ [
-    ".hermes/plugins/ponytail"
+    ".local/share/hermes/plugins/ponytail"
     ".gemini/config/plugins/ponytail"
   ];
 
@@ -97,6 +97,11 @@ let
       skill_names = json.loads(sys.argv[2])
       home = Path.home()
       xdg_config = Path(os.environ.get("XDG_CONFIG_HOME") or (home / ".config"))
+      xdg_data = Path(os.environ.get("XDG_DATA_HOME") or (home / ".local" / "share"))
+      claude_dir = Path(os.environ.get("CLAUDE_CONFIG_DIR") or (xdg_config / "claude"))
+      codex_dir = Path(os.environ.get("CODEX_HOME") or (xdg_config / "codex"))
+      hermes_dir = Path(os.environ.get("HERMES_HOME") or (xdg_data / "hermes"))
+      t3_home = Path(os.environ.get("T3CODE_HOME") or (xdg_data / "t3"))
 
 
       def atomic_write(path: Path, content: str, mode: int = 0o600) -> None:
@@ -184,9 +189,9 @@ let
           save_json_if_changed(path, existing, merged)
 
 
-      # 3. Claude Code (~/.claude/settings.json)
+      # 3. Claude Code ($CLAUDE_CONFIG_DIR/settings.json)
       def sync_claude_settings() -> None:
-          path = home / ".claude" / "settings.json"
+          path = claude_dir / "settings.json"
           if path.is_symlink():
               return
           existing = load_json(path)
@@ -203,9 +208,9 @@ let
           save_json_if_changed(path, existing, merged)
 
 
-      # 4. Codex (~/.codex/config.toml)
+      # 4. Codex ($CODEX_HOME/config.toml)
       def sync_codex_config() -> None:
-          path = home / ".codex" / "config.toml"
+          path = codex_dir / "config.toml"
           if path.is_symlink():
               return
           raw = path.read_text(encoding="utf-8") if path.is_file() else ""
@@ -227,9 +232,9 @@ let
               atomic_write(path, new_raw)
 
 
-      # 5. Hermes Agent (~/.hermes/config.yaml)
+      # 5. Hermes Agent ($HERMES_HOME/config.yaml)
       def sync_hermes_config() -> None:
-          path = home / ".hermes" / "config.yaml"
+          path = hermes_dir / "config.yaml"
           if path.is_symlink() or not path.parent.exists():
               return
           raw = path.read_text(encoding="utf-8") if path.is_file() else ""
@@ -253,22 +258,27 @@ let
               atomic_write(path, yaml.safe_dump(data, sort_keys=False, allow_unicode=True))
 
 
-      # 6. T3 Code Antigravity provider skills (~/.t3/userdata/providers/antigravity/*/config/skills)
+      # 6. T3 Code Antigravity provider skills ($T3CODE_HOME/userdata/providers/antigravity/*/config/skills)
       def sync_t3_antigravity_skills() -> None:
-          pattern = str(home / ".t3" / "userdata" / "providers" / "antigravity" / "*" / "config")
-          for cfg_dir in glob.glob(pattern):
-              skills_dir = Path(cfg_dir) / "skills"
-              skills_dir.mkdir(parents=True, exist_ok=True)
-              for name in skill_names:
-                  target = home / ".agents" / "skills" / name
-                  link = skills_dir / name
-                  if link.is_symlink():
-                      if os.readlink(link) == str(target):
+          roots = [t3_home]
+          legacy = home / ".t3"
+          if legacy != t3_home:
+              roots.append(legacy)
+          for root in roots:
+              pattern = str(root / "userdata" / "providers" / "antigravity" / "*" / "config")
+              for cfg_dir in glob.glob(pattern):
+                  skills_dir = Path(cfg_dir) / "skills"
+                  skills_dir.mkdir(parents=True, exist_ok=True)
+                  for name in skill_names:
+                      target = home / ".agents" / "skills" / name
+                      link = skills_dir / name
+                      if link.is_symlink():
+                          if os.readlink(link) == str(target):
+                              continue
+                          link.unlink()
+                      elif link.exists():
                           continue
-                      link.unlink()
-                  elif link.exists():
-                      continue
-                  link.symlink_to(target)
+                      link.symlink_to(target)
 
 
       sync_cursor_hooks()
@@ -284,7 +294,7 @@ in
 {
   home.file = skillFiles // {
     # Hermes Agent & Antigravity CLI native plugin directories from the pinned flake input.
-    ".hermes/plugins/ponytail" = {
+    ".local/share/hermes/plugins/ponytail" = {
       source = inputs.ponytail;
       force = true;
     };

@@ -33,6 +33,24 @@ let
       )
     else
       [ ];
+
+  xdgSessionVariables = {
+    # Keep dev toolchains, npm, PulseAudio cookie, XCompose cache, and agent/tool homes in XDG dirs.
+    GOPATH = "${config.xdg.dataHome}/go";
+    GRADLE_USER_HOME = "${config.xdg.dataHome}/gradle";
+    NPM_CONFIG_USERCONFIG = "${config.xdg.configHome}/npm/npmrc";
+    PULSE_COOKIE = "${config.xdg.configHome}/pulse/cookie";
+    XCOMPOSECACHE = "${config.xdg.cacheHome}/xcompose";
+    T3CODE_HOME = "${config.xdg.dataHome}/t3";
+    CLAUDE_CONFIG_DIR = "${config.xdg.configHome}/claude";
+    CODEX_HOME = "${config.xdg.configHome}/codex";
+    DSH_HOME = "${config.xdg.dataHome}/dsh";
+    AGENT_DESKTOP_HOME = "${config.xdg.dataHome}/agent-desktop";
+    PLATFORMIO_CORE_DIR = "${config.xdg.dataHome}/platformio";
+    ARDUINO_DIRECTORIES_DATA = "${config.xdg.dataHome}/arduino15";
+    ARDUINO_DIRECTORIES_DOWNLOADS = "${config.xdg.cacheHome}/arduino15";
+    ARDUINO_DIRECTORIES_USER = "${config.xdg.dataHome}/arduino";
+  };
 in
 {
   # User identity. The system profile also ships git, without this
@@ -428,30 +446,28 @@ in
     };
   };
 
-  home.sessionVariables = {
-    TERMINAL = "ghostty";
-    # Java AWT on tiling Wayland/XWayland compositors: prevents solid black frames.
-    _JAVA_AWT_WM_NONREPARENTING = "1";
-    # Expose Qt widget trees over AT-SPI2 for agent-desktop.
-    QT_ACCESSIBILITY = "1";
-    # Keep dev toolchains, npm, PulseAudio cookie, and XCompose cache in XDG dirs.
-    GOPATH = "${config.xdg.dataHome}/go";
-    GRADLE_USER_HOME = "${config.xdg.dataHome}/gradle";
-    NPM_CONFIG_USERCONFIG = "${config.xdg.configHome}/npm/npmrc";
-    PULSE_COOKIE = "${config.xdg.configHome}/pulse/cookie";
-    XCOMPOSECACHE = "${config.xdg.cacheHome}/xcompose";
-  }
-  # Local-only cursor theme (see the home.pointerCursor note above).
-  // lib.optionalAttrs (theme.cursor.package == null) (
-    {
-      XCURSOR_THEME = theme.cursor.name;
-      XCURSOR_SIZE = toString theme.cursor.size;
+  home.sessionVariables =
+    xdgSessionVariables
+    // {
+      TERMINAL = "ghostty";
+      # Java AWT on tiling Wayland/XWayland compositors: prevents solid black frames.
+      _JAVA_AWT_WM_NONREPARENTING = "1";
+      # Expose Qt widget trees over AT-SPI2 for agent-desktop.
+      QT_ACCESSIBILITY = "1";
     }
-    // lib.optionalAttrs theme.cursor.hyprcursor {
-      HYPRCURSOR_THEME = theme.cursor.name;
-      HYPRCURSOR_SIZE = toString theme.cursor.size;
-    }
-  );
+    # Local-only cursor theme (see the home.pointerCursor note above).
+    // lib.optionalAttrs (theme.cursor.package == null) (
+      {
+        XCURSOR_THEME = theme.cursor.name;
+        XCURSOR_SIZE = toString theme.cursor.size;
+      }
+      // lib.optionalAttrs theme.cursor.hyprcursor {
+        HYPRCURSOR_THEME = theme.cursor.name;
+        HYPRCURSOR_SIZE = toString theme.cursor.size;
+      }
+    );
+
+  systemd.user.sessionVariables = xdgSessionVariables;
 
   # libX11 creates compose cache files under $XCOMPOSECACHE only when the directory exists.
   home.activation.ensureXComposeCacheDir = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
@@ -507,18 +523,18 @@ in
   # legacy symlinks in ~/.local/bin do not shadow Nix store binaries).
   xdg.enable = true;
 
-  # Keep XDG dirs in English even with ja_JP.UTF-8 locale.
+  # Keep XDG dirs in English even with ja_JP.UTF-8 locale; disable unused ones with "$HOME/".
   xdg.userDirs = {
     enable = true;
     createDirectories = true;
-    desktop = "$HOME/Desktop";
+    desktop = "$HOME/";
     documents = "$HOME/Documents";
     download = "$HOME/Downloads";
-    music = "$HOME/Music";
+    music = "$HOME/";
     pictures = "$HOME/Pictures";
-    publicShare = "$HOME/Public";
-    templates = "$HOME/Templates";
-    videos = "$HOME/Videos";
+    publicShare = "$HOME/";
+    templates = "$HOME/";
+    videos = "$HOME/";
     projects = "$HOME/Projects";
   };
 

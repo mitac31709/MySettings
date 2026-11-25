@@ -1,5 +1,5 @@
 # Declarative overrides for T3 Code writable settings.json.
-# Keeps ~/.t3/userdata/settings.json writable so in-app Settings changes work
+# Keeps $T3CODE_HOME/userdata/settings.json writable so in-app Settings changes work
 # without EROFS, while reproducing declared provider binary paths.
 {
   config,
@@ -13,7 +13,11 @@ let
     name = "t3code-sync-declared-config";
     runtimeInputs = [ pkgs.python3 ];
     text = ''
-      settings_file="$HOME/.t3/userdata/settings.json"
+      t3_home="''${T3CODE_HOME:-${config.xdg.dataHome}/t3}"
+      if [ ! -d "$t3_home" ] && [ -d "$HOME/.t3" ]; then
+        t3_home="$HOME/.t3"
+      fi
+      settings_file="$t3_home/userdata/settings.json"
       python3 - "$settings_file" <<'PY'
       import json
       import os

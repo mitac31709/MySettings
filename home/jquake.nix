@@ -17,7 +17,7 @@ let
   theme = import ../lib/theme.nix;
   p = theme.palette;
 
-  confDir = "${config.home.homeDirectory}/Library/Application Support/JQuake";
+  confDir = "${config.xdg.configHome}/jquake";
   propsFile = "${confDir}/Settings.properties";
 
   jquakeClass = "net-jquake-app-Main";

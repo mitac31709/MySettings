@@ -1786,6 +1786,16 @@ scrub_new_device_stage() {
       ".codex/thread-writer-locks"
       ".codex/.codex-global-state.json"
       ".codex/.codex-global-state.json.bak"
+      ".config/codex/auth.json"
+      ".config/codex/installation_id"
+      ".config/codex/.sqlite-maintenance.lock"
+      ".config/codex/ipc"
+      ".config/codex/tmp"
+      ".config/codex/.tmp"
+      ".config/codex/project-metadata-locks"
+      ".config/codex/thread-writer-locks"
+      ".config/codex/.codex-global-state.json"
+      ".config/codex/.codex-global-state.json.bak"
 
       # Codex / ChatGPT desktop IDs
       ".config/Codex/.codex-tpp-local-executor-installation-id"
@@ -1807,6 +1817,7 @@ scrub_new_device_stage() {
       ".local/share/opencode/auth.json"
       ".gemini/antigravity-cli/installation_id"
       ".claude/.credentials.json"
+      ".config/claude/.credentials.json"
     )
 
     local rel
@@ -1836,6 +1847,8 @@ scrub_new_device_stage() {
     local -a glob_paths=(
       "${stage_home}/.codex/..codex-global-state.json"*
       "${stage_home}/.codex/state_"*.sqlite*
+      "${stage_home}/.config/codex/..codex-global-state.json"*
+      "${stage_home}/.config/codex/state_"*.sqlite*
       "${stage_home}/.local/share/Steam/ssfn"*
       "${stage_home}/.mozilla/firefox/"*/signedInUser.json
       "${stage_home}/.mozilla/firefox/"*/cookies.sqlite*

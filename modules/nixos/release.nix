@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "niri-side-by-side" ];
+  system.nixos.tags = [ "xdg-apps-cleanup" ];
 }

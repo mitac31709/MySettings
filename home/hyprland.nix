@@ -1670,19 +1670,19 @@ let
     {
       section = "ディスク容量";
       label = "PIO download cache 削除";
-      run = "rm -rf ~/.platformio/.cache && du -sh ~/.platformio";
+      run = "rm -rf ~/.local/share/platformio/.cache && du -sh ~/.local/share/platformio";
       mode = "term";
     }
     {
       section = "ディスク容量";
       label = "npm npx キャッシュ削除";
-      run = "rm -rf ~/.npm/_npx && du -sh ~/.npm";
+      run = "rm -rf ~/.cache/npm/_npx && du -sh ~/.cache/npm";
       mode = "term";
     }
     {
       section = "ディスク容量";
       label = "PIO 版付き toolchain 重複削除";
-      run = "rm -rf ~/.platformio/packages/toolchain-*@* && ls -d ~/.platformio/packages/toolchain-*";
+      run = "rm -rf ~/.local/share/platformio/packages/toolchain-*@* && ls -d ~/.local/share/platformio/packages/toolchain-*";
       mode = "show";
     }
     {
@@ -2856,6 +2856,7 @@ in
       Restart = "on-failure";
       RestartSec = 2;
       Environment = [
+        "T3CODE_HOME=${config.xdg.dataHome}/t3"
         "AGENT_RUN_T3=${t3Bin}"
         "AGENT_RUN_T3_DESKTOP=${t3DesktopBin}"
         "AGENT_RUN_XDG_OPEN=${xdgOpenBin}"

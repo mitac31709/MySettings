@@ -135,13 +135,13 @@ let
     "/home/${user}/.config/OrcaSlicer/ota"
 
     # Development toolchains / package caches (re-downloadable).
-    "/home/${user}/.platformio/packages"
-    "/home/${user}/.platformio/penv"
-    "/home/${user}/.platformio/.cache"
-    "/home/${user}/.arduino15/packages"
-    "/home/${user}/.arduino15/tmp"
-    "/home/${user}/.arduino15/library_index.json*"
-    "/home/${user}/.arduino15/package_index.json*"
+    "/home/${user}/.local/share/platformio/packages"
+    "/home/${user}/.local/share/platformio/penv"
+    "/home/${user}/.local/share/platformio/.cache"
+    "/home/${user}/.local/share/arduino15/packages"
+    "/home/${user}/.local/share/arduino15/tmp"
+    "/home/${user}/.local/share/arduino15/library_index.json*"
+    "/home/${user}/.local/share/arduino15/package_index.json*"
     "/home/${user}/.npm"
     "/home/${user}/.local/share/go/pkg/mod"
     "/home/${user}/.local/share/pnpm/store"
@@ -199,7 +199,10 @@ let
     "/home/${user}/.local/share/gradle/daemon"
 
     # T3 Code: downloaded agent/browser runtimes, logs, temp dirs, Electron caches
-    # (keep ~/.t3/userdata/statev2.sqlite, providers, attachments, and ~/.config/t3code-v2 settings).
+    # (keep $T3CODE_HOME/userdata/statev2.sqlite, providers, attachments, and ~/.config/t3code-v2 settings).
+    "/home/${user}/.local/share/t3/tools"
+    "/home/${user}/.local/share/t3/userdata/logs"
+    "/home/${user}/.local/share/t3/userdata/antigravity-tmp"
     "/home/${user}/.t3/tools"
     "/home/${user}/.t3/userdata/logs"
     "/home/${user}/.t3/userdata/antigravity-tmp"

@@ -506,7 +506,7 @@ in
   ];
 
   # T3 Code desktop backend listens on 0.0.0.0:3773 (serverExposureMode =
-  # "network-accessible" in ~/.t3/userdata/desktop-settings.json). Allow the
+  # "network-accessible" in ~/.local/share/t3/userdata/desktop-settings.json). Allow the
   # web GUI from the home LAN only, not from the internet at large.
   networking.firewall.extraCommands = ''
     iptables -A nixos-fw -p tcp -s 192.168.0.0/18 --dport 3773 -j nixos-fw-accept

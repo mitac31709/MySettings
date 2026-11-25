@@ -11,6 +11,8 @@
 #   that check (same-length URL → 404) so the dialog never appears.
 # - The JAR Class-Path is relative (`JQuake_lib/…`), so the patched JAR must
 #   stay next to that directory (not in a separate store path).
+# - Writes `./SettingsPath.properties` in the temp workdir so user config goes
+#   to `${XDG_CONFIG_HOME:-$HOME/.config}/jquake` instead of `~/Library`.
 {
   lib,
   jquake,
@@ -70,6 +72,9 @@ let
       trap 'rm -rf "$workdir"' EXIT
       trap 'if [ -n "$child" ]; then kill -TERM "$child" 2>/dev/null || true; wait "$child" 2>/dev/null || true; fi; exit 143' INT TERM
       ln -sf "${libDir}/sounds" "$workdir/sounds"
+      conf_dir="''${XDG_CONFIG_HOME:-$HOME/.config}/jquake"
+      mkdir -p "$conf_dir"
+      printf '%s\n' "$conf_dir" > "$workdir/SettingsPath.properties"
       cd "$workdir"
       java \
         -Xmx200m -Xms32m -Xmn2m \

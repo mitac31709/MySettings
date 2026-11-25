@@ -241,7 +241,7 @@ function sleep(ms) {
 
 async function withServer(fn) {
   const runtime = await discoverServer();
-  if (!runtime) throw new Error("T3 Code server is not running (~/.t3/userdata/server-runtime.json)");
+  if (!runtime) throw new Error("T3 Code server is not running ($T3CODE_HOME/userdata/server-runtime.json)");
   if (!versionSupported(runtime.serverVersion)) {
     throw new Error(
       `T3 Code ${runtime.serverVersion} is not the pinned RPC (expected ${SUPPORTED_T3_VERSION}). Update the bridge before using it.`,
