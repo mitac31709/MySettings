@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "hyprtasking-overview" ];
+  system.nixos.tags = [ "podman-distrobox" ];
 }

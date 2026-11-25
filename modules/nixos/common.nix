@@ -398,6 +398,8 @@ in
       alsa-utils # amixer/alsactl — mute SOF amps if audio wedges
       libva-utils # vainfo — verify VA-API / Parsec hw encode
       iperf3 # LAN / WAN bandwidth test (server: -s, client: -c HOST)
+      podman-compose # Multi-container labs (YAML) on top of Podman
+      distrobox # Seamless host-integrated Linux containers (e.g. Kali) on Podman
       (callPackage ../../pkgs/disktui { }) # TUI disk & partition manager (wrapped with parted/cryptsetup/mkfs/smartctl)
     ]
     ++ lib.optionals hasBtrfs [ compsize ];
@@ -444,6 +446,14 @@ in
   virtualisation.virtualbox.host = {
     enable = true;
     enableExtensionPack = true;
+  };
+
+  # Rootless OCI containers (Podman) + Compose + Distrobox.
+  virtualisation.containers.enable = true;
+  virtualisation.podman = {
+    enable = true;
+    # Enable container DNS on user-defined networks (required for podman-compose).
+    defaultNetwork.settings.dns_enabled = true;
   };
 
   # WhatPulse External PCap Service: captures network traffic for the WhatPulse

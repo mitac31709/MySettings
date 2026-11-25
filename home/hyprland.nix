@@ -2200,6 +2200,37 @@ let
       section = "周辺";
       label = "警報時は hyprlock 解除→全WS追従(pin)で前面化・最大化（緊急）";
     }
+    # コンテナ
+    {
+      section = "コンテナ";
+      label = "Podman コンテナ一覧";
+      run = "podman ps -a";
+      mode = "term";
+    }
+    {
+      section = "コンテナ";
+      label = "Kali 使い捨てコンテナ起動（Podman）";
+      run = "podman run --rm -it docker.io/kalilinux/kali-rolling bash";
+      mode = "show";
+    }
+    {
+      section = "コンテナ";
+      label = "Distrobox 一覧";
+      run = "distrobox list";
+      mode = "term";
+    }
+    {
+      section = "コンテナ";
+      label = "Distrobox Kali 作成";
+      run = "distrobox create --name kali --image docker.io/kalilinux/kali-rolling";
+      mode = "show";
+    }
+    {
+      section = "コンテナ";
+      label = "Distrobox Kali に入る";
+      run = "distrobox enter kali";
+      mode = "term";
+    }
   ];
 
   cheatsheetDisplay =
