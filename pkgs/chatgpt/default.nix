@@ -223,9 +223,6 @@ stdenv.mkDerivation {
       --run "source '$out/lib/chatgpt/prepare-bundled-plugins'" \
       --add-flags "\''${WAYLAND_DISPLAY:+--ozone-platform=wayland --enable-features=WaylandWindowDecorations --enable-wayland-ime=true --wayland-text-input-version=3}"
 
-    substituteInPlace $out/share/applications/chatgpt.desktop \
-      --replace-fail 'Exec=chatgpt %U' 'Exec=chatgpt %U'
-
     runHook postInstall
   '';
 
