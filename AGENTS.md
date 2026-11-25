@@ -1,87 +1,41 @@
 # AGENTS.md
 
-## Cursor Cloud specific instructions
+## What this repo is
 
-This repo is a **NixOS system-configuration flake** (user `mitac`, greetd + Hyprland (UWSM)
-desktop, supporting ASUS CX5500FE "delbin" Chromebook as `.#chromebook` and Intel
-8th+ gen VAIO laptops as `.#vaio` on `main`; `.#mitac` is kept as a legacy alias
-for `.#chromebook`). It is **not** a long-running app/server: "running" it means
-evaluating and building the system configuration with Nix. Applying it for real
-(`sudo nixos-rebuild switch --flake .#chromebook` or `.#vaio`) only works on the
-actual target NixOS machine — see `README.md`.
+NixOS flake for `mitac`: greetd + Hyprland (UWSM) desktop, two hosts — `.#chromebook` (ASUS CX5500FE "delbin") and `.#vaio` (Intel 8th+ gen); `.#mitac` is a legacy alias of chromebook. Not an app/server: "running" it means nix eval/build. Real application is `sudo nixos-rebuild switch --flake .#chromebook|.#vaio` on the target machine (see `README.md`). No CI, no test suite, no `opencode.json`.
 
-### Using Nix in the cloud VM (non-obvious)
+Nix is on PATH and the daemon normally runs. If a `nix` command errors with `cannot connect to socket at '/nix/var/nix/daemon-socket/socket'`, start `nix-daemon` in the background and retry.
 
-Nix (Determinate Nix, flakes enabled) is installed in the VM snapshot in **daemonless mode**
-(the pod has no systemd). Two things are needed once per VM boot before any `nix` command:
+## Commands you'd otherwise guess wrong
 
-1. Start the Nix daemon (nothing auto-starts it without systemd). Run it in the background,
-   e.g. in a tmux session:
-   `sudo /nix/var/nix/profiles/default/bin/nix-daemon &`
-2. Load Nix onto `PATH` in the current shell:
-   `. /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh`
+- Fast sanity eval (all modules load): `nix eval .#nixosConfigurations.chromebook.config.networking.hostName` (same for `vaio`).
+- **Never** `nix eval ...options...` (especially `options.home-manager.users`) — forces the whole options tree and stalls the machine. Use narrow `config.` paths or `rg` the module sources. If unavoidable, eval a leaf under `nice -n 19 ionice -c3` (interactive helper: `nix-eval-low`).
+- Build a declared package: `nix build .#nixosConfigurations.vaio.config.home-manager.users.mitac.programs.neovim.finalPackage`.
+- Full checks (only when `hardware-configuration.nix` matches the target): `nix flake check`, `nix build .#nixosConfigurations.<host>.config.system.build.toplevel`.
+- Format check (repo follows nixfmt RFC style): `nix run nixpkgs#nixfmt -- --check flake.nix hosts/*/*.nix modules/nixos/*.nix modules/nixos/*/*.nix home/*.nix` — drop `--check` to reformat in place.
+- Don't run a full `nix build` just to "verify" a finished config change — the user's `rebuild` does that.
 
-If `nix` commands report `cannot connect to socket at '/nix/var/nix/daemon-socket/socket'`,
-the daemon is not running — do step 1.
+## Non-obvious wiring
 
-### Develop / lint / build / eval
+- `rebuild`, `generations`, `secrets`, `flake-update`, `flake-update-cursor` are **Nix-store wrapper commands** defined in `home/shell.nix` / `home/flake-tools.nix`, not the files in `scripts/`. Editing `scripts/` changes nothing until `rebuild`.
+- They act on `repoPath` from `lib/machine.nix` (default `/home/mitac/MySettings`, overridable via `mitac.repoPath`). The `rebuild` target comes from `flakeTarget` / `mitac.flakeHost` (fallback `chromebook`); `rebuild vaio` overrides it.
+- `flake-update` runs `nix flake update` (all inputs) **and** rewrites pinned `.deb` URLs + custom package versions in `flake.nix` (UniClipboard / ChatGPT / Grok Bot / Meltype / OpenCode / Antigravity / wol-pc). Don't substitute a bare `nix flake update` — it skips the version sync. `flake-update-cursor` moves only `nixpkgs-cursor`.
+- OpenCode CLI is pinned to v2 in `pkgs/opencode` (nixpkgs 1.x deliberately unused).
+- Home Manager sets `backupFileExtension = "backup"` — colliding files are renamed instead of failing activation.
 
-- Evaluate composed config (fast sanity check that all modules load):
-  `nix eval .#nixosConfigurations.chromebook.config.networking.hostName`
-  `nix eval .#nixosConfigurations.vaio.config.networking.hostName`
-- **Do not** eval `.#nixosConfigurations.<host>.options…` (especially
-  `options.home-manager.users`) — it forces the full options tree and stalls the
-  machine. Prefer narrow `config.…` paths, or read HM/nixpkgs module sources with
-  `rg` / file read. If an options attr is unavoidable, use a leaf path only and
-  run under low priority:
-  `nice -n 19 ionice -c3 nix eval '…'` (interactive: `nix-eval-low`).
-- Build a repo-declared package end-to-end (headline "included software"):
-  `nix build .#nixosConfigurations.vaio.config.home-manager.users.mitac.programs.neovim.finalPackage`
-- Full configuration check / toplevel (works when `hardware-configuration.nix` matches the target):
-  `nix flake check`
-  `nix build .#nixosConfigurations.chromebook.config.system.build.toplevel`
-  `nix build .#nixosConfigurations.vaio.config.system.build.toplevel`
-- Lint / format (this repo follows nixfmt RFC style):
-  `nix run nixpkgs#nixfmt -- --check flake.nix hosts/*/*.nix modules/nixos/*.nix modules/nixos/*/*.nix home/*.nix`
-  (includes `modules/nixos/release.nix` for optional generation labels)
-  (drop `--check` to reformat in place).
+## Gotchas
 
-### Known gotchas (durable)
+- `hosts/vaio/hardware-configuration.nix` is a `lib.mkDefault` placeholder; regenerate on the target machine before switching. `hosts/chromebook/hardware-configuration.nix` is the real delbin config.
+- Chromebook ALSA UCM merge (`modules/nixos/chromebook/audio.nix`) copies from read-only `/nix/store` inputs with `cp -a --no-preserve=mode` so the tree stays writable.
+- Graphify is optional: `nix run nixpkgs#uv -- tool install graphifyy`, then `export PATH="$HOME/.local/bin:$PATH"`; `graphify update .` after structural edits (`graphify-out/` is gitignored). Use it for architecture/refactor questions, not as a prelude to every read.
 
-- `hosts/chromebook/hardware-configuration.nix` in this repo is the **delbin machine's generated
-  config** (real `fileSystems` / boot modules), while `hosts/vaio/hardware-configuration.nix`
-  is a generic `lib.mkDefault` placeholder. Before `nixos-rebuild switch` on real VAIO (or
-  other) hardware, regenerate and replace the target `hosts/<host>/hardware-configuration.nix`
-  (see `README.md`).
-- Chromebook ALSA UCM merge in `modules/nixos/chromebook/audio.nix` copies from read-only
-  `/nix/store` inputs with `cp -a --no-preserve=mode` so the tree stays writable.
-- Graphify CLI (`graphify`) is optional for agents; install with
-  `nix run nixpkgs#uv -- tool install graphifyy` then `export PATH="$HOME/.local/bin:$PATH"`.
-  After code edits: `graphify update .`
+## Workflow / rules
 
-### Branch workflow
-
-Do all work on `main` (commits, PRs). Do not develop on `chromebook`. See
-`.cursor/rules/branch-workflow.mdc`.
-
-### Project rules (`.cursor/rules`)
-
-Agents that do not auto-load `.cursor/rules/*.mdc` (such as Antigravity `agy` or
-Codex) **must** check `.cursor/rules/` at the start of work and read all
-`alwaysApply: true` rules (plus glob-scoped rules like `frontend-design.mdc`
-when editing matching files):
-
-- `avoid-premature-workarounds.mdc` — investigate root causes instead of switching to workarounds
-- `backup-staging.mdc` — prefer declarative Nix config; stage only machine-specific state in `backup.nix` + `README.md`
-- `branch-workflow.mdc` — develop and commit only on `main`, never `chromebook`
-- `cheatsheet-expand.mdc` — also update `cheatsheetEntries` in `home/hyprland.nix` for reusable answers
-- `commit-before-next-unit.mdc` — commit your own finished changes and before starting the next unit
-- `committing-changes-with-git.mdc` — git safety protocol, HEREDOC commit messages, push boundaries
-- `communication-style.mdc` — concise, direct responses with minimal bolding
-- `creating-pull-requests.mdc` — PR creation steps using `gh`
-- `generation-tags.mdc` — bump `system.nixos.tags` in `modules/nixos/release.nix` on meaningful config changes
-- `graphify-knowledge-graph.mdc` — hybrid use of `graphify-out/` and native search
-- `investigate-before-conclude.mdc` — read logs, configs, and source before concluding
-- `nix-eval-avoid-options.mdc` — avoid heavy `options` evals; use narrow `config.` or source reads
-- `prefer-native-tools.mdc` — prefer native CLI / `nix run` over ad-hoc Python for simple tasks
-- `skip-build-on-completion.mdc` — skip routine full `nix build` at task completion; leave it to `rebuild` unless build verification is needed
+- Work and commit only on `main`; never develop on the `chromebook` branch.
+- OpenCode does **not** auto-load `.cursor/rules/*.mdc`. At the start of work, read every `alwaysApply: true` rule (plus glob-scoped ones when editing matching files). The ones that change behavior most:
+  - `generation-tags` — bump `system.nixos.tags` in `modules/nixos/release.nix` on meaningful config changes (skip docs/rules/cheatsheet-only edits; no `gen/NN-*` tags).
+  - `commit-before-next-unit` / `committing-changes-with-git` — commit finished verified units; git safety (no force-push, no `--no-verify`, no config edits, HEREDOC commit messages, ask before push).
+  - `nix-eval-avoid-options` — see above.
+  - `cheatsheet-expand` — for reusable answers, also update `cheatsheetEntries` in `home/hyprland.nix`.
+  - `backup-staging` — prefer declarative Nix/agenix (`secrets/*.age`); only machine-specific non-secret state goes in `modules/nixos/backup.nix` (`systemStagingSources`), with `scripts/restore-on-nixos.sh` + `README.md` updated too.
+  - `avoid-premature-workarounds`, `investigate-before-conclude`, `prefer-native-tools`, `communication-style`, `skip-build-on-completion` — investigate root causes, read logs before concluding, prefer native CLI over ad-hoc Python, answer concisely.

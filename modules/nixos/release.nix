@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "t3code-0.1.11-antigravity" ];
+  system.nixos.tags = [ "nemo-hyprland-fixes" ];
 }

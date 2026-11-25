@@ -120,6 +120,14 @@ baseColorshell.overrideAttrs (old: {
         'this.hyprctl(`dispatch hl.dsp.exec_cmd("''${cmd}")`);' \
         'this.hyprctl(`dispatch hl.dsp.exec_cmd(''${JSON.stringify(cmd)})`);'
 
+    substituteInPlace src/widget/BackgroundWindow.tsx \
+      --replace-fail \
+        $'                    setTimeout(() => { // just in case (gtk can freeze when doing this too fast)\n                        if(this.attachedLayer)\n                            this.attachedLayer.visible = true;\n                    }, 50);' \
+        $'                    setTimeout(() => { // just in case (gtk can freeze when doing this too fast)\n                        if(this.visible && this.attachedLayer)\n                            this.attachedLayer.visible = true;\n                    }, 50);' \
+      --replace-fail \
+        $'    /** attach a main window to this background layer */' \
+        $'    on_close_request(): boolean {\n        const layer = this.attachedLayer;\n        this.deattach();\n        layer?.close();\n        return false;\n    }\n\n    /** attach a main window to this background layer */'
+
     printf '\n' >> data/css/main.css
     cat ${./css/main-extra.css} >> data/css/main.css
     printf '\n' >> data/css/main.css

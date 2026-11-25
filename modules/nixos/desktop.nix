@@ -2,6 +2,7 @@
 {
   config,
   lib,
+  pkgs,
   ...
 }:
 
@@ -19,6 +20,15 @@
     variant = "";
   };
   services.printing.enable = true;
+
+  # Nemo (GTK GUI file manager), video thumbnails, D-Bus FileManager1
+  # (browser / Electron "Show in folder"), and GVfs (Trash, USB/SD mounts, SMB/SFTP).
+  environment.systemPackages = with pkgs; [
+    nemo-with-extensions
+    ffmpegthumbnailer
+  ];
+  services.dbus.packages = [ pkgs.nemo-with-extensions ];
+  services.gvfs.enable = true;
 
   # Desktop portals: Hyprland native portal with GTK fallback for file dialogs & settings.
   # programs.hyprland already adds xdg-desktop-portal-hyprland and xdg-desktop-portal-gtk

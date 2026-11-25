@@ -145,8 +145,7 @@ class ServicesMonitor extends GObject.Object {
                 const rbS = sst[1] || "unknown";
                 const rtS = sst[2] || "unknown";
 
-                const yazi = GLib.getenv("COLORSHELL_YAZI_CMD") || "yazi";
-                const ghostty = GLib.getenv("COLORSHELL_GHOSTTY_CMD") || "ghostty";
+                const nemo = GLib.getenv("COLORSHELL_NEMO_CMD") || "nemo";
 
                 const clipLevel: ServiceLevel = (ctS === "active" && ciS === "active")
                     ? "active"
@@ -214,7 +213,7 @@ class ServicesMonitor extends GObject.Object {
                         isActive: tdS === "active",
                         canToggle: true,
                         extraLabel: "フォルダ",
-                        extraAction: () => execApp(`${ghostty} -e ${yazi} ${GLib.get_home_dir()}/Downloads`),
+                        extraAction: () => execApp(`${nemo} ${GLib.get_home_dir()}/Downloads`),
                     },
                     {
                         id: "cliphist",

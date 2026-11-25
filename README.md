@@ -26,7 +26,7 @@
 | 操作 | キー | 動作 |
 |------|------|------|
 | 検索／ランチャー | **Super+D** / **Super+Space** / **Alt+Space** | **Colorshell Runner**（アプリ検索 / `>` クリップボード / `#` 壁紙 / 計算 / コマンド） |
-| アプリ一覧 | **Win (Super)** / **Super+Shift+D** | **Colorshell Apps Drawer** |
+| アプリ一覧 | **Win+Shift** / **Super+Shift+D** | **Colorshell Apps Drawer** |
 | 壁紙切替・動的配色 | **Super+W** | **Colorshell Runner** 壁紙ピッカー（`#`、`~/wallpapers`、pywal16 動的配色） |
 | コントロールセンター | **Super+I** | **Colorshell Control Center**（Wi-Fi / Bluetooth / 音量 / ナイトライト） |
 | 通知・カレンダー・メディア | **Super+M** | **Colorshell Center Window** |
@@ -59,7 +59,7 @@ NixOS の世代番号はマシン固有です。コミットとの対応はビ�
 
 任意でブートメニュー用スラッグを変えるときは `modules/nixos/release.nix` の `system.nixos.tags` を更新してから rebuild してください。
 
-ブートメニュー（`systemd-boot`）は `configurationLimit = 10` で世代を 10 件に絞り、`consoleMode = "0"`（UEFI 標準の 80x25）で描画しています（`modules/nixos/common.nix`）。どちらも矢印キー操作時にファームウェアのコンソール描画が数秒止まるのを防ぐための設定なので、変更すると再び遅くなることがあります。反映には rebuild と再起動が必要です。
+ブートメニュー（`Limine`）は `maxGenerations = 10` で世代を 10 件に絞っています（`modules/nixos/common.nix`）。Phoenix UEFI（VAIO）で `systemd-boot` の矢印キー操作が数秒固まる問題を避けるため、UEFI テキストコンソールに依存しない Limine を採用しています。反映には rebuild と再起動が必要です。
 
 ## 前提条件
 
@@ -70,7 +70,7 @@ NixOS の世代番号はマシン固有です。コミットとの対応はビ�
 
 ## USB からの新規インストールと初回設定
 
-新しい PC や空の SSD へ NixOS Live USB から導入する手順です。この flake は `systemd-boot`（UEFI 専用、`modules/nixos/common.nix`）と `zramSwap`（RAM 100% / `zstd`、`modules/nixos/laptop/power.nix`）を使うため、**UEFI ブート有効（セキュアブート無効）**・GPT（ESP + root、swap パーティション不要）を前提とします。
+新しい PC や空の SSD へ NixOS Live USB から導入する手順です。この flake は `Limine`（UEFI 専用、`modules/nixos/common.nix`）と `zramSwap`（RAM 100% / `zstd`、`modules/nixos/laptop/power.nix`）を使うため、**UEFI ブート有効（セキュアブート無効）**・GPT（ESP + root、swap パーティション不要）を前提とします。
 
 > **初回設定は Graphical ISO の日本語 LXQt 環境で行うのがおすすめ**: `ja_JP.UTF-8` と `Asia/Tokyo`・日本語キーボードを選べば日本語表示（フォント）・Firefox・GUI 端末（QTerminal）・クリップボードが初期状態から使えるため、GitHub 認証・Bitwarden（`rbw` + GUI `pinentry-qt`）・Google Drive OAuth の操作や長い文字列の扱いが格段に楽になります（日本語入力 IME の Meltype はこの flake 適用後に有効になります）。Minimal ISO 等の GUI 無しコンソール（TTY）を直接使う場合のみ、コンソールフォントに日本語グリフが無いため ISO 既定の英語（`en_US.UTF-8`）のままで進めてください。なお、この flake は Calamares が生成する `/etc/nixos/configuration.nix`（一時的な **LXQt / LightDM 設定**）を import しないため、設定取得・復元後に `nixos-rebuild switch --flake` と再起動を行えばクリーンに **greetd（ReGreet）+ Hyprland 専用環境**へ切り替わります。
 

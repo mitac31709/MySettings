@@ -75,6 +75,7 @@ let
   '';
   rofiBin = lib.getExe config.programs.rofi.package;
   yaziBin = "${pkgs.yazi}/bin/yazi";
+  nemoBin = "${pkgs.nemo-with-extensions}/bin/nemo";
   hyprlockBin = "${pkgs.hyprlock}/bin/hyprlock";
   hyprpickerBin = "${pkgs.hyprpicker}/bin/hyprpicker";
   hyprctlBin = "${pkgs.hyprland}/bin/hyprctl";
@@ -264,10 +265,10 @@ let
     if [ -e "''${XDG_RUNTIME_DIR}/hypr-keep-screen-on" ] || [ -e "''${XDG_RUNTIME_DIR}/capsomnia/keep-display-awake" ]; then
       exit 0
     fi
-    exec ${hyprctlBin} dispatch 'hl.dsp.dpms("off")'
+    exec ${hyprctlBin} dispatch 'hl.dsp.dpms({ action = "off" })'
   '';
   idleDpmsOnCmd = pkgs.writeShellScript "hypr-idle-dpms-on" ''
-    ${hyprctlBin} dispatch 'hl.dsp.dpms("on")' >/dev/null 2>&1 || true
+    ${hyprctlBin} dispatch 'hl.dsp.dpms({ action = "on" })' >/dev/null 2>&1 || true
     ${brightnessctl} -r >/dev/null 2>&1 || true
   '';
   toggleKeepScreenOn = pkgs.writeShellApplication {
@@ -485,7 +486,13 @@ let
     ];
     text = ''
       if ${hyprctlBin} clients -j 2>/dev/null | jq -e '[.[] | select(.class == "net-jquake-app-Main")] | length > 0' >/dev/null; then
-        ${hyprctlBin} dispatch 'closewindow class:^net-jquake-app-Main$' >/dev/null 2>&1 || true
+        ${hyprctlBin} dispatch 'hl.dsp.window.close({ window = "class:^net-jquake-app-Main$" })' >/dev/null 2>&1 || true
+        for _ in $(seq 1 20); do
+          if ! ${hyprctlBin} clients -j 2>/dev/null | jq -e '[.[] | select(.class == "net-jquake-app-Main")] | length > 0' >/dev/null; then
+            break
+          fi
+          sleep 0.05
+        done
         exit 0
       fi
 
@@ -549,7 +556,7 @@ let
       pkgs.ghostty
       pkgs.rofi
       pkgs.systemd
-      pkgs.yazi
+      pkgs.nemo-with-extensions
       hyprExec
     ];
     text = ''
@@ -579,7 +586,7 @@ let
       LAN Mouse │ GUI を開く
       Taildrop Receive [$td_s] │ 再起動
       Taildrop Receive [$td_s] │ $(toggle_verb "$td_s")
-      Taildrop │ ~/Downloads を yazi で開く
+      Taildrop │ ~/Downloads を Nemo で開く
       Cliphist [t:$ct_s i:$ci_s] │ 再起動
       Cliphist │ 履歴メニューを開く
       Tailscale [$ts_s] │ Trayscale GUI を開く
@@ -628,8 +635,8 @@ let
               *"Taildrop Receive"*"停止")
                 systemctl --user stop taildrop-receive.service
                 ;;
-              *"Taildrop"*"yazi"*)
-                exec ${hyprExecBin} "${ghosttyBin}" -e "${yaziBin}" "$HOME/Downloads"
+              *"Taildrop"*"Nemo"*)
+                exec ${hyprExecBin} "${nemoBin}" "$HOME/Downloads"
                 ;;
               *"Cliphist"*"再起動")
                 systemctl --user restart cliphist-text.service cliphist-image.service
@@ -681,7 +688,7 @@ let
     {
       section = "起動・終了";
       label = "Colorshell アプリ一覧（Apps Drawer）";
-      keys = "Win (Super) / Super+Shift+D";
+      keys = "Win+Shift / Super+Shift+D";
       run = "${colorshellBin} toggle -w apps-drawer";
       mode = "exec";
     }
@@ -836,7 +843,7 @@ let
     }
     {
       section = "ウィンドウ・WS";
-      label = "注: Super+E は Yazi、外部リンクは Vivaldi へ自動フォーカス";
+      label = "注: Super+E は Yazi、Super+Shift+E は Nemo、外部リンクは Vivaldi へ自動フォーカス";
     }
     # スクショ・音量・輝度・履歴
     {
@@ -1049,8 +1056,20 @@ let
     }
     {
       section = "Yazi / Neovim";
+      label = "Nemo（GUI ファイラー）";
+      keys = "Super+Shift+E";
+      run = nemoBin;
+      mode = "exec";
+    }
+    {
+      section = "Yazi / Neovim";
       label = "隠し表示 / spot / 開く";
       keys = ". / Tab / Enter";
+    }
+    {
+      section = "Yazi / Neovim";
+      label = "移動(カット) / コピー / 貼付 / 解除 / 選択";
+      keys = "x / y / p(上書P) / X / Space";
     }
     {
       section = "Yazi / Neovim";
@@ -1066,6 +1085,11 @@ let
       section = "Yazi / Neovim";
       label = "シェル / フィルタ / zoxide";
       keys = "; / : / f / z";
+    }
+    {
+      section = "Yazi / Neovim";
+      label = "パス指定移動（外部ドライブ: /run/media/$USER）";
+      keys = "g Space";
     }
     {
       section = "Yazi / Neovim";
@@ -1493,6 +1517,12 @@ let
       label = "df / lsblk";
       run = "df -hT /; lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINTS";
       mode = "term";
+    }
+    {
+      section = "ディスク容量";
+      label = "外部ドライブをマウント / 解除（udisksctl）";
+      run = "udisksctl mount -b /dev/sdX1  # 解除: udisksctl unmount -b /dev/sdX1";
+      mode = "show";
     }
     {
       section = "ディスク容量";
@@ -2492,8 +2522,10 @@ in
       hl.bind(mod .. " + Space",     hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} runner"}), { dont_inhibit = true })
       hl.bind("ALT + Space",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} runner"}), { dont_inhibit = true })
       hl.bind(mod .. " + SHIFT + D", hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w apps-drawer"}), { dont_inhibit = true })
-      hl.bind("Super_L",             hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w apps-drawer"}), { release = true, dont_inhibit = true })
-      hl.bind("Super_R",             hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w apps-drawer"}), { release = true, dont_inhibit = true })
+      hl.bind(mod .. " + Shift_L",   hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w apps-drawer"}), { release = true, dont_inhibit = true })
+      hl.bind(mod .. " + Shift_R",   hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w apps-drawer"}), { release = true, dont_inhibit = true })
+      hl.bind("SHIFT + Super_L",     hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w apps-drawer"}), { release = true, dont_inhibit = true })
+      hl.bind("SHIFT + Super_R",     hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w apps-drawer"}), { release = true, dont_inhibit = true })
       hl.bind(mod .. " + W",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} runner -t \"#\""}), { dont_inhibit = true })
       hl.bind(mod .. " + I",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w control-center"}), { dont_inhibit = true })
       hl.bind(mod .. " + M",         hl.dsp.exec_cmd(${builtins.toJSON "${colorshellBin} toggle -w center-window"}), { dont_inhibit = true })
@@ -2501,6 +2533,7 @@ in
       hl.bind(mod .. " + P",         hl.dsp.exec_cmd(${builtins.toJSON "${rofiRunner}"}), { dont_inhibit = true })
       hl.bind(mod .. " + N",         hl.dsp.exec_cmd(${builtins.toJSON (lib.getExe newWorkspace)}), { dont_inhibit = true })
       hl.bind(mod .. " + E",         hl.dsp.exec_cmd(${builtins.toJSON openYazi}))
+      hl.bind(mod .. " + SHIFT + E", hl.dsp.exec_cmd(${builtins.toJSON nemoBin}))
       hl.bind(mod .. " + V",         hl.dsp.exec_cmd("clipboard-history"))
       hl.bind(mod .. " + L",         hl.dsp.exec_cmd(${builtins.toJSON "${lockOnceCmd}"}))
       hl.bind(mod .. " + slash",     hl.dsp.exec_cmd(${builtins.toJSON "${showCheatsheet}"}), { dont_inhibit = true })
@@ -2624,7 +2657,7 @@ in
       };
       aliases = {
         terminal = "ghostty";
-        file_manager = "ghostty -e yazi";
+        file_manager = "nemo";
         media = "mpv";
       };
       clock = {
@@ -2694,7 +2727,7 @@ in
         "COLORSHELL_BTOP_CMD=${openBtop}"
         "COLORSHELL_NMTUI_CMD=${openNmtui}"
         "COLORSHELL_GHOSTTY_CMD=${ghosttyBin}"
-        "COLORSHELL_YAZI_CMD=${yaziBin}"
+        "COLORSHELL_NEMO_CMD=${nemoBin}"
         "COLORSHELL_AGENT_RUN_CMD=${agentRunBin}"
         "AGENT_RUN_T3=${t3Bin}"
         "AGENT_RUN_T3_DESKTOP=${t3DesktopBin}"

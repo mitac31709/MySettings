@@ -239,7 +239,9 @@ let
 
       raise_alert() {
         # Wake outputs (pairs with JQuake wakeUpScreen).
-        ${hyprctl} dispatch 'hl.dsp.dpms("on")' >/dev/null 2>&1 || true
+        # Hyprland 0.57 Lua hl.dsp.dpms requires { action = "on" }; a bare "on"
+        # string is ignored and defaults to toggle, blanking an active display.
+        ${hyprctl} dispatch 'hl.dsp.dpms({ action = "on" })' >/dev/null 2>&1 || true
         # Session lock sits above all app surfaces; dismiss so the map is visible.
         if pgrep -x hyprlock >/dev/null 2>&1; then
           pkill -x hyprlock || true
@@ -261,7 +263,7 @@ let
 
         if [ -n "$info" ]; then
           floating="$(printf '%s\n' "$info" | jq -r '.floating // false')"
-          pinned="$(printf '%s\n' "$info" | jq -r '.pinned // false')"
+          pinned="$(printf '%s\n' "$info" | jq -r '(.pinned // false) or (.pinFullscreened // false)')"
           if [ "$floating" != "true" ]; then
             ${hyprctl} dispatch 'hl.dsp.window.float({ window = "class:^${jquakeClass}$", action = "toggle" })' >/dev/null 2>&1 || true
           fi
@@ -385,6 +387,7 @@ in
       pin = true,
       border_size = 2,
       maximize = true,
+      opacity = "1.0 override",
     })
     -- JQuake / XEmbed tray host window rules (XWayland)
     hl.window_rule({

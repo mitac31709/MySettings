@@ -132,7 +132,7 @@ let
   rofiBin = lib.getExe config.programs.rofi.package;
   nvimBin = lib.getExe config.programs.neovim.finalPackage;
   ghosttyBin = lib.getExe pkgs.ghostty;
-  yaziBin = lib.getExe pkgs.yazi;
+  nemoBin = "${pkgs.nemo-with-extensions}/bin/nemo";
 
   startupSoundBin = pkgs.writeShellApplication {
     name = "startup-sound";
@@ -659,8 +659,8 @@ let
           actions+=("toggle")
 
           if [ "$src" = "local" ]; then
-            labels+=("名前を変更 (リネーム)" "Yazi でフォルダを開く" "削除する")
-            actions+=("rename" "yazi" "delete")
+            labels+=("名前を変更 (リネーム)" "Nemo でフォルダを開く" "削除する")
+            actions+=("rename" "nemo" "delete")
           else
             labels+=("ローカルへ複製 (編集・リネーム用コピー)" "Nix 定義を編集 (home/startup-sound.nix)")
             actions+=("copy_local" "edit_nix")
@@ -696,9 +696,9 @@ let
             copy_local)
               copy_nix_to_local_ui "$file" "$name"
               ;;
-            yazi)
+            nemo)
               mkdir -p "$local_dir"
-              launch_in_session "$ghosttyBin" -e "$yaziBin" "$file"
+              launch_in_session "$nemoBin" "$(dirname "$file")"
               exit 0
               ;;
             edit_nix)
@@ -768,8 +768,8 @@ let
           actions+=("add_local")
           action_keys+=("")
 
-          labels+=("編集 │ 起動音フォルダを Yazi で開く")
-          actions+=("open_yazi")
+          labels+=("編集 │ 起動音フォルダを Nemo で開く")
+          actions+=("open_nemo")
           action_keys+=("")
 
           labels+=("編集 │ Nix 定義ファイルを Neovim で編集")
@@ -817,9 +817,9 @@ let
             add_local)
               add_local_sound_ui
               ;;
-            open_yazi)
+            open_nemo)
               mkdir -p "$local_dir"
-              launch_in_session "$ghosttyBin" -e "$yaziBin" "$local_dir"
+              launch_in_session "$nemoBin" "$local_dir"
               exit 0
               ;;
             edit_nix)
@@ -834,7 +834,7 @@ let
       }
 
       ghosttyBin=${lib.escapeShellArg ghosttyBin}
-      yaziBin=${lib.escapeShellArg yaziBin}
+      nemoBin=${lib.escapeShellArg nemoBin}
       nvimBin=${lib.escapeShellArg nvimBin}
 
       case "''${1:-}" in

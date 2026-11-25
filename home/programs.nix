@@ -297,6 +297,11 @@ in
       first-time = false;
       layout = "jp";
     };
+    # Nemo "Open in Terminal" (defaults to gnome-terminal otherwise).
+    "org/cinnamon/desktop/applications/terminal" = {
+      exec = "ghostty";
+      exec-arg = "-e";
+    };
   };
 
   # Stub: prevent stale light colors.css @import from overriding GTK / Colorshell theme.
@@ -431,7 +436,7 @@ in
     }
   );
 
-  # Yazi via Ghostty for inode/directory mime (xdg-open etc.).
+  # Yazi via Ghostty launcher entry.
   xdg.dataFile."applications/mitac-yazi.desktop".text = ''
     [Desktop Entry]
     Type=Application
@@ -448,7 +453,7 @@ in
   xdg.mimeApps = {
     enable = true;
     defaultApplications = {
-      "inode/directory" = [ "mitac-yazi.desktop" ];
+      "inode/directory" = [ "nemo.desktop" ];
       "text/plain" = [ "nvim.desktop" ];
       "text/markdown" = [ "nvim.desktop" ];
       "text/x-cmake" = [ "nvim.desktop" ];
