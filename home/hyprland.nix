@@ -150,7 +150,6 @@ let
       pkgs.coreutils
       pkgs.hyprshot
       pkgs.libnotify
-      pkgs.procps
       config.programs.rofi.package
       pkgs.satty
       pkgs.wl-clipboard
