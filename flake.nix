@@ -47,6 +47,11 @@
       url = "github:retrozinndev/colorshell";
       inputs.home-manager.follows = "home-manager";
     };
+    # HyprEndfield (Linux / Hyprland port of DDDuoDuo/EndfieldHUD).
+    hyprendfield = {
+      url = "github:OctoberPrayRain/HyprEndfield";
+      flake = false;
+    };
     # Vendor .debs (flake update re-fetches; see scripts/flake-update.sh).
     # Keep URL version in sync with uniclipboardVersion below (flake-update.sh).
     uniclipboard-deb = {
@@ -164,6 +169,10 @@
                     t3code = final.callPackage ./pkgs/t3code { };
                     # Tilion Fortress: local stealth Chromium engine + tilion / tilion-mcp CLI.
                     tilion-fortress = final.callPackage ./pkgs/tilion-fortress { };
+                    # HyprEndfield: Arknights: Endfield inspired HUD overlay for Hyprland.
+                    hyprendfield = final.callPackage ./pkgs/hyprendfield {
+                      src = inputs.hyprendfield;
+                    };
                   }
                 )
               ];

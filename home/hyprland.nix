@@ -891,7 +891,12 @@ let
     {
       section = "ウィンドウ・WS";
       label = "グループ（タブ）切替 / タブ移動 / ロック";
-      keys = "Super+G / Super+(Shift+)Tab / Super+Alt+G";
+      keys = "Super+G / Super+(Alt|Shift)+Tab / Super+Alt+G";
+    }
+    {
+      section = "ウィンドウ・WS";
+      label = "HyprEndfield HUD 開閉";
+      keys = "Super+Tab";
     }
     {
       section = "ウィンドウ・WS";
@@ -2340,7 +2345,27 @@ in
     toggleKeepScreenOn
     openFlakeUpdate
     agentRunStatus
+    pkgs.hyprendfield
   ];
+
+  # HyprEndfield (Arknights: Endfield HUD overlay) background daemon.
+  systemd.user.services.hyprendfield = {
+    Unit = {
+      Description = "HyprEndfield HUD Overlay Daemon";
+      PartOf = [ "graphical-session.target" ];
+      After = [ "graphical-session.target" ];
+      StartLimitIntervalSec = 30;
+      StartLimitBurst = 3;
+    };
+    Service = {
+      ExecStart = "${lib.getExe pkgs.hyprendfield} --background";
+      Restart = "on-failure";
+      RestartSec = 2;
+    };
+    Install = {
+      WantedBy = [ "graphical-session.target" ];
+    };
+  };
 
   # Unified Rofi Polkit authentication agent managed under UWSM graphical-session.target.
   systemd.user.services.rofi-polkit-agent = {
@@ -2575,6 +2600,14 @@ in
           ignore_alpha = 0.2;
           animation = "popin 92%";
         }
+        {
+          name = "hyprendfield-frosted-background";
+          match = {
+            namespace = "^hyprendfield$";
+          };
+          blur = true;
+          ignore_alpha = 0.1;
+        }
       ];
     };
 
@@ -2660,10 +2693,14 @@ in
       hl.bind(mod .. " + R",           hl.dsp.submap("resize"))
 
       -- Window groups (tabbed containers)
-      hl.bind(mod .. " + G",         hl.dsp.group.toggle())
-      hl.bind(mod .. " + Tab",       hl.dsp.group.next())
+      hl.bind(mod .. " + G",           hl.dsp.group.toggle())
+      hl.bind(mod .. " + ALT + Tab",   hl.dsp.group.next())
       hl.bind(mod .. " + SHIFT + Tab", hl.dsp.group.prev())
-      hl.bind(mod .. " + ALT + G",   hl.dsp.group.lock())
+      hl.bind(mod .. " + ALT + G",     hl.dsp.group.lock())
+
+      -- HyprEndfield HUD overlay
+      local hyprEndfield = ${builtins.toJSON (lib.getExe pkgs.hyprendfield)}
+      hl.bind(mod .. " + Tab", hl.dsp.exec_cmd(hyprEndfield .. " --toggle"))
 
       -- Special workspace (scratchpad)
       hl.bind(mod .. " + S",       hl.dsp.workspace.toggle_special("magic"))
@@ -2783,6 +2820,16 @@ in
         hl.bind("k",      hl.dsp.window.resize({ x = 0,   y = -24, relative = true }), { repeating = true })
         hl.bind("j",      hl.dsp.window.resize({ x = 0,   y = 24,  relative = true }), { repeating = true })
         hl.bind("Return", hl.dsp.submap("reset"))
+      end)
+
+      -- HyprEndfield submap (activated while HUD is visible)
+      hl.define_submap("hyprendfield", function()
+        hl.bind(mod .. " + Tab", function()
+          hl.dispatch(hl.dsp.submap("reset"))
+          hl.dispatch(hl.dsp.exec_cmd(hyprEndfield .. " --toggle"))
+        end)
+        hl.bind("Print", hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} full"}))
+        hl.bind("CTRL + ALT + A", hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} region"}))
       end)
     '';
   };

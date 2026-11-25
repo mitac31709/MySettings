@@ -288,6 +288,22 @@
         "type": "github"
       }
     },
+    "hyprendfield": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1794982905,
+        "narHash": "sha256-N+RR06DdtbbjXdG0jxvPin5wlROElQgXFfr0H4FbR34=",
+        "owner": "OctoberPrayRain",
+        "repo": "HyprEndfield",
+        "rev": "e040bbdc6fa1e348aa33baaf225beb22048977d2",
+        "type": "github"
+      },
+      "original": {
+        "owner": "OctoberPrayRain",
+        "repo": "HyprEndfield",
+        "type": "github"
+      }
+    },
     "import-tree": {
       "locked": {
         "lastModified": 1788467110,
@@ -475,6 +491,7 @@
         "grok-bot-deb": "grok-bot-deb",
         "hermes-agent": "hermes-agent",
         "home-manager": "home-manager_2",
+        "hyprendfield": "hyprendfield",
         "jakubkrehel-skills": "jakubkrehel-skills",
         "nixpkgs": "nixpkgs_3",
         "nixpkgs-cursor": "nixpkgs-cursor",

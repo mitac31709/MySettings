@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "xdg-apps-cleanup" ];
+  system.nixos.tags = [ "hyprendfield" ];
 }
