@@ -19,14 +19,13 @@
 - `bath-noritz-new.ogg` — ノーリツ「人形の夢と目覚め」（新）
 - `bath-rinnai-canon-new.ogg` — リンナイ「カノン」（新）
 - `bath-paloma-new.ogg` — パロマ（新）
-- `bath-purpose.ogg` — パーパス
 - `bath-panasonic-new.ogg` — パナソニック（新）
 - `bath-corona.ogg` / `bath-corona-voice.ogg` — コロナ（ふろauto／音声案内）
-- `bath-hitachi.ogg` — 日立（音声案内）
-- `bath-toto.ogg` — トートー
-- `bath-takara-a/b/c.ogg` — タカラスタンダード メロディー A／B／C
-- `bath-daikin.ogg` — ダイキン
-- `bath-chofu.ogg` — 長府
+
+## 回転寿司 到着音
+
+- `sushiro-arrival.ogg` — スシロー 注文品到着音（[【高音質】スシロー到着放送(到着音)](https://youtu.be/1GxG5WGymKE) から抽出し、前後無音トリミング・音量正規化）
+- `hamazushi-arrival.ogg` — はま寿司 お寿司到着メロディー（[【高音質】はま寿司到着メロディー](https://youtu.be/y5SOsa2cZtQ) から抽出し、前後無音トリミング・音量正規化）
 
 ## ゲーム起動音
 

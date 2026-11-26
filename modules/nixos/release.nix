@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "nixpkgs-chatgpt-opencode" ];
+  system.nixos.tags = [ "startup-sounds-sushi" ];
 }
