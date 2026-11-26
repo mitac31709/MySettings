@@ -76,9 +76,9 @@ let
       name = "windows-98-startup.wav";
       hash = "sha256-3k2haDLckHG7SikPBqvLSe0/dUSv14vYWfcNs48xQso=";
     };
-    "windows-2000.wav" = pkgs.fetchurl {
+    "windows-me.wav" = pkgs.fetchurl {
       url = "https://archive.org/download/Boot_Sounds_Compilation/Windows%202000%20%26%20Millenium%20-%20Boot.wav";
-      name = "windows-2000-startup.wav";
+      name = "windows-me-startup.wav";
       hash = "sha256-+hXytMs7RbOPMVsvaAUWdsbCGoglmiZgoP41ND3mDiY=";
     };
     "windows-xp.wav" = pkgs.fetchurl {
