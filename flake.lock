@@ -77,18 +77,6 @@
         "url": "https://codeberg.org/wvhulle/bootvine"
       }
     },
-    "chatgpt-deb": {
-      "flake": false,
-      "locked": {
-        "narHash": "sha256-m7VniemuZCJEwaeyUnPf+6lk43m/Tsfa7YhoI5ZubQE=",
-        "type": "file",
-        "url": "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.1117.41037_amd64.deb"
-      },
-      "original": {
-        "type": "file",
-        "url": "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.1117.41037_amd64.deb"
-      }
-    },
     "colorshell": {
       "inputs": {
         "corncheese-nix-lib": "corncheese-nix-lib",
@@ -486,7 +474,6 @@
         "agent-desktop-skills": "agent-desktop-skills",
         "alsa-ucm-conf-cros": "alsa-ucm-conf-cros",
         "bootvine": "bootvine",
-        "chatgpt-deb": "chatgpt-deb",
         "colorshell": "colorshell",
         "grok-bot-deb": "grok-bot-deb",
         "hermes-agent": "hermes-agent",

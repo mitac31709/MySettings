@@ -58,11 +58,6 @@
       url = "https://github.com/UniClipboard/UniClipboard/releases/download/v1.6.2/UniClipboard_1.6.2_amd64.deb";
       flake = false;
     };
-    # Keep URL version in sync with chatgptVersion below (flake-update.sh).
-    chatgpt-deb = {
-      url = "https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_26.1117.41037_amd64.deb";
-      flake = false;
-    };
     # Keep URL version in sync with grokBotVersion below (flake-update.sh).
     grok-bot-deb = {
       url = "https://downloads.cursor.com/grokbot/stable/a5927fa2ba82336a29f9343babd28b4c903abbb2/linux/x64/grok-bot_1.2.3_amd64.deb";
@@ -84,8 +79,6 @@
       system = "x86_64-linux";
       # Must match inputs.uniclipboard-deb URL (updated by scripts/flake-update.sh).
       uniclipboardVersion = "1.6.2";
-      # Must match inputs.chatgpt-deb URL (updated by scripts/flake-update.sh).
-      chatgptVersion = "26.1117.41037";
       # Must match inputs.grok-bot-deb URL (updated by scripts/flake-update.sh).
       grokBotVersion = "1.2.3";
 
@@ -139,11 +132,6 @@
                     };
                     # Meltype Linux preview as Fcitx5 addon (not in nixpkgs).
                     meltype = final.callPackage ./pkgs/meltype { };
-                    # Official ChatGPT Linux desktop (Codex included); overrides darwin-only nixpkgs attr.
-                    chatgpt = final.callPackage ./pkgs/chatgpt {
-                      src = inputs.chatgpt-deb;
-                      version = chatgptVersion;
-                    };
                     # Official Grok Bot Linux desktop (Cursor / x.ai).
                     grok-bot = final.callPackage ./pkgs/grok-bot {
                       src = inputs.grok-bot-deb;
@@ -151,8 +139,6 @@
                     };
                     # 1.8.4 + Hyprland/XWayland AWT / sounds / no-update-prompt wrapper.
                     jquake = final.callPackage ./pkgs/jquake { jquake = prev.jquake; };
-                    # OpenCode 2 CLI (nixpkgs still ships 1.x; pin npm linux-x64 binary).
-                    opencode = final.callPackage ./pkgs/opencode { };
                     # Google Antigravity CLI (`agy`; binary from antigravity-public).
                     antigravity = final.callPackage ./pkgs/antigravity { };
                     # Unified Rofi prompt helpers (Askpass, Pinentry, Polkit).

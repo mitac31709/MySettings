@@ -94,19 +94,6 @@ else
   fail_fetch "UniClipboard release fetch failed"
 fi
 
-# --- ChatGPT (.deb) ---
-chatgpt_cur="$(current_ver chatgptVersion)"
-if chatgpt_ver="$(
-  curl -fsSL --max-time 20 https://persistent.oaistatic.com/codex-app-prod/linux/deb/dists/stable/main/binary-amd64/Packages 2>/dev/null |
-    awk '/^Package: chatgpt$/{p=1;next} p&&/^Version:/{print $2;exit} p&&/^$/{exit}'
-)"; then
-  if [[ -n "$chatgpt_ver" && -n "$chatgpt_cur" && "$chatgpt_ver" != "$chatgpt_cur" ]]; then
-    note $'\uf075' "gpt" "ChatGPT ${chatgpt_cur}→${chatgpt_ver}"
-  fi
-else
-  fail_fetch "ChatGPT Packages fetch failed"
-fi
-
 # --- Grok Bot (.deb) ---
 grok_cur="$(current_ver grokBotVersion)"
 if grok_bot_url="$(
@@ -131,16 +118,6 @@ if mel_json="$(gh_curl https://api.github.com/repos/yksr-melt/Meltype/releases/l
   fi
 else
   fail_fetch "Meltype release fetch failed"
-fi
-
-oc_cur="$(pkg_attr opencode version)"
-if oc_json="$(curl -fsSL --max-time 20 https://registry.npmjs.org/@opencode/cli-linux-x64/latest 2>/dev/null)"; then
-  oc_ver="$(printf '%s\n' "$oc_json" | jq -r '.version // empty')"
-  if [[ -n "$oc_ver" && -n "$oc_cur" && "$oc_ver" != "$oc_cur" ]]; then
-    note $'\uf121' "opcd" "OpenCode ${oc_cur}→${oc_ver}"
-  fi
-else
-  fail_fetch "OpenCode npm registry fetch failed"
 fi
 
 agy_cur="$(pkg_attr antigravity version)"

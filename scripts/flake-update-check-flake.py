@@ -25,6 +25,8 @@ WATCH: dict[str, list[tuple[str, str, str, tuple[str, ...]]]] = {
         ("neovim", "nvim", "\ue62b", ("pkgs/applications/editors/neovim",)),
         ("zed-editor", "zed", "\uf121", ()),
         ("claude-code", "clde", "\U000f06a9", ()),
+        ("opencode", "opcd", "\uf121", ()),
+        ("chatgpt", "gpt", "\uf075", ()),
         ("btop", "btop", "\uf080", ()),
         ("yazi", "yazi", "\uf07b", ()),
         ("tmux", "tmux", "\uf489", ()),

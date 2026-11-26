@@ -80,16 +80,6 @@ fi
 uc_ver="${tag#v}"
 uc_url="https://github.com/UniClipboard/UniClipboard/releases/download/v${uc_ver}/UniClipboard_${uc_ver}_amd64.deb"
 
-chatgpt_ver="$(
-  curl -fsSL https://persistent.oaistatic.com/codex-app-prod/linux/deb/dists/stable/main/binary-amd64/Packages |
-    awk '/^Package: chatgpt$/{p=1;next} p&&/^Version:/{print $2;exit} p&&/^$/{exit}'
-)"
-if [[ -z "$chatgpt_ver" ]]; then
-  echo "flake-update: could not parse ChatGPT package version" >&2
-  exit 1
-fi
-chatgpt_url="https://persistent.oaistatic.com/codex-app-prod/linux/deb/pool/main/c/chatgpt/chatgpt_${chatgpt_ver}_amd64.deb"
-
 grok_bot_url="$(
   curl -fsSL https://cursor.com/download/bot |
     sed -n 's/.*\(https:\/\/downloads\.cursor\.com\/grokbot\/stable\/[^"]*linux\/x64\/grok-bot_[^"]*_amd64\.deb\).*/\1/p' |
@@ -105,11 +95,11 @@ if [[ -z "$grok_bot_ver" ]]; then
   exit 1
 fi
 
-"${py[@]}" - "$root/flake.nix" "$uc_ver" "$uc_url" "$chatgpt_ver" "$chatgpt_url" "$grok_bot_ver" "$grok_bot_url" <<'PY'
+"${py[@]}" - "$root/flake.nix" "$uc_ver" "$uc_url" "$grok_bot_ver" "$grok_bot_url" <<'PY'
 import pathlib, re, sys
 
 path = pathlib.Path(sys.argv[1])
-uc_ver, uc_url, chatgpt_ver, chatgpt_url, grok_bot_ver, grok_bot_url = sys.argv[2:8]
+uc_ver, uc_url, grok_bot_ver, grok_bot_url = sys.argv[2:6]
 text = path.read_text()
 
 replacements = [
@@ -118,12 +108,6 @@ replacements = [
         r'(uniclipboard-deb\s*=\s*\{(?:\$\{[^}]*\}|[^}])*?url\s*=\s*")[^"]*(")',
         uc_url,
         "uniclipboard-deb url",
-    ),
-    (r'(chatgptVersion\s*=\s*")[^"]*(";)', chatgpt_ver, "chatgptVersion"),
-    (
-        r'(chatgpt-deb\s*=\s*\{(?:\$\{[^}]*\}|[^}])*?url\s*=\s*")[^"]*(")',
-        chatgpt_url,
-        "chatgpt-deb url",
     ),
     (r'(grokBotVersion\s*=\s*")[^"]*(";)', grok_bot_ver, "grokBotVersion"),
     (
@@ -142,15 +126,13 @@ old = path.read_text()
 if text != old:
     path.write_text(text)
     print(f"UniClipboard → {uc_ver}")
-    print(f"ChatGPT → {chatgpt_ver}")
     print(f"Grok Bot → {grok_bot_ver}")
 else:
     print(f"UniClipboard already {uc_ver}")
-    print(f"ChatGPT already {chatgpt_ver}")
     print(f"Grok Bot already {grok_bot_ver}")
 PY
 
-echo "==> Checking custom pkgs/ (Meltype / OpenCode / Antigravity / wol-pc; JQuake pinned at 1.8.4)"
+echo "==> Checking custom pkgs/ (Meltype / Antigravity / wol-pc; JQuake pinned at 1.8.4)"
 
 # --- Meltype ---
 mel_cur="$(pkg_attr meltype version)"
@@ -186,41 +168,6 @@ print(f"Meltype → {ver}")
 PY
 else
   echo "Meltype already ${mel_ver}"
-fi
-
-# --- OpenCode ---
-oc_cur="$(pkg_attr opencode version)"
-oc_meta="$(curl -fsSL https://registry.npmjs.org/@opencode/cli-linux-x64/latest)"
-oc_ver="$(printf '%s\n' "$oc_meta" | jq -r '.version // empty')"
-oc_tarball="$(printf '%s\n' "$oc_meta" | jq -r '.dist.tarball // empty')"
-if [[ -z "$oc_ver" || -z "$oc_tarball" ]]; then
-  echo "flake-update: could not parse OpenCode latest release" >&2
-  exit 1
-fi
-if [[ "$oc_ver" != "$oc_cur" ]]; then
-  echo "OpenCode: prefetching ${oc_cur} -> ${oc_ver}..."
-  oc_hash="$(prefetch_hash "$oc_tarball")"
-  if [[ -z "$oc_hash" ]]; then
-    echo "flake-update: failed to prefetch OpenCode ${oc_ver}" >&2
-    exit 1
-  fi
-  "${py[@]}" - "$root/pkgs/opencode/default.nix" "$oc_ver" "$oc_hash" <<'PY'
-import pathlib, re, sys
-p = pathlib.Path(sys.argv[1])
-ver, h = sys.argv[2:4]
-t = p.read_text()
-for pat, val, lbl in [
-    (r'(  version\s*=\s*")[^"]*(";)', ver, "opencode version"),
-    (r'(src\s*=\s*fetchurl\s*\{(?:\$\{[^}]*\}|[^}])*?hash\s*=\s*")[^"]*(";)', h, "opencode hash"),
-]:
-    t, n = re.subn(pat, rf"\g<1>{val}\2", t, count=1, flags=re.S)
-    if n != 1:
-        sys.exit(f"flake-update: expected one {lbl} (got {n})")
-p.write_text(t)
-print(f"OpenCode → {ver}")
-PY
-else
-  echo "OpenCode already ${oc_ver}"
 fi
 
 # --- Antigravity ---
