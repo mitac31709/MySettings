@@ -178,6 +178,9 @@ in
     enable = true;
     wifi.backend = "iwd";
   };
+  # Use systemd-resolved so NetworkManager, Tailscale, and Cloudflare WARP
+  # coordinate per-interface DNS via D-Bus instead of fighting over /etc/resolv.conf.
+  services.resolved.enable = true;
 
   # Avoid leaving networking down if activation stops NM then fails mid-switch
   # (seen with switch-to-configuration exit 101).

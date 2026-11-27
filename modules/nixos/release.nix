@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "hyprspace-overview" ];
+  system.nixos.tags = [ "systemd-resolved" ];
 }
