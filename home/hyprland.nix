@@ -173,7 +173,6 @@ let
       pkgs.hyprshot
       pkgs.jq
       pkgs.libnotify
-      pkgs.procps
       config.programs.rofi.package
       pkgs.satty
       snipOverlayPkg
@@ -2632,7 +2631,6 @@ in
       -- Cursor theme/size (from lib/theme.nix) & Colorshell wallpaper directory
       hl.env("XCURSOR_THEME", ${builtins.toJSON theme.cursor.name})
       hl.env("XCURSOR_SIZE", ${builtins.toJSON cursorSizeStr})
-      hl.env("HYPRCURSOR_THEME", ${builtins.toJSON theme.cursor.name})
       hl.env("HYPRCURSOR_SIZE", ${builtins.toJSON cursorSizeStr})
       ${lib.optionalString theme.cursor.hyprcursor ''hl.env("HYPRCURSOR_THEME", ${builtins.toJSON theme.cursor.name})''}
       hl.env("WALLPAPERS", os.getenv("HOME") .. "/wallpapers")

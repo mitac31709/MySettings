@@ -60,7 +60,6 @@ let
     netTools
     ++ [
       pkgs.libnotify
-      pkgs.procps
     ]
   ) ../scripts/flake-update-check.sh;
   flakeUpdate =
@@ -75,7 +74,6 @@ let
         netTools
         ++ [
           pkgs.nix-output-monitor
-          pkgs.procps
         ]
       )
       ../scripts/flake-update.sh;

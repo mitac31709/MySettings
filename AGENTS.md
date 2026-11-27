@@ -2,7 +2,7 @@
 
 ## What this repo is
 
-NixOS flake for `mitac`: greetd + Hyprland (UWSM) desktop, two hosts — `.#chromebook` (ASUS CX5500FE "delbin") and `.#vaio` (Intel 8th+ gen); `.#mitac` is a legacy alias of chromebook. Not an app/server: "running" it means nix eval/build. Real application is `sudo nixos-rebuild switch --flake .#chromebook|.#vaio` on the target machine (see `README.md`). No CI, no test suite, no `opencode.json`.
+NixOS flake for `mitac`: greetd/tuigreet + Hyprland (UWSM, default) & optional Niri desktop, two hosts — `.#chromebook` (ASUS CX5500FE "delbin") and `.#vaio` (Intel 8th+ gen); `.#mitac` is a legacy alias of chromebook. Not an app/server: "running" it means nix eval/build. Real application is `sudo nixos-rebuild switch --flake .#chromebook|.#vaio` on the target machine (see `README.md`). No CI, no test suite, no `opencode.json`.
 
 Nix is on PATH and the daemon normally runs. If a `nix` command errors with `cannot connect to socket at '/nix/var/nix/daemon-socket/socket'`, start `nix-daemon` in the background and retry.
 

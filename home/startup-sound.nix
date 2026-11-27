@@ -1,5 +1,5 @@
 # Random session startup sound: Windows / Mac / GameCube / Wii / Wii Sports presets,
-# repo/local audio pool, per-sound/global toggles, and Waybar/Rofi tray management.
+# repo/local audio pool, per-sound/global toggles, and Colorshell/Rofi tray management.
 {
   config,
   lib,
@@ -145,7 +145,6 @@ let
       pkgs.mpv
       pkgs.pulseaudio
       pkgs.hyprland
-      pkgs.systemd
     ];
     text = ''
       self_bin="$(realpath "$0")"
@@ -175,14 +174,10 @@ let
         --toggle-and-notify  Toggle global ON/OFF and send desktop notification
         --enable             Enable global startup sound
         --disable            Disable global startup sound
-        --waybar             Print JSON status for Waybar custom/startup-sound
+        --waybar             Print JSON status for Colorshell / bar widget
         --menu               Open interactive Rofi tray menu (list/edit/toggle/play)
         -h, --help           Show this help message
       EOF
-      }
-
-      refresh_waybar() {
-        systemctl --user kill --kill-who=main --signal=RTMIN+13 waybar.service >/dev/null 2>&1 || true
       }
 
       notify() {
@@ -387,7 +382,6 @@ let
         pick_pos="$(shuf -i "0-$(( ''${#pool[@]} - 1 ))" -n 1)"
         idx="''${pool[$pick_pos]}"
         record_last "''${cand_keys[$idx]}"
-        refresh_waybar
         play_file "''${candidates[$idx]}"
       }
 
@@ -555,7 +549,6 @@ let
 
         cp -f "$src" "$dest"
         chmod u+w "$dest" 2>/dev/null || true
-        refresh_waybar
         notify "起動音を追加しました" "$(basename "$dest")"
       }
 
@@ -597,7 +590,6 @@ let
         mv "$file" "$dest"
         local new_rel="''${dest#"$local_dir/"}"
         migrate_sound_key "$old_key" "local:$new_rel"
-        refresh_waybar
         notify "名前を変更しました" "$rel → $new_rel"
         return 0
       }
@@ -618,7 +610,6 @@ let
         fi
         cp -f "$file" "$dest"
         chmod u+w "$dest" 2>/dev/null || true
-        refresh_waybar
         notify "ローカルへ複製しました" "$(basename "$dest")"
       }
 
@@ -675,7 +666,6 @@ let
           case "''${actions[$choice]}" in
             play)
               play_bg --play "$key"
-              refresh_waybar
               ;;
             stop)
               stop_playback
@@ -686,7 +676,6 @@ let
               else
                 set_sound_enabled "$key" on
               fi
-              refresh_waybar
               ;;
             rename)
               if rename_local_sound_ui "$file" "$name"; then
@@ -711,7 +700,6 @@ let
               if [ "$confirm" = "1" ]; then
                 rm -f "$file"
                 set_sound_enabled "$key" on
-                refresh_waybar
                 notify "起動音を削除しました" "$name"
                 return 0
               fi
@@ -805,11 +793,9 @@ let
               else
                 rm -f "$disabled_marker"
               fi
-              refresh_waybar
               ;;
             play_random)
               play_bg --play
-              refresh_waybar
               ;;
             stop)
               stop_playback
@@ -860,13 +846,11 @@ let
           ;;
         --enable)
           rm -f "$disabled_marker"
-          refresh_waybar
           exit 0
           ;;
         --disable)
           mkdir -p "$state_dir"
           : >"$disabled_marker"
-          refresh_waybar
           exit 0
           ;;
         --toggle)
@@ -876,7 +860,6 @@ let
           else
             rm -f "$disabled_marker"
           fi
-          refresh_waybar
           exit 0
           ;;
         --toggle-and-notify)
@@ -888,7 +871,6 @@ let
             rm -f "$disabled_marker"
             notify "起動音を ON にしました" "次回ログイン時にランダム再生します"
           fi
-          refresh_waybar
           exit 0
           ;;
         --auto)
@@ -929,7 +911,6 @@ let
         base="$(basename "''${candidates[$i]}")"
         if [ "''${cand_keys[$i]}" = "$target" ] || [ "''${cand_names[$i]}" = "$target" ] || [ "$base" = "$target" ] || [ "''${base%.*}" = "$target" ]; then
           record_last "''${cand_keys[$i]}"
-          refresh_waybar
           play_file "''${candidates[$i]}"
           exit 0
         fi

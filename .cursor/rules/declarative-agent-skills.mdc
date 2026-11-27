@@ -12,10 +12,10 @@ AI エージェント用のスキルやプラグインを導入・更新・削�
 1. **`flake.nix` の `inputs` に `flake = false` で追加する**
    - `nix flake update <input>` で `flake.lock` にピン留めする（以降の更新は `flake-update` に乗る）
 2. **`home/agent-skills.nix` の `declaredSkills` にスキルを登録する**
-   - ここに登録したスキルは `~/.agents/skills`・`~/.claude/skills`・`~/.gemini/config/skills`・`~/.hermes/skills`・T3 Code の Antigravity `config/skills` へ自動展開される
+   - ここに登録したスキルは `~/.agents/skills`・`~/.config/claude/skills`・`~/.gemini/config/skills`・`~/.local/share/hermes/skills`・T3 Code の Antigravity `config/skills` へ自動展開される
 3. **エージェント固有のプラグイン・フック設定も `home/agent-skills.nix` に書く**
-   - read-only のまま置けるプラグインディレクトリは `home.file` で Nix store を直接参照する（例: `.hermes/plugins/ponytail`、`.gemini/config/plugins/ponytail`）
-   - アプリ自身が書き換える設定ファイル（`~/.cursor/hooks.json`、`~/.config/opencode/opencode.json`、`~/.claude/settings.json`、`~/.codex/config.toml`、`~/.hermes/config.yaml`）は、`syncScript` で既存設定を壊さずマージする
+   - read-only のまま置けるプラグインディレクトリは `home.file` で Nix store を直接参照する（例: `~/.local/share/hermes/plugins/ponytail`、`~/.gemini/config/plugins/ponytail`）
+   - アプリ自身が書き換える設定ファイル（`~/.cursor/hooks.json`、`~/.config/opencode/opencode.json`、`~/.config/claude/settings.json`、`~/.config/codex/config.toml`、`~/.local/share/hermes/config.yaml`）は、`syncScript` で既存設定を壊さずマージする
    - 過去に手動導入した実ディレクトリと衝突して `.backup` が走査ディレクトリに残らないよう、`managedDirs` に含める
 4. **`modules/nixos/release.nix` の世代タグを更新する**（`generation-tags` ルールに従う）
 

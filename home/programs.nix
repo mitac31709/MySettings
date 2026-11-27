@@ -666,7 +666,6 @@ in
       # wol-pc (Wake-on-LAN client): packaged via pkgs/wol-pc; reads agenix
       # (/run/agenix/wol-pc-env) or $WOL_PC_CONFIG.
       wol-pc
-      sshpass
       rofi-prompt
       tmux
       ripgrep

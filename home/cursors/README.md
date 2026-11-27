@@ -88,7 +88,7 @@ stdenvNoCC.mkDerivation {
 挙動と注意:
 
 - `home.pointerCursor` は store パッケージが必須で、`~/.local/share/icons/<name>` を store へのシンボリックリンクで上書きしてしまう。そのため `package = null` のときは無効化し、`home/programs.nix` が同等の設定（`XCURSOR_THEME` / `XCURSOR_SIZE` / `XCURSOR_PATH`、GTK settings.ini + dconf、`default/index.theme` の `Inherits`）を直接生成する。
-- ログイン画面（ReGreet）は greeter ユーザーで動き `/home/mitac` を読めないため、Adwaita にフォールバックする。
+- ログイン画面（greetd greeter）は greeter ユーザーで動き `/home/mitac` を読めないため、Adwaita にフォールバックする。
 - テーマ実体は restic のホームバックアップ対象（`~/.local/share/icons` は除外指定なし）。再インストール後はバックアップから復元するか、原本から再変換する。
 - 別端末（vaio など）でも使うには、その端末の同じパスにテーマを置く。
 

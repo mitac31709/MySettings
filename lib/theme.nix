@@ -1,11 +1,10 @@
-# Unified visual design system for the Hyprland desktop ("Nocturne Slate").
-# Shared across Hyprland, Waybar, Hyprlock, Hyprpaper, Mako, Rofi, ReGreet,
-# Ghostty, Satty, and Fcitx5 (Meltype).
+# Unified visual design system for the Wayland desktop ("Nocturne Slate").
+# Shared across Hyprland, Niri, Hyprlock, Hyprpaper, Rofi, Ghostty, Satty,
+# and Fcitx5 (Meltype).
 let
   palette = {
     # Surfaces
     bg = "#0d1117";
-    bgRgb = "13, 17, 23";
     bgHex = "0d1117";
 
     surface = "#131922";
@@ -13,57 +12,41 @@ let
     surfaceHex = "131922";
 
     surfaceAlt = "#1a2330";
-    surfaceAltRgb = "26, 35, 48";
-    surfaceAltHex = "1a2330";
-
-    surfaceHover = "#222e3f";
-    surfaceHoverHex = "222e3f";
 
     # Borders
     border = "#263344";
     borderHex = "263344";
-    borderStrong = "#35475e";
 
     # Typography
     fg = "#e8eef5";
-    fgRgb = "232, 238, 245";
     fgHex = "e8eef5";
 
     fgSecondary = "#a3b1c2";
-    fgSecondaryRgb = "163, 177, 194";
     fgSecondaryHex = "a3b1c2";
 
     fgMuted = "#637286";
-    fgMutedRgb = "99, 114, 134";
     fgMutedHex = "637286";
 
     # Accents (Glacial Teal -> Arctic Sky gradient)
     accent = "#56d4c8";
-    accentRgb = "86, 212, 200";
     accentHex = "56d4c8";
 
     accentAlt = "#4ea8de";
-    accentAltRgb = "78, 168, 222";
     accentAltHex = "4ea8de";
 
     accentSoft = "#16333a";
-    accentSoftRgb = "22, 51, 58";
     accentSoftHex = "16333a";
 
     # Semantic status colors
     success = "#6ee7b7";
-    successHex = "6ee7b7";
     warning = "#f2b866";
     warningHex = "f2b866";
     danger = "#f07178";
-    dangerRgb = "240, 113, 120";
     dangerHex = "f07178";
-    dangerSoft = "#3b1c24";
   };
 
   font = {
     mono = "JetBrainsMono Nerd Font";
-    monoBold = "JetBrainsMono Nerd Font Bold";
   };
 
   radius = {
@@ -198,7 +181,7 @@ let
     '';
 
   # Active mouse cursor theme shared across Hyprland, GTK, X11/XWayland,
-  # Hyprcursor, and ReGreet. See home/cursors/README.md to switch to a custom
+  # Hyprcursor, and the greetd greeter. See home/cursors/README.md to switch to a custom
   # local or externally packaged cursor theme.
   # package = null: local-only theme managed outside the repo under
   # ~/.local/share/icons/<name> (e.g. packs that forbid redistribution).

@@ -9,7 +9,7 @@ alwaysApply: true
 
 ## 対象
 
-- 場所: `home/hyprland.nix` の `cheatsheetEntries`（waybar `?` / `Super+/` → rofi）
+- 場所: `home/hyprland.nix` の `cheatsheetEntries`（Colorshell `?` / `Super+/` → rofi）
 - 載せるもの: キーバインド、自作 CLI、よく使う手順（backup / bluetoothctl / lan-mouse / warp など）
 - 載せないもの: 一度きりの調査、セットアップの長い物語、エージェント向け git/rebuild 手順の詳細
 

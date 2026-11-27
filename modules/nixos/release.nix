@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "mute-system-bell" ];
+  system.nixos.tags = [ "cleanup-stale-deps-waybar-hooks" ];
 }

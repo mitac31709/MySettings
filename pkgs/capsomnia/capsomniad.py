@@ -46,7 +46,6 @@ from capsomnia_core import (  # noqa: E402
 )
 
 HELPER_SOCKET_DEFAULT = "/run/capsomnia/helper.sock"
-WAYBAR_SIGNAL_NUM = signal.SIGRTMIN + 15
 POLL_INTERVAL_MS = 250
 SLEEP_VERIFY_INTERVAL_SEC = 10.0
 HELPER_RETRY_INTERVAL_SEC = 5.0
@@ -231,47 +230,6 @@ def set_backlight_raw(device: str, raw: int) -> bool:
         return proc.returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False
-
-
-def is_waybar_running() -> bool:
-    uid = os.getuid()
-    try:
-        entries = list(Path("/proc").iterdir())
-    except OSError:
-        return False
-    for entry in entries:
-        if not entry.name.isdigit():
-            continue
-        try:
-            if entry.stat().st_uid != uid:
-                continue
-            comm = (entry / "comm").read_text(encoding="utf-8", errors="ignore").strip()
-        except OSError:
-            continue
-        if comm in {"waybar", ".waybar-wrapped"}:
-            return True
-    return False
-
-
-def notify_waybar() -> None:
-    # Avoid spawning `systemctl --user` every timer tick on shells without Waybar.
-    if not is_waybar_running():
-        return
-    try:
-        subprocess.run(
-            [
-                "systemctl",
-                "--user",
-                "kill",
-                "--kill-who=main",
-                "--signal=RTMIN+15",
-                "waybar.service",
-            ],
-            capture_output=True,
-            check=False,
-        )
-    except OSError:
-        pass
 
 
 class CapsomniaDaemon:
@@ -747,7 +705,6 @@ class CapsomniaDaemon:
             tmp.replace(self.waybar_json_path)
             self.last_waybar_payload = payload
             self.last_waybar_tick_sec = cur_sec
-            notify_waybar()
 
     def handle_hardware_event(self, event: dict[str, Any]) -> None:
         ev_type = event.get("event")

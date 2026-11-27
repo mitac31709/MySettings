@@ -230,16 +230,6 @@ class CapsomniaCoreTests(unittest.TestCase):
             self.assertTrue(daemon.request_system_sleep_if_closed())
         daemon.helper_call.assert_called_once_with({"cmd": "suspend"}, timeout=5.0)
 
-    def test_notify_waybar_skips_subprocess_when_waybar_absent(self) -> None:
-        from unittest.mock import patch
-        from capsomniad import notify_waybar
-
-        with patch("capsomniad.is_waybar_running", return_value=False), patch(
-            "capsomniad.subprocess.run"
-        ) as mock_run:
-            notify_waybar()
-        mock_run.assert_not_called()
-
     def test_sync_keep_display_marker_tracks_awake_on(self) -> None:
         from capsomniad import CapsomniaDaemon
 
