@@ -40,6 +40,7 @@ in
       agent = "cursor-agent";
       chatgpt = "gui chatgpt";
       grok-bot = "gui grok-bot";
+      orca-ide = "gui orca-ide";
       onlyoffice-desktopeditors = "gui onlyoffice-desktopeditors";
       jquake = "gui JQuake";
       parsec = "gui parsecd";

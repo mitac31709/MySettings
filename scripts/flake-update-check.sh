@@ -109,6 +109,17 @@ else
   fail_fetch "Grok Bot download page fetch failed"
 fi
 
+# --- Orca IDE (.deb) ---
+orca_cur="$(current_ver orcaIdeVersion)"
+if orca_json="$(gh_curl https://api.github.com/repos/stablyai/orca/releases/latest 2>/dev/null)"; then
+  orca_ver="$(printf '%s\n' "$orca_json" | jq -r '.tag_name // empty' | sed 's/^v//')"
+  if [[ -n "$orca_ver" && -n "$orca_cur" && "$orca_ver" != "$orca_cur" ]]; then
+    note $'\uf121' "orca" "Orca IDE ${orca_cur}→${orca_ver}"
+  fi
+else
+  fail_fetch "Orca IDE release fetch failed"
+fi
+
 # --- Custom pkgs/ (jquake stays pinned at 1.8.4) ---
 mel_cur="$(pkg_attr meltype version)"
 if mel_json="$(gh_curl https://api.github.com/repos/yksr-melt/Meltype/releases/latest 2>/dev/null)"; then

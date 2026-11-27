@@ -63,6 +63,11 @@
       url = "https://downloads.cursor.com/grokbot/stable/a5927fa2ba82336a29f9343babd28b4c903abbb2/linux/x64/grok-bot_1.2.3_amd64.deb";
       flake = false;
     };
+    # Keep URL version in sync with orcaIdeVersion below (flake-update.sh).
+    orca-ide-deb = {
+      url = "https://github.com/stablyai/orca/releases/download/v1.4.280/orca-ide_1.4.280_amd64.deb";
+      flake = false;
+    };
   };
 
   outputs =
@@ -81,6 +86,8 @@
       uniclipboardVersion = "1.6.2";
       # Must match inputs.grok-bot-deb URL (updated by scripts/flake-update.sh).
       grokBotVersion = "1.2.3";
+      # Must match inputs.orca-ide-deb URL (updated by scripts/flake-update.sh).
+      orcaIdeVersion = "1.4.280";
 
       mkHost =
         {
@@ -136,6 +143,11 @@
                     grok-bot = final.callPackage ./pkgs/grok-bot {
                       src = inputs.grok-bot-deb;
                       version = grokBotVersion;
+                    };
+                    # Orca IDE: parallel agentic development desktop app (stablyai/orca).
+                    orca-ide = final.callPackage ./pkgs/orca-ide {
+                      src = inputs.orca-ide-deb;
+                      version = orcaIdeVersion;
                     };
                     # 1.8.4 + Hyprland/XWayland AWT / sounds / no-update-prompt wrapper.
                     jquake = final.callPackage ./pkgs/jquake { jquake = prev.jquake; };

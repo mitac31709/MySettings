@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "systemd-resolved" ];
+  system.nixos.tags = [ "orca-ide" ];
 }

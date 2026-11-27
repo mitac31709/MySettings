@@ -402,6 +402,18 @@
         "type": "github"
       }
     },
+    "orca-ide-deb": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-bbMb5NTHz0RueqR6lrmvXuR2cD/T2ByFCuGPvGferiQ=",
+        "type": "file",
+        "url": "https://github.com/stablyai/orca/releases/download/v1.4.280/orca-ide_1.4.280_amd64.deb"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://github.com/stablyai/orca/releases/download/v1.4.280/orca-ide_1.4.280_amd64.deb"
+      }
+    },
     "ponytail": {
       "flake": false,
       "locked": {
@@ -482,6 +494,7 @@
         "jakubkrehel-skills": "jakubkrehel-skills",
         "nixpkgs": "nixpkgs_3",
         "nixpkgs-cursor": "nixpkgs-cursor",
+        "orca-ide-deb": "orca-ide-deb",
         "ponytail": "ponytail",
         "uniclipboard-deb": "uniclipboard-deb"
       }

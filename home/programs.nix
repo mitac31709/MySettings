@@ -644,6 +644,8 @@ in
       chatgpt
       # Grok Bot desktop agent. App menu: Grok Bot (`grok-bot`).
       grok-bot
+      # Orca IDE: parallel agentic development desktop app. App menu: Orca (`orca-ide`).
+      orca-ide
       # Earthquake map (pkgs/jquake: Hyprland/XWayland AWT fix + sounds cwd + http.agent).
       jquake
       onlyoffice-desktopeditors

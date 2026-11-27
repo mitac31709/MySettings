@@ -70,7 +70,7 @@ prefetch_hash() {
   nix store prefetch-file --json "$@" | jq -r '.hash'
 }
 
-echo "==> Checking .deb URLs (UniClipboard / ChatGPT / Grok Bot)"
+echo "==> Checking .deb URLs (UniClipboard / Grok Bot / Orca IDE)"
 uc_json="$(gh_curl https://api.github.com/repos/UniClipboard/UniClipboard/releases/latest)"
 tag="$(printf '%s\n' "$uc_json" | jq -r '.tag_name // empty')"
 if [[ -z "$tag" ]]; then
@@ -95,11 +95,20 @@ if [[ -z "$grok_bot_ver" ]]; then
   exit 1
 fi
 
-"${py[@]}" - "$root/flake.nix" "$uc_ver" "$uc_url" "$grok_bot_ver" "$grok_bot_url" <<'PY'
+orca_json="$(gh_curl https://api.github.com/repos/stablyai/orca/releases/latest)"
+orca_tag="$(printf '%s\n' "$orca_json" | jq -r '.tag_name // empty')"
+if [[ -z "$orca_tag" ]]; then
+  echo "flake-update: could not parse Orca IDE latest tag" >&2
+  exit 1
+fi
+orca_ver="${orca_tag#v}"
+orca_url="https://github.com/stablyai/orca/releases/download/v${orca_ver}/orca-ide_${orca_ver}_amd64.deb"
+
+"${py[@]}" - "$root/flake.nix" "$uc_ver" "$uc_url" "$grok_bot_ver" "$grok_bot_url" "$orca_ver" "$orca_url" <<'PY'
 import pathlib, re, sys
 
 path = pathlib.Path(sys.argv[1])
-uc_ver, uc_url, grok_bot_ver, grok_bot_url = sys.argv[2:6]
+uc_ver, uc_url, grok_bot_ver, grok_bot_url, orca_ver, orca_url = sys.argv[2:8]
 text = path.read_text()
 
 replacements = [
@@ -115,6 +124,12 @@ replacements = [
         grok_bot_url,
         "grok-bot-deb url",
     ),
+    (r'(orcaIdeVersion\s*=\s*")[^"]*(";)', orca_ver, "orcaIdeVersion"),
+    (
+        r'(orca-ide-deb\s*=\s*\{(?:\$\{[^}]*\}|[^}])*?url\s*=\s*")[^"]*(")',
+        orca_url,
+        "orca-ide-deb url",
+    ),
 ]
 
 for pattern, value, label in replacements:
@@ -127,9 +142,11 @@ if text != old:
     path.write_text(text)
     print(f"UniClipboard → {uc_ver}")
     print(f"Grok Bot → {grok_bot_ver}")
+    print(f"Orca IDE → {orca_ver}")
 else:
     print(f"UniClipboard already {uc_ver}")
     print(f"Grok Bot already {grok_bot_ver}")
+    print(f"Orca IDE already {orca_ver}")
 PY
 
 echo "==> Checking custom pkgs/ (Meltype / Antigravity / wol-pc; JQuake pinned at 1.8.4)"
