@@ -47,6 +47,8 @@ in
     extraConfig = ''
       [main]
       capslock = macro
+      # Tap: z, Hold/chord with H/J/K/L: arrow keys (matches laptop/input.nix).
+      z = overloadt2(z_nav, z, 200)
 
       f1 = back
       f2 = refresh
@@ -72,6 +74,12 @@ in
 
       f13 = coffee
       sleep = coffee
+
+      [z_nav]
+      h = left
+      j = down
+      k = up
+      l = right
 
       [meta]
       f1 = f1

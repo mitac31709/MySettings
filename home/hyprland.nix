@@ -1044,6 +1044,11 @@ let
     }
     {
       section = inputSection;
+      label = "矢印キー ←↓↑→（keyd・Shift/Ctrl併用可）";
+      keys = "Z+H/J/K/L（同時押し）";
+    }
+    {
+      section = inputSection;
       label = "ChatGPT で英語のまま戻らない → 再起動";
       keys = "ShareInputState + Meltype先頭";
     }

@@ -55,6 +55,14 @@ in
           # never triggers Eisu_toggle / Caps_Lock in Hyprland, fcitx5/Meltype,
           # or TTY; capsomnia-helperd watches KEY_MACRO to toggle Keep Awake.
           capslock = macro
+          # Tap: z, Hold/chord with H/J/K/L: arrow keys (also duplicated in chromebook/input.nix).
+          z = overloadt2(z_nav, z, 200)
+
+          [z_nav]
+          h = left
+          j = down
+          k = up
+          l = right
 
           [control+alt]
           delete = command(${sysrqOom})
