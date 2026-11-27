@@ -219,6 +219,10 @@ let
     "/home/${user}/.local/share/bottles/runners"
     "/home/${user}/.local/share/bottles/temp"
 
+    # Podman / rootless container image & overlay storage (re-pullable;
+    # contains subuid-mapped dirs that cause permission denied during backup).
+    "/home/${user}/.local/share/containers/storage"
+
     # Auto-downloaded CLI tool runtimes and plugin caches (apps are packaged in Nix).
     "/home/${user}/.opencode/bin"
     "/home/${user}/.local/share/dsh/node22"
@@ -1177,12 +1181,16 @@ in
           "''${summary:-/home/${user} + システム → Google Drive}" || true
       else
         fail_hint="結果: ''${SERVICE_RESULT:-unknown}（journalctl -u ${backupUnit}）"
-        if journalctl -u ${backupUnit} -n 40 -o cat --no-pager 2>/dev/null \
+        recent_log="$(journalctl -u ${backupUnit} -n 40 -o cat --no-pager 2>/dev/null || true)"
+        if printf '%s\n' "$recent_log" \
           | grep -Eqi 'invalid_grant|token expired|couldn.t fetch token'; then
           fail_hint="GDrive OAuth失効。ConsoleでPublish後: backup reconnect"
-        elif journalctl -u ${backupUnit} -n 40 -o cat --no-pager 2>/dev/null \
-          | grep -Eqi 'restic-home-(password|rclone)|no such file|permission denied|/run/agenix'; then
+        elif printf '%s\n' "$recent_log" \
+          | grep -Eqi '/run/agenix|restic-home-(password|rclone)|agenix.*(no such file|permission denied|not readable)'; then
           fail_hint="agenix復号失敗。/etc/agenix/master.key 確認: secrets bootstrap && rebuild"
+        elif printf '%s\n' "$recent_log" \
+          | grep -Eqi 'at least one source file could not be read'; then
+          fail_hint="一部ファイルの読み取りに失敗（スナップショットは保存済みの可能性あり: backup log）"
         fi
         ${resticPanel} set "バックアップ失敗" "$fail_hint" failed || true
         ${resticNotify} critical "バックアップ失敗" "$fail_hint" || true

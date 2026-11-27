@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "z-nav-arrows-ws10-dashboard" ];
+  system.nixos.tags = [ "backup-containers-agenix-hint" ];
 }
