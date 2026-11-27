@@ -223,6 +223,9 @@ let
     "/home/${user}/.local/share/dsh/node22"
     "/home/${user}/.cursor/plugins/cache"
     "/home/${user}/.config/Cursor/agent-harness/versions"
+
+    # Temporary staging directory created by restore-on-nixos.sh / `rebuild --restore`.
+    "/home/${user}/.restore-mitac-*"
   ];
 
   # GNU du treats `**` as single-segment glob; expand `/**/` so top-level matches also exclude.
@@ -928,6 +931,26 @@ let
       say "  backup restore latest --target /tmp/restore"
     '';
   };
+
+  # Applies a pre-staged restore (`rebuild --restore`) on the next boot before
+  # Home Manager, greetd, Bluetooth, and Cloudflare WARP start.
+  restoreApplyScript = pkgs.writeShellApplication {
+    name = "mitac-restore-apply";
+    runtimeInputs = [
+      pkgs.bash
+      pkgs.coreutils
+      pkgs.findutils
+      pkgs.gnugrep
+      pkgs.gnused
+      pkgs.jq
+      pkgs.python3
+      pkgs.systemd
+      pkgs.util-linux
+    ];
+    text = ''
+      exec ${pkgs.bash}/bin/bash ${../../scripts/restore-on-nixos.sh} --apply-staged
+    '';
+  };
 in
 {
   environment.systemPackages = with pkgs; [
@@ -1058,6 +1081,39 @@ in
     serviceConfig = {
       Type = "simple";
       ExecStart = "${progressNotifyScript}";
+    };
+  };
+
+  systemd.tmpfiles.rules = [
+    "d /var/lib/mitac-restore 0755 root root -"
+  ];
+
+  # One-shot boot-time restore applier for `rebuild --restore`.
+  # Only runs when /var/lib/mitac-restore/pending.json exists; completes before
+  # home-manager-mitac.service and greetd so no user apps or DBs are open and
+  # Home Manager symlinks are reconciled immediately afterward.
+  systemd.services.mitac-restore-apply = {
+    description = "Apply staged /home and system state restore before desktop login";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "local-fs.target" ];
+    before = [
+      "home-manager-${user}.service"
+      "greetd.service"
+      "display-manager.service"
+      "bluetooth.service"
+      "cloudflare-warp.service"
+    ];
+    restartIfChanged = false;
+    stopIfChanged = false;
+    unitConfig = {
+      ConditionPathExists = "/var/lib/mitac-restore/pending.json";
+    };
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      StandardOutput = "journal+console";
+      StandardError = "journal+console";
+      ExecStart = lib.getExe restoreApplyScript;
     };
   };
 }

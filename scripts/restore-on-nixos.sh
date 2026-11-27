@@ -18,6 +18,17 @@ usage() {
                  既存の ~/MySettings チェックアウト・rbw・rclone.conf は保持）
   --agenix-only  restic 復元を行わず、Bitwarden (rbw) の 'agenix-master-key'
                  から ${RESTORE_ROOT:-/}/etc/agenix/master.key (0400 root:root) のみ導入
+  --stage-for-boot
+                 現行の /home やシステム状態は書き換えず、一時領域への展開・検証と
+                 agenix 鍵／ヒラギノフォントの先行配置のみを行い、次回 OS 起動時の
+                 mitac-restore-apply.service による自動反映を予約する
+  --defer-commit (--stage-for-boot と併用) 予約ファイルを pending.staging.json として
+                 作成し、呼び出し元（rebuild）側でビルド成功後に確定させる
+  --apply-staged (システム起動時サービス用) 予約済みステージを /home とシステム状態へ反映
+  --restore-status
+                 次回起動時の復元予約状態および直近の適用結果を表示
+  --cancel-staged
+                 予約中の次回起動時復元とステージ領域を削除してキャンセル
   -h, --help     このヘルプを表示
 
 復元元リポジトリの既定値:
@@ -61,6 +72,11 @@ EOF
 GDRIVE_CONFIGURED_THIS_RUN=0
 NEW_DEVICE=${NEW_DEVICE:-0}
 AGENIX_ONLY=${AGENIX_ONLY:-0}
+STAGE_FOR_BOOT=${STAGE_FOR_BOOT:-0}
+DEFER_COMMIT=${DEFER_COMMIT:-0}
+APPLY_STAGED=${APPLY_STAGED:-0}
+RESTORE_STATUS=${RESTORE_STATUS:-0}
+CANCEL_STAGED=${CANCEL_STAGED:-0}
 AGENIX_KEY_INSTALLED=0
 FROM_HOST=${FROM_HOST:-}
 EXPLICIT_REPO=${EXPLICIT_REPO:-}
@@ -74,11 +90,32 @@ RBW_CLIENT_ID=""
 RBW_CLIENT_SECRET=""
 RBW_TOKEN_JSON=""
 RBW_PASSWORD=""
+RESTORE_STATE_DIR=${RESTORE_STATE_DIR:-/var/lib/mitac-restore}
+_DEFAULT_AGENIX_PREFIX=${RESTORE_ROOT:-/}
+_DEFAULT_AGENIX_PREFIX=${_DEFAULT_AGENIX_PREFIX%/}
+AGENIX_RCLONE_CONF=${AGENIX_RCLONE_CONF:-${_DEFAULT_AGENIX_PREFIX}/run/agenix/rclone-conf}
+AGENIX_RESTIC_PASSWORD=${AGENIX_RESTIC_PASSWORD:-${_DEFAULT_AGENIX_PREFIX}/run/agenix/restic-home-password}
+_RESTORE_TMP_RCLONE_CONF=""
+
+cleanup_tmp_rclone_conf() {
+  if [[ -n ${_RESTORE_TMP_RCLONE_CONF:-} && -f $_RESTORE_TMP_RCLONE_CONF ]]; then
+    rm -f -- "$_RESTORE_TMP_RCLONE_CONF" 2>/dev/null || true
+  fi
+}
 
 fail() { printf '%s\n' "$*" >&2; exit 1; }
 
 check_platform() {
   [[ -f /etc/NIXOS ]] || fail 'このスクリプトは NixOS マシン上で実行してください。'
+  if (( APPLY_STAGED == 1 )); then
+    if [[ -z ${RESTORE_ROOT:-} || ${RESTORE_ROOT} == / ]]; then
+      (( EUID == 0 )) || fail '--apply-staged は root 権限（mitac-restore-apply.service）で実行してください。'
+    fi
+    return 0
+  fi
+  if (( RESTORE_STATUS == 1 || CANCEL_STAGED == 1 )); then
+    return 0
+  fi
   [[ $(id -un) == mitac ]] || fail 'ユーザー mitac で実行してください（sudo は付けない）。'
 }
 
@@ -104,8 +141,12 @@ run_sudo() {
 }
 
 move_tree_python() {
-  local src=$1 dst=$2 protect_path=${3:-}
-  python3 - "$src" "$dst" "$protect_path" <<'PYEOF'
+  local src=$1 dst=$2 protect_path=${3:-} run_as_user=${4:-}
+  local -a py_cmd=(python3)
+  if [[ -n $run_as_user ]] && (( EUID == 0 )); then
+    py_cmd=(runuser -u "$run_as_user" -- python3)
+  fi
+  "${py_cmd[@]}" - "$src" "$dst" "$protect_path" <<'PYEOF'
 import errno
 import os
 import shutil
@@ -445,10 +486,10 @@ move_tree_bash() {
 }
 
 move_tree() {
-  local src=${1%/} dst=${2%/} protect_path=${3:-}
+  local src=${1%/} dst=${2%/} protect_path=${3:-} run_as_user=${4:-}
   [[ -d $src ]] || return 0
   if command -v python3 >/dev/null 2>&1; then
-    move_tree_python "$src" "$dst" "$protect_path"
+    move_tree_python "$src" "$dst" "$protect_path" "$run_as_user"
   else
     move_tree_bash "$src" "$dst" "$protect_path"
   fi
@@ -544,6 +585,15 @@ resolve_rclone_config() {
     export RCLONE_CONFIG=$xdg_conf
   elif [[ -f "$HOME/.rclone.conf" ]]; then
     export RCLONE_CONFIG="$HOME/.rclone.conf"
+  elif [[ -n ${AGENIX_RCLONE_CONF:-} && -r $AGENIX_RCLONE_CONF ]]; then
+    local tmp_dir="${XDG_RUNTIME_DIR:-/tmp}"
+    local tmp_conf=""
+    tmp_conf=$(mktemp "${tmp_dir%/}/restore-rclone-XXXXXX.conf")
+    chmod 600 -- "$tmp_conf"
+    cp -- "$AGENIX_RCLONE_CONF" "$tmp_conf"
+    chmod 600 -- "$tmp_conf"
+    _RESTORE_TMP_RCLONE_CONF=$tmp_conf
+    export RCLONE_CONFIG=$tmp_conf
   else
     export RCLONE_CONFIG=$xdg_conf
   fi
@@ -1147,6 +1197,7 @@ ensure_gdrive_remote() {
 
 need_rbw_upfront() {
   [[ ${RESTORE_NO_RBW:-0} != 1 ]] || return 1
+  (( APPLY_STAGED == 0 && RESTORE_STATUS == 0 && CANCEL_STAGED == 0 )) || return 1
   (( AGENIX_ONLY == 0 )) || return 0
   resolve_rclone_config
   local resolved_repo=""
@@ -1156,7 +1207,8 @@ need_rbw_upfront() {
      { [[ -f $RCLONE_CONFIG ]] && grep -Eiq '^[[:space:]]*\[gdrive\][[:space:]]*$' -- "$RCLONE_CONFIG"; }; then
     have_gdrive=1
   fi
-  if [[ -v RESTIC_PASSWORD || -n ${RESTIC_PASSWORD_FILE:-} || -n ${RESTIC_PASSWORD_COMMAND:-} ]]; then
+  if [[ -v RESTIC_PASSWORD || -n ${RESTIC_PASSWORD_FILE:-} || -n ${RESTIC_PASSWORD_COMMAND:-} ]] ||
+     [[ -n ${AGENIX_RESTIC_PASSWORD:-} && -r $AGENIX_RESTIC_PASSWORD ]]; then
     have_pw=1
   fi
   if (( have_gdrive == 0 || have_pw == 0 )); then
@@ -1270,6 +1322,11 @@ validate_host_name() {
 parse_args() {
   NEW_DEVICE=0
   AGENIX_ONLY=0
+  STAGE_FOR_BOOT=0
+  DEFER_COMMIT=0
+  APPLY_STAGED=0
+  RESTORE_STATUS=0
+  CANCEL_STAGED=0
   FROM_HOST=""
   EXPLICIT_REPO=""
   EXPLICIT_TARGET=""
@@ -1288,6 +1345,26 @@ parse_args() {
         ;;
       --agenix-only)
         AGENIX_ONLY=1
+        shift
+        ;;
+      --stage-for-boot)
+        STAGE_FOR_BOOT=1
+        shift
+        ;;
+      --defer-commit)
+        DEFER_COMMIT=1
+        shift
+        ;;
+      --apply-staged)
+        APPLY_STAGED=1
+        shift
+        ;;
+      --restore-status)
+        RESTORE_STATUS=1
+        shift
+        ;;
+      --cancel-staged)
+        CANCEL_STAGED=1
         shift
         ;;
       --from)
@@ -1334,6 +1411,16 @@ parse_args() {
   EXPLICIT_TARGET=${positionals[0]:-}
   if (( AGENIX_ONLY == 1 )) && [[ -n $EXPLICIT_TARGET ]]; then
     fail '--agenix-only と EXTRACT_DIR は同時に指定できません。'
+  fi
+  local special_modes=$(( AGENIX_ONLY + STAGE_FOR_BOOT + APPLY_STAGED + RESTORE_STATUS + CANCEL_STAGED ))
+  if (( special_modes > 1 )); then
+    fail '--agenix-only / --stage-for-boot / --apply-staged / --restore-status / --cancel-staged は併用できません。'
+  fi
+  if (( DEFER_COMMIT == 1 && STAGE_FOR_BOOT == 0 )); then
+    fail '--defer-commit は --stage-for-boot と併用してください。'
+  fi
+  if (( (STAGE_FOR_BOOT == 1 || APPLY_STAGED == 1 || RESTORE_STATUS == 1 || CANCEL_STAGED == 1) )) && [[ -n $EXPLICIT_TARGET ]]; then
+    fail 'このオプションと EXTRACT_DIR は同時に指定できません。'
   fi
 }
 
@@ -1877,9 +1964,236 @@ print_new_device_checklist() {
 EOF
 }
 
+is_safe_stage_dir_path() {
+  local p=${1%/}
+  [[ -n $p && $p == /* && $p != / ]] || return 1
+  local base
+  base=$(basename -- "$p")
+  [[ $base == restore-mitac-* || $base == .restore-mitac-* ]]
+}
+
+copy_hiragino_fonts_early() {
+  local stage_dir=${1%/} target_home=${2%/}
+  local src_fonts="${stage_dir}/home/mitac/.local/share/fonts/hiragino-otf"
+  local dst_fonts="${target_home}/.local/share/fonts/hiragino-otf"
+  if dir_has_entries "$src_fonts"; then
+    mkdir -p -- "$dst_fonts"
+    cp -a -- "${src_fonts}/." "${dst_fonts}/"
+    printf 'ヒラギノフォントを先行配置しました: %s\n' "$dst_fonts" >&2
+  fi
+}
+
+write_pending_manifest() {
+  local manifest_path=$1
+  local stage_dir=$2
+  local snapshot_id=$3
+  local target_home=$4
+  local new_device=$5
+  local preserved_rclone=$6
+  local rclone_config=$7
+
+  local created_at
+  created_at=$(date -Is 2>/dev/null || date)
+  local new_device_json=false
+  if (( new_device == 1 )); then
+    new_device_json=true
+  fi
+
+  local tmp_manifest
+  tmp_manifest=$(mktemp)
+  jq -n \
+    --argjson version 1 \
+    --arg stage_dir "$stage_dir" \
+    --arg snapshot_id "$snapshot_id" \
+    --arg target_home "$target_home" \
+    --argjson new_device "$new_device_json" \
+    --arg preserved_rclone "$preserved_rclone" \
+    --arg rclone_config "$rclone_config" \
+    --arg created_at "$created_at" \
+    '{
+      version: $version,
+      stage_dir: $stage_dir,
+      snapshot_id: $snapshot_id,
+      target_home: $target_home,
+      new_device: $new_device,
+      preserved_rclone: $preserved_rclone,
+      rclone_config: $rclone_config,
+      created_at: $created_at
+    }' >"$tmp_manifest"
+
+  local state_dir
+  state_dir=$(dirname -- "$manifest_path")
+  run_sudo install -d -m 0755 -- "$state_dir"
+  run_sudo install -m 0644 -- "$tmp_manifest" "$manifest_path"
+  rm -f -- "$tmp_manifest"
+}
+
+show_restore_status() {
+  local state_dir=${RESTORE_STATE_DIR%/}
+  local pending_file="${state_dir}/pending.json"
+  local staging_file="${state_dir}/pending.staging.json"
+  local applying_file="${state_dir}/applying.json"
+  local failed_file="${state_dir}/failed.json"
+  local last_file="${state_dir}/last-applied.json"
+
+  local shown=0
+  if [[ -f $pending_file ]]; then
+    shown=1
+    printf '=== 次回起動時の復元予約 (有効) ===\n'
+    printf '  予約ファイル : %s\n' "$pending_file"
+    printf '  スナップショット: %s\n' "$(jq -r '.snapshot_id // "不明"' "$pending_file")"
+    printf '  ステージ先   : %s\n' "$(jq -r '.stage_dir // "不明"' "$pending_file")"
+    printf '  new-device   : %s\n' "$(jq -r 'if .new_device then "yes" else "no" end' "$pending_file")"
+    printf '  予約日時     : %s\n' "$(jq -r '.created_at // "不明"' "$pending_file")"
+    printf '  適用方法     : sudo reboot（キャンセル: rebuild --restore-cancel）\n'
+  fi
+  if [[ -f $staging_file ]]; then
+    shown=1
+    printf '=== 未確定のステージ予約 (pending.staging.json) ===\n'
+    printf '  ステージ先   : %s\n' "$(jq -r '.stage_dir // "不明"' "$staging_file")"
+    printf '  ※ rebuild のビルドが中断された残骸です。rebuild --restore-cancel で掃除できます。\n'
+  fi
+  if [[ -f $applying_file ]]; then
+    shown=1
+    printf '=== 復元適用中 (applying.json) ===\n'
+    printf '  ステージ先   : %s\n' "$(jq -r '.stage_dir // "不明"' "$applying_file")"
+  fi
+  if [[ -f $failed_file ]]; then
+    shown=1
+    printf '=== 前回の起動時復元が失敗しました (failed.json) ===\n'
+    printf '  ステージ先   : %s\n' "$(jq -r '.stage_dir // "不明"' "$failed_file")"
+    printf '  ログ確認     : journalctl -u mitac-restore-apply.service\n'
+    printf '  後始末       : rebuild --restore-cancel\n'
+  fi
+  if (( shown == 0 )); then
+    printf '予約中の次回起動時復元はありません。\n'
+  fi
+  if [[ -f $last_file ]]; then
+    printf '\n=== 直近の起動時復元 ===\n'
+    printf '  スナップショット: %s\n' "$(jq -r '.snapshot_id // "不明"' "$last_file")"
+    printf '  適用日時     : %s\n' "$(jq -r '.applied_at // "不明"' "$last_file")"
+    printf '  new-device   : %s\n' "$(jq -r 'if .new_device then "yes" else "no" end' "$last_file")"
+  fi
+}
+
+cancel_staged_restore() {
+  local state_dir=${RESTORE_STATE_DIR%/}
+  local -a manifest_files=(
+    "${state_dir}/pending.json"
+    "${state_dir}/pending.staging.json"
+    "${state_dir}/failed.json"
+  )
+  local found=0 mf stage_dir
+  for mf in "${manifest_files[@]}"; do
+    [[ -f $mf ]] || continue
+    found=1
+    stage_dir=$(jq -r '.stage_dir // empty' "$mf" 2>/dev/null || true)
+    if [[ -n $stage_dir ]] && is_safe_stage_dir_path "$stage_dir" && [[ -d $stage_dir ]]; then
+      printf 'ステージディレクトリを削除しています: %s\n' "$stage_dir" >&2
+      chmod -R u+rwx -- "$stage_dir" 2>/dev/null || true
+      rm -rf -- "$stage_dir" 2>/dev/null || run_sudo rm -rf -- "$stage_dir"
+    fi
+    run_sudo rm -f -- "$mf"
+    printf '予約ファイルを削除しました: %s\n' "$mf" >&2
+  done
+  if (( found == 0 )); then
+    printf 'キャンセル対象の復元予約はありません。\n'
+  else
+    printf '次回起動時の復元予約をキャンセルしました。\n'
+  fi
+}
+
+apply_staged_restore() {
+  local root_prefix=${1%/}
+  local state_dir=${RESTORE_STATE_DIR%/}
+  local pending_file="${state_dir}/pending.json"
+  local applying_file="${state_dir}/applying.json"
+  local failed_file="${state_dir}/failed.json"
+  local last_file="${state_dir}/last-applied.json"
+
+  if [[ ! -f $pending_file ]]; then
+    printf 'mitac-restore-apply: 予約ファイル (%s) が無いためスキップします。\n' "$pending_file"
+    return 0
+  fi
+
+  # ブートループ防止: 反映開始前に pending.json を applying.json へ移動する。
+  mv -f -- "$pending_file" "$applying_file"
+  mark_apply_failed() {
+    if [[ -f $applying_file ]]; then
+      mv -f -- "$applying_file" "$failed_file" 2>/dev/null || true
+    fi
+  }
+  trap 'mark_apply_failed' ERR
+
+  local stage_dir snapshot_id target_home new_device_str preserved_rclone rclone_config
+  stage_dir=$(jq -er '.stage_dir' "$applying_file")
+  snapshot_id=$(jq -r '.snapshot_id // "unknown"' "$applying_file")
+  target_home=$(jq -er '.target_home' "$applying_file")
+  new_device_str=$(jq -r 'if .new_device then "1" else "0" end' "$applying_file")
+  preserved_rclone=$(jq -r '.preserved_rclone // empty' "$applying_file")
+  rclone_config=$(jq -r '.rclone_config // empty' "$applying_file")
+
+  if ! is_safe_stage_dir_path "$stage_dir" || [[ ! -d $stage_dir ]]; then
+    mark_apply_failed
+    fail "mitac-restore-apply: ステージディレクトリが見つかりません: $stage_dir"
+  fi
+
+  local run_as_user=""
+  if [[ -z $root_prefix ]] && (( EUID == 0 )); then
+    run_as_user="mitac"
+  fi
+
+  printf 'mitac-restore-apply: 予約済み復元を適用します (snapshot: %s, stage: %s)\n' "$snapshot_id" "$stage_dir"
+  if [[ -d "${stage_dir}/home/mitac" ]]; then
+    move_tree "${stage_dir}/home/mitac" "$target_home" "$stage_dir" "$run_as_user"
+  fi
+
+  local restore_home_mode=""
+  if [[ ( -n $preserved_rclone || $stage_dir == "$target_home"/* ) && -d $target_home && ! -w $target_home ]]; then
+    restore_home_mode=$(stat -c '%a' -- "$target_home")
+    chmod u+rwx -- "$target_home"
+  fi
+
+  if [[ -n $preserved_rclone && -f $preserved_rclone && -n $rclone_config ]]; then
+    mkdir -p -- "$(dirname -- "$rclone_config")"
+    cp -f --remove-destination -- "$preserved_rclone" "$rclone_config"
+    chmod 600 -- "$rclone_config"
+    if [[ -n $run_as_user ]]; then
+      chown "$run_as_user:users" -- "$(dirname -- "$rclone_config")" "$rclone_config" 2>/dev/null || true
+    fi
+    rm -f -- "$preserved_rclone"
+  fi
+
+  if [[ $new_device_str != "1" ]]; then
+    restore_system_state "${stage_dir}/run/restic-backups-home/system" "$root_prefix"
+  fi
+
+  rm -rf -- "$stage_dir"
+  if [[ -n $restore_home_mode ]]; then
+    chmod "$restore_home_mode" -- "$target_home"
+  fi
+
+  local applied_at
+  applied_at=$(date -Is 2>/dev/null || date)
+  local new_device_json=false
+  if [[ $new_device_str == "1" ]]; then
+    new_device_json=true
+  fi
+  jq -n \
+    --arg snapshot_id "$snapshot_id" \
+    --arg applied_at "$applied_at" \
+    --argjson new_device "$new_device_json" \
+    '{snapshot_id: $snapshot_id, applied_at: $applied_at, new_device: $new_device}' >"$last_file"
+  chmod 0644 -- "$last_file"
+  rm -f -- "$applying_file"
+  trap - ERR
+  printf 'mitac-restore-apply: 復元適用が完了しました (snapshot: %s)\n' "$snapshot_id"
+}
+
 main() {
   set -euo pipefail
   umask 077
+  trap cleanup_tmp_rclone_conf EXIT
   parse_args "$@"
   if (( HELP_REQUESTED == 1 )); then
     usage
@@ -1892,6 +2206,31 @@ main() {
   local stage_parent_override=${RESTORE_STAGE_PARENT:-}
   local default_stage_parent=${_RESTORE_DEFAULT_STAGE_PARENT:-/var/tmp}
   local target="" parent="" stage_prefix="restore-mitac"
+
+  check_platform
+  if (( RESTORE_STATUS == 1 )); then
+    show_restore_status
+    return 0
+  fi
+  if (( CANCEL_STAGED == 1 )); then
+    cancel_staged_restore
+    return 0
+  fi
+  if (( APPLY_STAGED == 1 )); then
+    apply_staged_restore "$root_prefix"
+    return 0
+  fi
+
+  if (( STAGE_FOR_BOOT == 1 )); then
+    local state_dir=${RESTORE_STATE_DIR%/}
+    if [[ -f "${state_dir}/pending.json" || -f "${state_dir}/applying.json" ]]; then
+      fail "既に次回起動時の復元予約が存在します (${state_dir}/pending.json)。確認は rebuild --restore-status、取消は rebuild --restore-cancel を実行してください。"
+    fi
+    if [[ -f "${state_dir}/pending.staging.json" ]]; then
+      printf '前回の未確定ステージをクリーンアップします...\n' >&2
+      cancel_staged_restore >/dev/null
+    fi
+  fi
 
   if [[ -n $explicit_target ]]; then
     target=$explicit_target
@@ -1910,7 +2249,6 @@ main() {
   local resolved_repo
   resolved_repo=$(resolve_repository "$FROM_HOST" "$EXPLICIT_REPO")
 
-  check_platform
   ensure_tools "$@"
   if (( AGENIX_ONLY == 1 )); then
     maybe_bootstrap_agenix_from_rbw "$root_prefix" 1
@@ -1926,6 +2264,10 @@ main() {
 
   # 先にスナップショット ID を固定してから必要容量・復元を行う。
   local snapshot_id="" snapshots_json="" stats required_bytes available_bytes
+  if [[ ! -v RESTIC_PASSWORD && -z ${RESTIC_PASSWORD_FILE:-} && -z ${RESTIC_PASSWORD_COMMAND:-} ]] &&
+     [[ -n ${AGENIX_RESTIC_PASSWORD:-} && -r $AGENIX_RESTIC_PASSWORD ]]; then
+    export RESTIC_PASSWORD_FILE="$AGENIX_RESTIC_PASSWORD"
+  fi
   if [[ ! -v RESTIC_PASSWORD && -z ${RESTIC_PASSWORD_FILE:-} && -z ${RESTIC_PASSWORD_COMMAND:-} ]]; then
     local pw_resolved=0 rbw_attempted=0
     if has_rbw && (( RBW_DECLINED == 0 )); then
@@ -2117,10 +2459,47 @@ main() {
 
   resolve_rclone_config
   local preserved_rclone=""
-  if [[ -n ${RCLONE_CONFIG:-} && -f $RCLONE_CONFIG ]] && (( GDRIVE_CONFIGURED_THIS_RUN == 1 || NEW_DEVICE == 1 )); then
+  if [[ -n ${RCLONE_CONFIG:-} && -f $RCLONE_CONFIG && $RCLONE_CONFIG != "${_RESTORE_TMP_RCLONE_CONF:-}" ]] && (( GDRIVE_CONFIGURED_THIS_RUN == 1 || NEW_DEVICE == 1 )); then
     preserved_rclone="${stage_dir}/.preserved-rclone.conf"
     cp -p -- "$RCLONE_CONFIG" "$preserved_rclone"
     chmod 600 -- "$preserved_rclone"
+  fi
+
+  if (( STAGE_FOR_BOOT == 1 )); then
+    copy_hiragino_fonts_early "$stage_dir" "$target_home"
+    maybe_bootstrap_agenix_from_rbw "$root_prefix" 0
+    local state_dir=${RESTORE_STATE_DIR%/}
+    local manifest_path="${state_dir}/pending.json"
+    if (( DEFER_COMMIT == 1 )); then
+      manifest_path="${state_dir}/pending.staging.json"
+    fi
+    local saved_rclone_target=""
+    if [[ -n $preserved_rclone ]]; then
+      saved_rclone_target=$RCLONE_CONFIG
+    fi
+    write_pending_manifest \
+      "$manifest_path" \
+      "$stage_dir" \
+      "$snapshot_id" \
+      "$target_home" \
+      "$NEW_DEVICE" \
+      "$preserved_rclone" \
+      "$saved_rclone_target"
+
+    printf '\n復元データのステージングと検証が完了しました（現行ホームは未変更）。\n'
+    printf 'スナップショット: %s\n' "$snapshot_id"
+    printf 'ステージ先: %s\n' "$stage_dir"
+    printf '予約ファイル: %s\n' "$manifest_path"
+    if (( AGENIX_KEY_INSTALLED == 1 )); then
+      printf 'agenix マスター鍵: %s/etc/agenix/master.key\n' "$root_prefix"
+    fi
+    if (( DEFER_COMMIT == 0 )); then
+      printf '次回 OS 再起動時に mitac-restore-apply.service が自動適用します（キャンセル: rebuild --restore-cancel）。\n'
+    fi
+    if (( NEW_DEVICE == 1 )); then
+      print_new_device_checklist
+    fi
+    return 0
   fi
 
   if [[ -d "${stage_dir}/home/mitac" ]]; then

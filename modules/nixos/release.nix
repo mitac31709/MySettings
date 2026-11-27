@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "snip-overlay" ];
+  system.nixos.tags = [ "boot-restore" ];
 }

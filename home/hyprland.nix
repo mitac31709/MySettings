@@ -1365,6 +1365,24 @@ let
     }
     {
       section = "NixOS";
+      label = "次回起動時にデータ復元を予約して適用（--from/--new-device/--reboot 可）";
+      run = "rebuild --restore";
+      mode = "show";
+    }
+    {
+      section = "NixOS";
+      label = "次回起動時復元の予約状態確認";
+      run = "rebuild --restore-status";
+      mode = "term";
+    }
+    {
+      section = "NixOS";
+      label = "次回起動時復元の予約キャンセル";
+      run = "rebuild --restore-cancel";
+      mode = "show";
+    }
+    {
+      section = "NixOS";
       label = "注: hiragino-otf があるとき rebuild は --impure";
     }
     {

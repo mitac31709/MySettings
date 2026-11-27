@@ -3464,5 +3464,210 @@ class AgenixRestoreAndSecretsTest(unittest.TestCase):
         self.assertEqual(decrypted_explicit, explicit_rclone_content)
 
 
+class BootStagedRestoreTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(prefix="restore-boot-stage-")
+        self.root = Path(self.tmp.name)
+        self.home = self.root / "runner-home"
+        self.home.mkdir()
+        self.restore_root = self.root / "restore-root"
+        (self.restore_root / "home" / "mitac").mkdir(parents=True)
+        self.state_dir = self.root / "state"
+        self.stage_parent = self.root / "stage-parent"
+        self.stage_parent.mkdir()
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        self.sudo_log = self.root / "sudo.log"
+
+        sudo_shim = self.bin / "sudo"
+        sudo_shim.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            'printf "%s\\n" "$*" >>"$SUDO_LOG"\n'
+            'if [[ ${1:-} == chown ]]; then exit 0; fi\n'
+            'exec "$@"\n',
+            encoding="utf-8",
+        )
+        sudo_shim.chmod(0o700)
+
+        id_shim = self.bin / "id"
+        id_shim.write_text(
+            "#!/usr/bin/env bash\n"
+            'if [[ ${1:-} == -un ]]; then printf "mitac\\n"; exit 0; fi\n'
+            'exec /usr/bin/env id "$@"\n',
+            encoding="utf-8",
+        )
+        id_shim.chmod(0o700)
+
+        self.fixture_stage = self.root / "fixture-stage"
+        (self.fixture_stage / "home" / "mitac" / ".local" / "share" / "fonts" / "hiragino-otf").mkdir(parents=True)
+        (self.fixture_stage / "home" / "mitac" / ".bashrc").write_text("# restored-on-boot\n", encoding="utf-8")
+        (
+            self.fixture_stage
+            / "home"
+            / "mitac"
+            / ".local"
+            / "share"
+            / "fonts"
+            / "hiragino-otf"
+            / "Hiragino.otf"
+        ).write_bytes(b"OTTO-test-font")
+        (self.fixture_stage / "run" / "restic-backups-home" / "system" / "bluetooth").mkdir(parents=True)
+        (self.fixture_stage / "run" / "restic-backups-home" / "system" / "bluetooth" / "info").write_text(
+            "bt-paired=1\n", encoding="utf-8"
+        )
+
+        self.fake_snap_id = "b" * 64
+        restic_shim = self.bin / "restic"
+        restic_shim.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            '[[ -n ${RESTIC_PASSWORD_FILE:-} && -r $RESTIC_PASSWORD_FILE ]] || exit 1\n'
+            'case "${1:-}" in\n'
+            f'  snapshots) printf \'[{{"id":"{self.fake_snap_id}"}}]\\n\' ;;\n'
+            '  stats) printf \'{"total_size":1024}\\n\' ;;\n'
+            '  restore) cp -a -- "${FIXTURE_STAGE_TREE}/." "$4/" ;;\n'
+            "esac\n",
+            encoding="utf-8",
+        )
+        restic_shim.chmod(0o700)
+
+        rclone_shim = self.bin / "rclone"
+        rclone_shim.write_text(
+            "#!/usr/bin/env bash\n"
+            "set -euo pipefail\n"
+            '[[ -n ${RCLONE_CONFIG:-} && -r $RCLONE_CONFIG ]] || exit 1\n'
+            'case "${1:-}" in\n'
+            '  listremotes) printf "gdrive:\\n" ;;\n'
+            '  about) printf "Total: 100 GiB\\n" ;;\n'
+            "esac\n",
+            encoding="utf-8",
+        )
+        rclone_shim.chmod(0o700)
+
+        self.agenix_dir = self.root / "run-agenix"
+        self.agenix_dir.mkdir()
+        self.agenix_pw = self.agenix_dir / "restic-home-password"
+        self.agenix_pw.write_text("agenix-passphrase\n", encoding="utf-8")
+        self.agenix_rclone = self.agenix_dir / "rclone-conf"
+        self.agenix_rclone.write_text("[gdrive]\ntype = drive\nscope = drive\n", encoding="utf-8")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def base_env(self, **extra):
+        env = os.environ.copy()
+        env.pop("RCLONE_CONFIG", None)
+        env.pop("RESTIC_PASSWORD", None)
+        env.pop("RESTIC_PASSWORD_FILE", None)
+        env.pop("RESTIC_PASSWORD_COMMAND", None)
+        env.pop("RESTIC_REPOSITORY", None)
+        env.update(
+            {
+                "HOME": str(self.home),
+                "PATH": f"{self.bin}:{env.get('PATH', '')}",
+                "RESTORE_ROOT": str(self.restore_root),
+                "RESTORE_STATE_DIR": str(self.state_dir),
+                "RESTORE_STAGE_PARENT": str(self.stage_parent),
+                "RESTORE_NO_RBW": "1",
+                "AGENIX_RESTIC_PASSWORD": str(self.agenix_pw),
+                "AGENIX_RCLONE_CONF": str(self.agenix_rclone),
+                "FIXTURE_STAGE_TREE": str(self.fixture_stage),
+                "SUDO_LOG": str(self.sudo_log),
+            }
+        )
+        env.update(extra)
+        return env
+
+    def run_restore(self, args, env=None):
+        return subprocess.run(
+            ["bash", str(SCRIPT), *args],
+            env=env or self.base_env(),
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+        )
+
+    def test_stage_for_boot_defer_commit_status_and_apply(self):
+        target_home = self.restore_root / "home" / "mitac"
+        (target_home / ".bashrc").write_text("# original-live\n", encoding="utf-8")
+
+        res = self.run_restore(["--stage-for-boot", "--defer-commit", "--from", "vaio"])
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+
+        staging_manifest = self.state_dir / "pending.staging.json"
+        pending_manifest = self.state_dir / "pending.json"
+        self.assertTrue(staging_manifest.is_file())
+        self.assertFalse(pending_manifest.exists())
+
+        # Live home and system state must remain untouched during staging,
+        # except Hiragino fonts which are pre-placed for `rebuild --impure`.
+        self.assertEqual((target_home / ".bashrc").read_text(encoding="utf-8"), "# original-live\n")
+        self.assertEqual(
+            (target_home / ".local" / "share" / "fonts" / "hiragino-otf" / "Hiragino.otf").read_bytes(),
+            b"OTTO-test-font",
+        )
+        self.assertFalse((self.restore_root / "var" / "lib" / "bluetooth" / "info").exists())
+
+        status_staging = self.run_restore(["--restore-status"])
+        self.assertEqual(status_staging.returncode, 0, status_staging.stdout + status_staging.stderr)
+        self.assertIn("pending.staging.json", status_staging.stdout)
+
+        # Commit pending manifest (simulates `rebuild --restore` after nixos-rebuild switch succeeds).
+        staging_manifest.rename(pending_manifest)
+        meta = json.loads(pending_manifest.read_text(encoding="utf-8"))
+        stage_dir = Path(meta["stage_dir"])
+        self.assertTrue(stage_dir.is_dir())
+        self.assertEqual(meta["snapshot_id"], self.fake_snap_id)
+
+        # Reject duplicate staging while a pending restore exists.
+        dup = self.run_restore(["--stage-for-boot", "--from", "vaio"])
+        self.assertNotEqual(dup.returncode, 0)
+
+        # Apply staged restore (simulates mitac-restore-apply.service on next boot).
+        apply_res = self.run_restore(["--apply-staged"])
+        self.assertEqual(apply_res.returncode, 0, apply_res.stdout + apply_res.stderr)
+
+        self.assertEqual((target_home / ".bashrc").read_text(encoding="utf-8"), "# restored-on-boot\n")
+        self.assertEqual(
+            (self.restore_root / "var" / "lib" / "bluetooth" / "info").read_text(encoding="utf-8"),
+            "bt-paired=1\n",
+        )
+        self.assertFalse(pending_manifest.exists())
+        self.assertFalse((self.state_dir / "applying.json").exists())
+        self.assertFalse(stage_dir.exists())
+        self.assertTrue((self.state_dir / "last-applied.json").is_file())
+
+        status_after = self.run_restore(["--restore-status"])
+        self.assertEqual(status_after.returncode, 0, status_after.stdout + status_after.stderr)
+        self.assertIn("予約中の次回起動時復元はありません", status_after.stdout)
+        self.assertIn(self.fake_snap_id, status_after.stdout)
+
+    def test_cancel_staged_removes_stage_and_manifest(self):
+        res = self.run_restore(["--stage-for-boot", "--from", "vaio"])
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        pending_manifest = self.state_dir / "pending.json"
+        meta = json.loads(pending_manifest.read_text(encoding="utf-8"))
+        stage_dir = Path(meta["stage_dir"])
+        self.assertTrue(stage_dir.is_dir())
+
+        cancel_res = self.run_restore(["--cancel-staged"])
+        self.assertEqual(cancel_res.returncode, 0, cancel_res.stdout + cancel_res.stderr)
+        self.assertFalse(pending_manifest.exists())
+        self.assertFalse(stage_dir.exists())
+
+    def test_apply_staged_missing_stage_marks_failed_without_boot_loop(self):
+        res = self.run_restore(["--stage-for-boot", "--from", "vaio"])
+        self.assertEqual(res.returncode, 0, res.stdout + res.stderr)
+        pending_manifest = self.state_dir / "pending.json"
+        meta = json.loads(pending_manifest.read_text(encoding="utf-8"))
+        shutil.rmtree(meta["stage_dir"])
+
+        apply_res = self.run_restore(["--apply-staged"])
+        self.assertNotEqual(apply_res.returncode, 0)
+        self.assertFalse(pending_manifest.exists())
+        self.assertTrue((self.state_dir / "failed.json").is_file())
+
+
 if __name__ == "__main__":
     unittest.main()
