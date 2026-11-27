@@ -39,3 +39,6 @@ Nix is on PATH and the daemon normally runs. If a `nix` command errors with `can
   - `backup-staging` — prefer declarative Nix/agenix (`secrets/*.age`); only machine-specific non-secret state goes in `modules/nixos/backup.nix` (`systemStagingSources`), with `scripts/restore-on-nixos.sh` + `README.md` updated too.
   - `declarative-agent-skills` — manage AI agent skills/plugins declaratively via `flake.nix` (`flake = false` inputs) + `home/agent-skills.nix` instead of imperative-only installs.
   - `avoid-premature-workarounds`, `investigate-before-conclude`, `prefer-native-tools`, `communication-style`, `skip-build-on-completion` — investigate root causes, read logs before concluding, prefer native CLI over ad-hoc Python, answer concisely.
+- **Subagent cost optimization (Antigravity / T3 Code)**:
+  - Actively delegate broad codebase exploration, multi-file research, log inspection, and independent/routine subtasks to subagents to save main-model cost. Keep trivial one-step lookups or small edits direct.
+  - When delegating from Antigravity in T3 Code, use `delegate_task` with `target: { providerInstanceId: "opencode", model: "opencode/hy4-flash-free" }` instead of native `invoke_subagent` (call `orchestrator_capabilities` once per thread before the first `delegate_task`).
