@@ -1365,24 +1365,6 @@ let
     }
     {
       section = "NixOS";
-      label = "次回起動時にデータ復元を予約して適用（--from/--new-device/--reboot 可）";
-      run = "rebuild --restore";
-      mode = "show";
-    }
-    {
-      section = "NixOS";
-      label = "次回起動時復元の予約状態確認";
-      run = "rebuild --restore-status";
-      mode = "term";
-    }
-    {
-      section = "NixOS";
-      label = "次回起動時復元の予約キャンセル";
-      run = "rebuild --restore-cancel";
-      mode = "show";
-    }
-    {
-      section = "NixOS";
       label = "注: hiragino-otf があるとき rebuild は --impure";
     }
     {
@@ -1976,14 +1958,32 @@ let
     }
     {
       section = "バックアップ";
-      label = "全体復元（home+システム・上書き・要注意）";
+      label = "次回起動時フル復元を予約（--from/--new-device/--rebuild/--reboot 可）";
+      run = "backup full-restore";
+      mode = "show";
+    }
+    {
+      section = "バックアップ";
+      label = "次回起動時フル復元の予約状態確認";
+      run = "backup full-restore --status";
+      mode = "term";
+    }
+    {
+      section = "バックアップ";
+      label = "次回起動時フル復元の予約キャンセル";
+      run = "backup full-restore --cancel";
+      mode = "show";
+    }
+    {
+      section = "バックアップ";
+      label = "全体復元（即時上書き・初回環境用・要注意）";
       run = "cd ~/MySettings && ./scripts/restore-on-nixos.sh";
       mode = "show";
     }
     {
       section = "バックアップ";
       label = "別端末から新端末復元（--from --new-device）";
-      run = "cd ~/MySettings && ./scripts/restore-on-nixos.sh --from vaio --new-device";
+      run = "backup full-restore --from vaio --new-device --rebuild";
       mode = "show";
     }
     {

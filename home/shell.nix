@@ -65,100 +65,10 @@ in
 
       rebuild() {
         local defaultTarget=${lib.escapeShellArg defaultHost}
-        local restoreBin=${lib.escapeShellArg (lib.getExe config.mitac.scripts.restoreOnNixos)}
-        local target=""
-        local doRestore=0
-        local doReboot=0
-        local -a restoreArgs=()
-
-        while [ "$#" -gt 0 ]; do
-          case "$1" in
-            -h|--help)
-              cat <<'EOF'
-      使い方:
-        rebuild [TARGET]
-        rebuild [TARGET] --restore [--from HOST | --repo REPO] [--new-device] [--reboot]
-        rebuild --restore-status
-        rebuild --restore-cancel
-
-      オプション:
-        --restore          バックアップを事前ステージング・検証し、rebuild 後に次回 OS 再起動時の自動復元を予約
-        --from HOST        復元元ホスト指定（例: --from vaio / --from chromebook）
-        --repo REPO        restic リポジトリ URI を明示指定
-        --new-device       新端末・再構築向けに端末 ID / トークン / Bluetooth / WARP を初期化して復元
-        --reboot           --restore の予約と rebuild 完了後に自動で sudo reboot
-        --restore-status   次回起動時の復元予約状態と直近適用結果を表示
-        --restore-cancel   予約中の復元とステージ領域を削除してキャンセル
-      EOF
-              return 0
-              ;;
-            --restore)
-              doRestore=1
-              shift
-              ;;
-            --reboot)
-              doReboot=1
-              shift
-              ;;
-            --restore-status)
-              "$restoreBin" --restore-status
-              return $?
-              ;;
-            --restore-cancel)
-              "$restoreBin" --cancel-staged
-              return $?
-              ;;
-            --new-device)
-              restoreArgs+=(--new-device)
-              shift
-              ;;
-            --from|--repo)
-              if [ "$#" -lt 2 ]; then
-                printf 'rebuild: %s には値が必要です。\n' "$1" >&2
-                return 2
-              fi
-              restoreArgs+=("$1" "$2")
-              shift 2
-              ;;
-            --from=*|--repo=*)
-              restoreArgs+=("$1")
-              shift
-              ;;
-            -*)
-              printf 'rebuild: 不明なオプションです: %s（rebuild --help を確認）\n' "$1" >&2
-              return 2
-              ;;
-            *)
-              if [ -n "$target" ]; then
-                printf 'rebuild: ターゲットは 1 つだけ指定してください: %s\n' "$1" >&2
-                return 2
-              fi
-              target="$1"
-              shift
-              ;;
-          esac
-        done
-
-        if [ "$doRestore" -eq 0 ] && [ "''${#restoreArgs[@]}" -gt 0 ]; then
-          printf 'rebuild: --from / --repo / --new-device は --restore と併用してください。\n' >&2
-          return 2
-        fi
-        if [ "$doRestore" -eq 0 ] && [ "$doReboot" -eq 1 ]; then
-          printf 'rebuild: --reboot は --restore と併用してください。\n' >&2
-          return 2
-        fi
-
-        target="''${target:-$defaultTarget}"
+        local target="''${1:-$defaultTarget}"
         local flakeUri=${lib.escapeShellArg repoPath}"#$target"
         # Ask for the password on the real TTY (|& nom swallows/hides the prompt).
         sudo -v || return $?
-
-        if [ "$doRestore" -eq 1 ]; then
-          "$restoreBin" --stage-for-boot --defer-commit "''${restoreArgs[@]}" || return $?
-          # Refresh sudo timestamp in case download/verify took longer than sudo timeout.
-          sudo -v || return $?
-        fi
-
         # Resolve nom at call time (PATH) so GC of an old store path cannot break
         # a long-lived shell that still has this function body.
         local nom
@@ -180,23 +90,6 @@ in
         # OSC 4/10/11 を流し込む問題) は pkgs/colorshell/default.nix の `wal -s` で抑止済み。
         if [ -t 1 ]; then
           printf '\033[0m\033]104\033\\\033]110\033\\\033]111\033\\\033]112\033\\'
-        fi
-        if [ "$doRestore" -eq 1 ]; then
-          if [ "$rc" -eq 0 ]; then
-            sudo mv -f /var/lib/mitac-restore/pending.staging.json /var/lib/mitac-restore/pending.json || return $?
-            printf '\n次回 OS 再起動時のデータ復元を予約しました（mitac-restore-apply.service）。\n'
-            printf '  状態確認: rebuild --restore-status\n'
-            printf '  キャンセル: rebuild --restore-cancel\n'
-            if [ "$doReboot" -eq 1 ]; then
-              printf '再起動します...\n'
-              sudo reboot
-            else
-              printf '準備ができたら `sudo reboot` を実行してください。\n'
-            fi
-          else
-            printf '\n警告: nixos-rebuild が失敗したため、次回起動時の復元予約は確定していません。\n' >&2
-            printf '残骸を削除する場合は `rebuild --restore-cancel` を実行してください。\n' >&2
-          fi
         fi
         return "$rc"
       }

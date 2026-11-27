@@ -2045,13 +2045,13 @@ show_restore_status() {
     printf '  ステージ先   : %s\n' "$(jq -r '.stage_dir // "不明"' "$pending_file")"
     printf '  new-device   : %s\n' "$(jq -r 'if .new_device then "yes" else "no" end' "$pending_file")"
     printf '  予約日時     : %s\n' "$(jq -r '.created_at // "不明"' "$pending_file")"
-    printf '  適用方法     : sudo reboot（キャンセル: rebuild --restore-cancel）\n'
+    printf '  適用方法     : sudo reboot（キャンセル: backup full-restore --cancel）\n'
   fi
   if [[ -f $staging_file ]]; then
     shown=1
     printf '=== 未確定のステージ予約 (pending.staging.json) ===\n'
     printf '  ステージ先   : %s\n' "$(jq -r '.stage_dir // "不明"' "$staging_file")"
-    printf '  ※ rebuild のビルドが中断された残骸です。rebuild --restore-cancel で掃除できます。\n'
+    printf '  ※ --rebuild のビルドが中断された残骸です。backup full-restore --cancel で掃除できます。\n'
   fi
   if [[ -f $applying_file ]]; then
     shown=1
@@ -2063,7 +2063,7 @@ show_restore_status() {
     printf '=== 前回の起動時復元が失敗しました (failed.json) ===\n'
     printf '  ステージ先   : %s\n' "$(jq -r '.stage_dir // "不明"' "$failed_file")"
     printf '  ログ確認     : journalctl -u mitac-restore-apply.service\n'
-    printf '  後始末       : rebuild --restore-cancel\n'
+    printf '  後始末       : backup full-restore --cancel\n'
   fi
   if (( shown == 0 )); then
     printf '予約中の次回起動時復元はありません。\n'
@@ -2224,7 +2224,7 @@ main() {
   if (( STAGE_FOR_BOOT == 1 )); then
     local state_dir=${RESTORE_STATE_DIR%/}
     if [[ -f "${state_dir}/pending.json" || -f "${state_dir}/applying.json" ]]; then
-      fail "既に次回起動時の復元予約が存在します (${state_dir}/pending.json)。確認は rebuild --restore-status、取消は rebuild --restore-cancel を実行してください。"
+      fail "既に次回起動時の復元予約が存在します (${state_dir}/pending.json)。確認は backup full-restore --status、取消は backup full-restore --cancel を実行してください。"
     fi
     if [[ -f "${state_dir}/pending.staging.json" ]]; then
       printf '前回の未確定ステージをクリーンアップします...\n' >&2
@@ -2494,7 +2494,7 @@ main() {
       printf 'agenix マスター鍵: %s/etc/agenix/master.key\n' "$root_prefix"
     fi
     if (( DEFER_COMMIT == 0 )); then
-      printf '次回 OS 再起動時に mitac-restore-apply.service が自動適用します（キャンセル: rebuild --restore-cancel）。\n'
+      printf '次回 OS 再起動時に mitac-restore-apply.service が自動適用します（キャンセル: backup full-restore --cancel）。\n'
     fi
     if (( NEW_DEVICE == 1 )); then
       print_new_device_checklist

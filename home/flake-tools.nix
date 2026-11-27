@@ -91,29 +91,6 @@ let
     pkgs.python3
     pkgs.rbw
   ] ../scripts/secrets-tool.sh;
-  restoreOnNixos = pkgs.writeShellApplication {
-    name = "restore-on-nixos";
-    runtimeInputs = [
-      pkgs.bash
-      pkgs.coreutils
-      pkgs.findutils
-      pkgs.gawk
-      pkgs.gnugrep
-      pkgs.gnused
-      pkgs.jq
-      pkgs.pinentry-curses
-      pkgs.pinentry-qt
-      pkgs.python3
-      pkgs.rbw
-      pkgs.rclone
-      pkgs.restic
-      pkgs.util-linux
-    ];
-    text = ''
-      export PATH="/run/wrappers/bin:/run/current-system/sw/bin:$PATH"
-      exec ${pkgs.bash}/bin/bash ${../scripts/restore-on-nixos.sh} "$@"
-    '';
-  };
 in
 {
   options.mitac.repoPath = lib.mkOption {
@@ -145,7 +122,6 @@ in
         flakeUpdateCursor
         flakeUpdateCheck
         secretsTool
-        restoreOnNixos
         ;
     };
 
@@ -154,7 +130,6 @@ in
       flakeUpdateCursor
       flakeUpdateCheck
       secretsTool
-      restoreOnNixos
     ];
   };
 }

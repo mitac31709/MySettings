@@ -23,6 +23,7 @@
 }:
 
 let
+  machine = import ../../lib/machine.nix;
   user = "mitac";
   backupUnit = "restic-backups-home.service";
 
@@ -224,7 +225,7 @@ let
     "/home/${user}/.cursor/plugins/cache"
     "/home/${user}/.config/Cursor/agent-harness/versions"
 
-    # Temporary staging directory created by restore-on-nixos.sh / `rebuild --restore`.
+    # Temporary staging directory created by restore-on-nixos.sh / `backup full-restore`.
     "/home/${user}/.restore-mitac-*"
   ];
 
@@ -455,6 +456,31 @@ let
     # Final label + clear are handled by backupCleanupCommand (avoids racing partOf stop).
   '';
 
+  # Full-restore staging helper (wraps scripts/restore-on-nixos.sh with all runtime tools).
+  restoreOnNixosScript = pkgs.writeShellApplication {
+    name = "mitac-restore-on-nixos";
+    runtimeInputs = [
+      pkgs.bash
+      pkgs.coreutils
+      pkgs.findutils
+      pkgs.gawk
+      pkgs.gnugrep
+      pkgs.gnused
+      pkgs.jq
+      pkgs.pinentry-curses
+      pkgs.pinentry-qt
+      pkgs.python3
+      pkgs.rbw
+      pkgs.rclone
+      pkgs.restic
+      pkgs.util-linux
+    ];
+    text = ''
+      export PATH="/run/wrappers/bin:/run/current-system/sw/bin:$PATH"
+      exec ${pkgs.bash}/bin/bash ${../../scripts/restore-on-nixos.sh} "$@"
+    '';
+  };
+
   # Single entrypoint for home backup ops (systemd / rclone / agenix / restic).
   # NixOS names its auto-wrapper `restic-<name>`; we disable that and ship `backup`.
   # Meta subcommands are handled here; everything else is passed to restic.
@@ -536,6 +562,12 @@ let
       backup find NAME
       backup restore latest --target /tmp/restore
       backup unlock                  古い restic リポジトリロックを解除
+
+    次回起動時フル復元（アプリ非稼働のログイン前に自動適用）:
+      backup full-restore [--from HOST | --repo REPO] [--new-device] [--rebuild] [--reboot]
+                                     バックアップを事前検証・ステージングし次回起動時復元を予約
+      backup full-restore --status   予約状態・直近の起動時復元結果を表示
+      backup full-restore --cancel   予約中の復元とステージ領域を削除してキャンセル
 
     削除（空き容量を作る。restic はスナップショット単位のみ、個別ファイルは不可）:
       backup forget <ID> --prune     指定スナップショットを削除して領域を回収
@@ -725,6 +757,129 @@ let
             shift
             resolve_writable_rclone_conf
             exec rclone about "''${remote_name}:" "$@"
+            ;;
+          full-restore)
+            shift
+            restore_bin=${lib.escapeShellArg (lib.getExe restoreOnNixosScript)}
+            repo_path=${lib.escapeShellArg machine.repoPath}
+            default_target=${lib.escapeShellArg flakeTarget}
+            hiragino_dir=${lib.escapeShellArg machine.hiraginoDir}
+            do_rebuild=0
+            do_reboot=0
+            rebuild_target=""
+            restore_args=()
+
+            while [ "$#" -gt 0 ]; do
+              case "$1" in
+                -h|--help)
+                  cat <<'FR_EOF'
+    使い方:
+      backup full-restore [--from HOST | --repo REPO] [--new-device] [--rebuild] [--target HOST] [--reboot]
+      backup full-restore --status
+      backup full-restore --cancel
+
+    オプション:
+      --from HOST     復元元ホスト指定（例: --from vaio / --from chromebook）
+      --repo REPO     restic リポジトリ URI を明示指定
+      --new-device    新端末・再構築向けに端末 ID / トークン / Bluetooth / WARP を初期化して復元
+      --rebuild       ステージング後に nixos-rebuild switch を実行してから予約を確定
+                      （agenix マスター鍵やヒラギノフォントを同時に反映したいとき）
+      --target HOST   --rebuild 時の flake ターゲット上書き（既定: 現在のホスト）
+      --reboot        予約完了後に自動で sudo reboot
+      --status        次回起動時の復元予約状態と直近適用結果を表示
+      --cancel        予約中の復元とステージ領域を削除してキャンセル
+    FR_EOF
+                  exit 0
+                  ;;
+                --status)
+                  exec "$restore_bin" --restore-status
+                  ;;
+                --cancel)
+                  exec "$restore_bin" --cancel-staged
+                  ;;
+                --rebuild)
+                  do_rebuild=1
+                  shift
+                  ;;
+                --reboot)
+                  do_reboot=1
+                  shift
+                  ;;
+                --target)
+                  if [ "$#" -lt 2 ]; then
+                    printf 'backup full-restore: --target にはホスト名が必要です。\n' >&2
+                    exit 2
+                  fi
+                  rebuild_target="$2"
+                  shift 2
+                  ;;
+                --target=*)
+                  rebuild_target="''${1#--target=}"
+                  shift
+                  ;;
+                --new-device)
+                  restore_args+=(--new-device)
+                  shift
+                  ;;
+                --from|--repo)
+                  if [ "$#" -lt 2 ]; then
+                    printf 'backup full-restore: %s には値が必要です。\n' "$1" >&2
+                    exit 2
+                  fi
+                  restore_args+=("$1" "$2")
+                  shift 2
+                  ;;
+                --from=*|--repo=*)
+                  restore_args+=("$1")
+                  shift
+                  ;;
+                *)
+                  printf 'backup full-restore: 不明な引数です: %s（--help を確認）\n' "$1" >&2
+                  exit 2
+                  ;;
+              esac
+            done
+
+            if [ -n "$rebuild_target" ] && [ "$do_rebuild" -eq 0 ]; then
+              printf 'backup full-restore: --target は --rebuild と併用してください。\n' >&2
+              exit 2
+            fi
+
+            sudo -v || exit $?
+            if [ "$do_rebuild" -eq 1 ]; then
+              "$restore_bin" --stage-for-boot --defer-commit "''${restore_args[@]}" || exit $?
+              sudo -v || exit $?
+              target="''${rebuild_target:-$default_target}"
+              rebuild_args=(--flake "''${repo_path}#''${target}")
+              if [ -d "$hiragino_dir" ]; then
+                rebuild_args+=(--impure)
+              fi
+              if command -v nom >/dev/null 2>&1; then
+                sudo nixos-rebuild switch "''${rebuild_args[@]}" |& nom
+                rc="''${PIPESTATUS[0]}"
+              else
+                sudo nixos-rebuild switch "''${rebuild_args[@]}"
+                rc=$?
+              fi
+              if [ "$rc" -ne 0 ]; then
+                printf '\n警告: nixos-rebuild が失敗したため、次回起動時の復元予約は確定していません。\n' >&2
+                printf '残骸を削除する場合は `backup full-restore --cancel` を実行してください。\n' >&2
+                exit "$rc"
+              fi
+              sudo mv -f /var/lib/mitac-restore/pending.staging.json /var/lib/mitac-restore/pending.json || exit $?
+              printf '\n次回 OS 再起動時のデータ復元を予約しました（mitac-restore-apply.service）。\n'
+              printf '  状態確認: backup full-restore --status\n'
+              printf '  キャンセル: backup full-restore --cancel\n'
+            else
+              "$restore_bin" --stage-for-boot "''${restore_args[@]}" || exit $?
+            fi
+
+            if [ "$do_reboot" -eq 1 ]; then
+              printf '再起動します...\n'
+              sudo reboot
+            else
+              printf '準備ができたら `sudo reboot` を実行してください。\n'
+            fi
             ;;
           *)
             prepare_restic_env
@@ -932,7 +1087,7 @@ let
     '';
   };
 
-  # Applies a pre-staged restore (`rebuild --restore`) on the next boot before
+  # Applies a pre-staged restore (`backup full-restore`) on the next boot before
   # Home Manager, greetd, Bluetooth, and Cloudflare WARP start.
   restoreApplyScript = pkgs.writeShellApplication {
     name = "mitac-restore-apply";
@@ -1088,7 +1243,7 @@ in
     "d /var/lib/mitac-restore 0755 root root -"
   ];
 
-  # One-shot boot-time restore applier for `rebuild --restore`.
+  # One-shot boot-time restore applier for `backup full-restore`.
   # Only runs when /var/lib/mitac-restore/pending.json exists; completes before
   # home-manager-mitac.service and greetd so no user apps or DBs are open and
   # Home Manager symlinks are reconciled immediately afterward.

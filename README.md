@@ -305,12 +305,8 @@ sudo nixos-rebuild switch --flake .#chromebook
 # ※ 後方互換エイリアス `.#mitac` も `.#chromebook` を指します
 
 # Home Manager 適用後は、どのディレクトリからでも:
-#   rebuild                                           # 現在のホストターゲット（vaio / chromebook）を再ビルド
-#   rebuild vaio                                      # 引数でターゲット明示も可能
-#   rebuild --restore                                 # バックアップを事前検証し、次回 OS 再起動時に自動復元
-#   rebuild --restore --from vaio --new-device        # 別端末バックアップから新端末向けに次回再起動時復元を予約
-#   rebuild --restore --reboot                        # 予約・再ビルド完了後にそのまま再起動
-#   rebuild --restore-status / --restore-cancel       # 予約状態の確認／キャンセル
+#   rebuild          # 現在のホストターゲット（vaio / chromebook）を再ビルド
+#   rebuild vaio     # 引数でターゲット明示も可能
 
 # 必要なら:
 passwd mitac
@@ -640,21 +636,21 @@ rm -f "$tmp_conf"
 
 このモジュールはセットアップ、systemd ユニット、rclone 確認、および restic（agenix のパスフレーズ／rclone 設定を読み込み済み）をまとめて扱う `backup` CLI を導入します（`restic-home-setup` も `backup setup` のエイリアスとして利用できます）。
 
-すべてのファイルを元の位置へ一括復元する場合は、**起動中のデスクトップアプリや常駐サービス（ActivityWatch / WhatPulse / Vivaldi / Cursor 等）との競合を避けるため**、次の **2 段階方式（`rebuild --restore`）** が推奨です：
+すべてのファイルを元の位置へ一括復元する場合は、**起動中のデスクトップアプリや常駐サービス（ActivityWatch / WhatPulse / Vivaldi / Cursor 等）との競合を避けるため**、次の **2 段階方式（`backup full-restore`）** が推奨です：
 
 ```bash
 # 同一ホストのバックアップを事前ステージング・検証し、次回再起動時に自動反映を予約
-rebuild --restore
+backup full-restore
 
-# 別端末のバックアップから新端末向けに予約（完了後にそのまま再起動するなら --reboot）
-rebuild --restore --from vaio --new-device
+# 別端末のバックアップから新端末向けに予約（agenix 鍵／ヒラギノ反映も同時に行うなら --rebuild、自動再起動は --reboot）
+backup full-restore --from vaio --new-device --rebuild
 
 # 予約状態の確認 / キャンセル
-rebuild --restore-status
-rebuild --restore-cancel
+backup full-restore --status
+backup full-restore --cancel
 ```
 
-`rebuild --restore` は現行の `/home/mitac` に触れず一時領域へ展開・`--verify`・`--new-device` 初期化と agenix 鍵／ヒラギノフォントの先行配置を行い、`nixos-rebuild switch` 成功後に `/var/lib/mitac-restore/pending.json` を確定します。次回起動時に `mitac-restore-apply.service`（`Type=oneshot`）が `home-manager-mitac.service`・`greetd`・`bluetooth`・`cloudflare-warp` より先に数秒でステージを反映し、直後の `home-manager-mitac.service` がシンボリックリンクの整合も自動修復します（既存の agenix `/run/agenix/restic-home-password`・`/run/agenix/rclone-conf` がある環境では `rbw` 解錠も不要です）。
+`backup full-restore` は現行の `/home/mitac` に触れず一時領域へ展開・`--verify`・`--new-device` 初期化と agenix 鍵／ヒラギノフォントの先行配置を行い、`/var/lib/mitac-restore/pending.json` を作成します（`--rebuild` 併用時は `nixos-rebuild switch` 成功後に予約を確定）。次回起動時に `mitac-restore-apply.service`（`Type=oneshot`）が `home-manager-mitac.service`・`greetd`・`bluetooth`・`cloudflare-warp` より先に数秒でステージを反映し、直後の `home-manager-mitac.service` がシンボリックリンクの整合も自動修復します（既存の agenix `/run/agenix/restic-home-password`・`/run/agenix/rclone-conf` がある環境では `rbw` 解錠も不要です）。
 
 初回 OS ビルド前や即時上書きを行いたい場合は引き続き `cd ~/MySettings && ./scripts/restore-on-nixos.sh`（別端末からは `--from <host> --new-device`）を使えます。一部ファイルだけ別ディレクトリへ取り出して確認・手動反映する場合は `backup restore latest --target /tmp/restore` を使います。他ホストのリポジトリを `backup` CLI から確認したい場合は `RESTIC_REPOSITORY=rclone:gdrive:restic/chromebook-home backup snapshots` のように環境変数で指定できます。
 
