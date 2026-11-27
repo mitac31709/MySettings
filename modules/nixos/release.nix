@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "boot-restore" ];
+  system.nixos.tags = [ "mute-system-bell" ];
 }

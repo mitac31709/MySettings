@@ -2520,6 +2520,7 @@ in
           key_press_enables_dpms = true;
           animate_manual_resizes = true;
           animate_mouse_windowdragging = true;
+          bell_sound = "none";
         };
 
         binds = {

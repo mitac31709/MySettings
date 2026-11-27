@@ -265,9 +265,15 @@ in
     };
     gtk3 = {
       colorScheme = "dark";
-      extraConfig.gtk-application-prefer-dark-theme = true;
+      extraConfig = {
+        gtk-application-prefer-dark-theme = true;
+        gtk-error-bell = false;
+      };
     };
-    gtk4.extraConfig.gtk-interface-color-scheme = "dark";
+    gtk4.extraConfig = {
+      gtk-interface-color-scheme = "dark";
+      gtk-error-bell = false;
+    };
   };
 
   # Packaged cursor themes go through home.pointerCursor. Local-only themes
