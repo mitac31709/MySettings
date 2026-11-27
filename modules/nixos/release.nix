@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "startup-sounds-sushi" ];
+  system.nixos.tags = [ "hyprspace-overview" ];
 }
