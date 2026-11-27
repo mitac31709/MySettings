@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "orca-ide" ];
+  system.nixos.tags = [ "snip-overlay" ];
 }

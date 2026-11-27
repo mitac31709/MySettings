@@ -144,15 +144,39 @@ let
     exec ${pactl} set-sink-volume @DEFAULT_SINK@ "''${new}%"
   '';
 
+  snipOverlayPkg = pkgs.callPackage ../pkgs/snip-overlay { };
+  snipThemeJson = pkgs.writeText "snip-overlay-theme.json" (
+    builtins.toJSON {
+      bg = p.bg;
+      surface = p.surface;
+      surfaceAlt = p.surfaceAlt;
+      surfaceHover = p.surfaceHover;
+      border = p.border;
+      borderStrong = p.borderStrong;
+      fg = p.fg;
+      fgSecondary = p.fgSecondary;
+      fgMuted = p.fgMuted;
+      accent = p.accent;
+      accentAlt = p.accentAlt;
+      accentSoft = p.accentSoft;
+      danger = p.danger;
+      dangerSoft = p.dangerSoft;
+      radiusPopup = theme.radius.popup;
+      radiusControl = theme.radius.control;
+    }
+  );
+
   screenshotBin = pkgs.writeShellApplication {
     name = "screenshot";
     runtimeInputs = [
       pkgs.coreutils
       pkgs.hyprshot
+      pkgs.jq
       pkgs.libnotify
       pkgs.procps
       config.programs.rofi.package
       pkgs.satty
+      snipOverlayPkg
       pkgs.wl-clipboard
     ];
     text = ''
@@ -164,17 +188,17 @@ let
       if [ "$mode" = "menu" ]; then
         choice="$(
           printf '%s\n' \
-            "範囲選択 → Satty 編集 (Super+Shift+S / Shift+Print)" \
-            "全画面（出力） → Satty 切り抜き・編集 (Print)" \
-            "ウィンドウ → Satty 編集 (Super+Print)" \
+            "オーバーレイ（範囲・自由・ウィンドウ・全画面切替） (Super+Shift+S / Print)" \
+            "ウィンドウ選択モードで開始 (Super+Print)" \
+            "自由選択モードで開始" \
             "範囲選択 → 即クリップボード" \
-            "全画面（出力） → 即クリップボード" \
+            "全画面（出力） → 即クリップボード (Ctrl+Print)" \
             | rofi -dmenu -i -p 'スクリーンショット' || true
         )"
         case "$choice" in
-          "範囲選択 → Satty"*) mode="region" ;;
-          "全画面（出力） → Satty"*) mode="full" ;;
-          "ウィンドウ"*) mode="window" ;;
+          "オーバーレイ"*) mode="region" ;;
+          "ウィンドウ選択"*) mode="window" ;;
+          "自由選択"*) mode="freeform" ;;
           "範囲選択 → 即"*) mode="quick-region" ;;
           "全画面（出力） → 即"*) mode="quick-full" ;;
           *) exit 0 ;;
@@ -201,27 +225,37 @@ let
       tmp="$(mktemp --suffix=.png)"
       trap 'rm -f "$tmp"' EXIT
 
-      case "$mode" in
-        region)
-          hyprshot -m region -s -z -r >"$tmp" || exit 0
-          [ -s "$tmp" ] || exit 0
+      run_overlay() {
+        local init_mode="$1"
+        local init_action="$2"
+        local meta=""
+        meta="$(snip-overlay --mode "$init_mode" "--$init_action" --output "$tmp" --theme-json "${snipThemeJson}")" || exit 0
+        [ -s "$tmp" ] || exit 0
+        local final_action
+        final_action="$(printf '%s\n' "$meta" | jq -r '.action // "edit"')"
+        if [ "$final_action" = "quick" ]; then
+          wl-copy --type image/png < "$tmp"
+          notify-send "スクリーンショット" "クリップボードへコピーしました" >/dev/null 2>&1 || true
+        else
           open_satty "$tmp" arrow
+        fi
+      }
+
+      case "$mode" in
+        overlay|region)
+          run_overlay region edit
           ;;
-        full)
-          hyprshot -m output -s -z -r >"$tmp" || exit 0
-          [ -s "$tmp" ] || exit 0
-          open_satty "$tmp" crop
+        freeform)
+          run_overlay freeform edit
           ;;
         window)
-          hyprshot -m window -s -z -r >"$tmp" || exit 0
-          [ -s "$tmp" ] || exit 0
-          open_satty "$tmp" arrow
+          run_overlay window edit
+          ;;
+        full)
+          run_overlay full edit
           ;;
         quick-region)
-          hyprshot -m region -s -z -r >"$tmp" || exit 0
-          [ -s "$tmp" ] || exit 0
-          wl-copy --type image/png < "$tmp"
-          notify-send "スクリーンショット" "選択範囲をクリップボードへコピーしました" >/dev/null 2>&1 || true
+          run_overlay region quick
           ;;
         quick-full)
           hyprshot -m output -s -z -r >"$tmp" || exit 0
@@ -230,7 +264,7 @@ let
           notify-send "スクリーンショット" "全画面をクリップボードへコピーしました" >/dev/null 2>&1 || true
           ;;
         *)
-          printf 'Usage: screenshot [region|full|window|quick-region|quick-full|menu]\n' >&2
+          printf 'Usage: screenshot [overlay|region|freeform|window|full|quick-region|quick-full|menu]\n' >&2
           exit 2
           ;;
       esac
@@ -919,28 +953,28 @@ let
     # スクショ・音量・輝度・履歴
     {
       section = "スクショ・音量・輝度";
-      label = "範囲選択 → Satty 編集・コピー (hyprshot)";
-      keys = "Super+Shift+S / Shift+Print";
+      label = "スクショオーバーレイ（上部バー / 1:範囲 2:自由 3:窓 4:全画面 E:編集切替）";
+      keys = "Super+Shift+S / Print / Shift+Print";
       run = "${lib.getExe screenshotBin} region";
       mode = "exec";
     }
     {
       section = "スクショ・音量・輝度";
-      label = "全画面（出力） → Satty 切り抜き・編集・コピー (hyprshot)";
-      keys = "Print";
-      run = "${lib.getExe screenshotBin} full";
-      mode = "exec";
-    }
-    {
-      section = "スクショ・音量・輝度";
-      label = "ウィンドウ → Satty 編集 (hyprshot)";
+      label = "ウィンドウ選択モードでスクショ開始";
       keys = "Super+Print";
       run = "${lib.getExe screenshotBin} window";
       mode = "exec";
     }
     {
       section = "スクショ・音量・輝度";
-      label = "スクショメニュー（即コピー含む）";
+      label = "全画面 → 即クリップボードコピー";
+      keys = "Ctrl+Print";
+      run = "${lib.getExe screenshotBin} quick-full";
+      mode = "exec";
+    }
+    {
+      section = "スクショ・音量・輝度";
+      label = "スクショメニュー（rofi）";
       run = "${lib.getExe screenshotBin} menu";
       mode = "exec";
     }
@@ -2292,6 +2326,7 @@ in
     pkgs.playerctl
     pkgs.jq
     hyprExec
+    snipOverlayPkg
     screenshotBin
     jquakeOpen
     jquakeToggle
@@ -2564,6 +2599,13 @@ in
           blur = true;
           ignore_alpha = 0.1;
         }
+        {
+          name = "snip-overlay-no-anim";
+          match = {
+            namespace = "^snip-overlay$";
+          };
+          no_anim = true;
+        }
       ];
     };
 
@@ -2663,10 +2705,11 @@ in
       hl.bind(mod .. " + ALT + S", hl.dsp.window.move({ workspace = "special:magic" }))
 
       -- Screenshots & color picker
-      hl.bind(mod .. " + SHIFT + S", hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} region"}), { dont_inhibit = true })
-      hl.bind(mod .. " + Print",     hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} window"}), { dont_inhibit = true })
-      hl.bind("Print",               hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} full"}),   { dont_inhibit = true })
-      hl.bind("SHIFT + Print",       hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} region"}), { dont_inhibit = true })
+      hl.bind(mod .. " + SHIFT + S", hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} region"}),     { dont_inhibit = true })
+      hl.bind(mod .. " + Print",     hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} window"}),     { dont_inhibit = true })
+      hl.bind("Print",               hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} region"}),     { dont_inhibit = true })
+      hl.bind("SHIFT + Print",       hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} region"}),     { dont_inhibit = true })
+      hl.bind("CTRL + Print",        hl.dsp.exec_cmd(${builtins.toJSON "${lib.getExe screenshotBin} quick-full"}), { dont_inhibit = true })
       hl.bind(mod .. " + SHIFT + P", hl.dsp.exec_cmd(${builtins.toJSON "${hyprpickerBin} -a"}))
 
       -- Focus navigation (Super+L is reserved exclusively for hyprlock; use Super+Right for right focus)
