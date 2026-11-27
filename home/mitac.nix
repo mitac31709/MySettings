@@ -26,6 +26,7 @@
     ./activitywatch.nix
     ./whatpulse.nix
     ./hyprland.nix
+    ./ws10-dashboard.nix
     ./niri.nix
   ];
 

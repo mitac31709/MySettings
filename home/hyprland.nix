@@ -937,6 +937,19 @@ let
     }
     {
       section = "ウィンドウ・WS";
+      label = "WS 10 TUI/CLI ダッシュボード補完起動（btop / OS詳細 / サービス / yazi / nmtui / shell）";
+      keys = "Super+0（自動起動）";
+      run = "ws10-dashboard";
+      mode = "exec";
+    }
+    {
+      section = "ウィンドウ・WS";
+      label = "WS 10 ダッシュボードをリセット再展開";
+      run = "ws10-dashboard --reset";
+      mode = "exec";
+    }
+    {
+      section = "ウィンドウ・WS";
       label = "マウス移動・リサイズ / WS スクロール";
       keys = "Super+左・右ドラッグ / Super+ホイール";
     }

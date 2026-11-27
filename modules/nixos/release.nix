@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "cleanup-stale-deps-waybar-hooks" ];
+  system.nixos.tags = [ "z-nav-arrows-ws10-dashboard" ];
 }
