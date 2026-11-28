@@ -293,6 +293,15 @@ in
         mode = "0400";
       };
     })
+    (lib.optionalAttrs (hasSecretFile "ubuntu-zstdvpn-env.age") {
+      # EnvironmentFile (SLOWLINK_PSK=...) for zstdvpn-server container on host ubuntu.
+      "ubuntu-zstdvpn-env" = {
+        file = secretsDir + "/ubuntu-zstdvpn-env.age";
+        owner = "root";
+        group = "root";
+        mode = "0400";
+      };
+    })
   ];
 
   # Keep /etc/agenix strictly root-only even before the first key is written.

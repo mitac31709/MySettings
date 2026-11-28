@@ -15,7 +15,7 @@ GMKtec NucBox G3（Intel N100 / 16GB RAM / Apacer 256GB NVMe）で動いてい�
   - `nvme0n1p3`: 235.4 GiB LVM（PV・LV ともに 235.4 GiB いっぱい、`ubuntu-vg/ubuntu-lv`、使用約 75 GiB / 空き 147 GiB）
   - スワップ: `/swapfile` 8 GiB（使用中）+ `/swap.img` 4 GiB（未使用）
 - 新しいディスク構成（`hosts/ubuntu/disko.nix`）:
-  - GPT、1 GiB vfat ESP（`/boot`）、残りを btrfs（`compress=zstd:1`、`@` / `@home` / `@nix` / `@log` / `@swap` 4 GiB swapfile）
+  - GPT、1 GiB vfat ESP（`/boot`）、残りを btrfs（`compress=zstd:1`、`@` / `@home` / `@nix` / `@log` / `@swap` **8 GiB** swapfile。16 GB RAM + Minecraft `-Xmx12G` での OOM 対策として現行 `/swapfile` 8 GiB と同容量を確保）
 - ネットワーク:
   - 有線 LAN `enp3s0`（MAC `e0:51:d8:1e:90:95`）
   - ルーターの DHCP 予約で `192.168.1.50` が割り当てられる前提
@@ -26,11 +26,12 @@ GMKtec NucBox G3（Intel N100 / 16GB RAM / Apacer 256GB NVMe）で動いてい�
   - `cloudflared`・Node 18・`snapd`・`cloud-init`・`open-vm-tools` も意図的に除外しています。
   - タイムゾーンは現行の `Etc/UTC` から `Asia/Tokyo` へ変更しています。
   - `services.tailscale.useRoutingFeatures = "server"` により IPv4 に加えて IPv6 転送も有効になります（現行 Ubuntu は IPv4 のみ転送）。
-- 移行前に残っている `TODO`（秘密・任意項目のみ）:
+- 移行前に残っている `TODO`（秘密・確認項目のみ）:
   - `/etc/win-credentials` の agenix 暗号化（`secrets/ubuntu-win-credentials.age`）
+  - `zstdvpn-server` 用の `SLOWLINK_PSK`（`~/slowflow-vpn/psk`）の agenix 暗号化（`secrets/ubuntu-zstdvpn-env.age`、`SLOWLINK_PSK=...` 形式）および `-tls-auto ...` 引数の実機確認
   - ユニット外の秘密ファイル（`~/.hermes/.env`・`auth.json`、`~/siesta-bot/.env`、`~/.config/lecture-asr/gemini.env` 等）は退避から復元するか agenix へ移行
   - （任意）NVMe を増設する予定があれば `hosts/ubuntu/disko.nix` の `/dev/nvme0n1` を `/dev/disk/by-id/...` に固定
-  - 公開鍵 4 本（`pi-lecture-upload` の `rrsync` 制限含む）、`hermes-gateway` / `siesta-bot` / `lecture-asr` / `lecture-publish` の実ユニット値、Minecraft 6 インスタンスの起動コマンドは `modules/nixos/ubuntu.nix` へ実測値を反映済み
+  - 公開鍵 4 本（`pi-lecture-upload` の `rrsync` 制限含む）、`hermes-gateway` / `siesta-bot` / `lecture-asr` / `lecture-publish` の実ユニット値、Minecraft 6 インスタンスの起動コマンド、単独 `docker run` の 7 コンテナ（`oci-containers`）は `modules/nixos/ubuntu.nix` へ実測値を反映済み
 
 ---
 
@@ -201,15 +202,15 @@ sudo systemctl start docker vpnserver
 
 | 項目 | 現行 Ubuntu 上のパス / コマンド | 権限・備考 |
 |---|---|---|
-| ホーム全体 | `/home/mitac/` | `.hermes`（3.3G）、`siesta-bot`、`lectures`（モデル 1.5G 含む）、`minecraft`（6 インスタンス: `ATM10` / `ATM9-Eureka` / `latest-vanila` / `mohist-1.20.1` / `paper-1.21.11` / `yower-1.21.1`）、`znc`、`ntopng`、`FindSenryu4Discord`、`slowflow-vpn`、`bin/`、`.ssh/`、`.gnupg/`、`.config/gh/`、`.config/lecture-asr/`、`.config/btop/`、`.config/systemd/user/` などを含む |
+| ホーム全体 | `/home/mitac/` | `.hermes`（3.3G）、`siesta-bot`、`lectures`（モデル 1.5G 含む）、`minecraft`（6 インスタンス: `ATM10` / `ATM9-Eureka` / `latest-vanila` / `mohist-1.20.1` / `paper-1.21.11` / `yower-1.21.1`）、`znc`、`ntopng`、`FindSenryu4Discord`、`slowflow-vpn`、`ts-ubuntu-at-exit`、`bin/`、`.ssh/`、`.gnupg/`、`.config/gh/`、`.config/lecture-asr/`、`.config/btop/`、`.config/systemd/user/` などを含む |
 | 停止中アプリのデータ（退避のみ） | `~/immich-app`（+ volume `immich_model-cache` 5.6G）、`~/AdGuardHome`、`~/kikoune`、`~/CloudflareOS`、`~/DiscordShogi` | NixOS 側には設定を作らずデータだけ保持 |
 | 廃止予定アプリのデータ（任意） | `~/NFAS26`、`~/.config/code-server` | 意図的に廃止する対象。念のため残したい場合のみ退避（`/home/mitac` 丸ごとコピーなら自動的に含まれる） |
 | SoftEther 設定・証明書 | `/usr/local/vpnserver/vpn_server.config` と同フォルダ内の証明書・`chain_certs` 等 | root 所有。`sudo` が必要 |
 | SSH ホスト鍵 | `/etc/ssh/ssh_host_*` | 再インストール後も他端末から `WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED` を出さないため。root 所有 |
 | Tailscale 状態 | `/var/lib/tailscale/` | ノード ID と `100.124.196.22` / `fd7a:115c:a1e0::f101:c484` を維持するため（SSH の `Match LocalAddress` にも必要）。root 所有 |
-| Docker ボリューム | `/var/lib/docker/volumes/`（`immich_model-cache` や各 compose の named volume） | bind mount 分は `/home/mitac` に含まれる。named volume は `docker volume ls` で確認し、Docker 停止中にコピーまたは `tar` で抜く |
+| Docker ボリューム | `/var/lib/docker/volumes/`（`ts-ubuntu-at-exit-state`、`immich_model-cache`、各 compose の named volume） | bind mount 分は `/home/mitac` に含まれる。named volume は `docker volume ls` で確認し、Docker 停止中にコピーまたは `tar` で抜く |
 | ローカルビルドの Docker イメージ | `docker save findsenryu4discord-app`（その他 `docker images` でローカルビルド扱いがあれば同様） | `/var/lib/docker/volumes/` には含まれないため、そのまま戻す場合は `docker save` で退避する（または移行後に `docker compose build` で再ビルド） |
-| 各種 `.env`・認証ファイル | `~/.hermes/.env`、`~/.hermes/auth.json`、`~/siesta-bot/.env`、`~/.config/lecture-asr/gemini.env`、`~/slowflow-vpn/psk`、各 compose の `.env` | `/home/mitac` に含まれるが、漏れがないか個別確認する |
+| 各種 `.env`・認証ファイル | `~/.hermes/.env`、`~/.hermes/auth.json`、`~/siesta-bot/.env`、`~/.config/lecture-asr/gemini.env`、`~/slowflow-vpn/psk`、各 compose の `.env` | `/home/mitac` に含まれるが、漏れがないか個別確認する。`~/slowflow-vpn/psk` は agenix（`secrets/ubuntu-zstdvpn-env.age` に `SLOWLINK_PSK=...`）へ暗号化して管理する |
 | CIFS 資格情報 | `/etc/win-credentials` | root 所有（0600）。NixOS では agenix（`secrets/ubuntu-win-credentials.age`）へ暗号化して管理する |
 
 ### 2-2. 退避コマンドの例（現行 Ubuntu 上で実行）
@@ -244,13 +245,17 @@ sudo cp -a /etc/win-credentials /tmp/ubuntu-sys-backup/cifs/
 # sudo cp -a /var/lib/docker/volumes/. /tmp/ubuntu-sys-backup/docker-volumes/
 ```
 
-退避した `/etc/win-credentials` の内容は、手元の NixOS マシンの `MySettings` で agenix に登録しておきます（平文を git に入れない）:
+退避した `/etc/win-credentials` と `~/slowflow-vpn/psk` の内容は、手元の NixOS マシンの `MySettings` で agenix に登録しておきます（平文を git に入れない）:
 
 ```bash
 cd ~/MySettings
 secrets edit ubuntu-win-credentials
 # エディタで username=... / password=... を貼り付けて保存
-git add secrets/ubuntu-win-credentials.age
+
+secrets edit ubuntu-zstdvpn-env
+# エディタで SLOWLINK_PSK=... を記入して保存
+
+git add secrets/ubuntu-win-credentials.age secrets/ubuntu-zstdvpn-env.age
 ```
 
 ---
@@ -336,7 +341,7 @@ nix run github:nix-community/nixos-anywhere -- \
 ```bash
 ssh root@<PUBLIC_IP>
 
-# IP が 192.168.1.50 になっているか、btrfs と 4G swapfile が有効か確認
+# IP が 192.168.1.50 になっているか、btrfs と 8G swapfile が有効か確認
 ip -4 addr show enp3s0
 df -h / /home /nix /var/log /boot
 swapon --show
@@ -368,6 +373,8 @@ systemctl start tailscaled
 # 確認（元のアドレス 100.124.196.22 / fd7a:115c:a1e0::f101:c484 で Online になっていること）
 tailscale status
 ```
+
+> 復元した既存ノードであれば、Tailscale 管理画面での exit node および `192.168.1.0/24` サブネットルートの承認状態はそのまま維持されます（新規ノードとして登録した場合のみ管理画面で再承認してください）。
 
 ### 手順 4: SoftEther VPN Server の設定・証明書復元
 
@@ -406,10 +413,10 @@ mv /home/mitac/.ssh/authorized_keys /home/mitac/.ssh/authorized_keys.ubuntu-bak 
 su - mitac -c 'test -d ~/MySettings || git clone -b main https://github.com/mitac31709/MySettings.git ~/MySettings'
 ```
 
-### 手順 6: Docker ボリューム・ローカルイメージ復元と compose スタック起動
+### 手順 6: Docker ボリューム・ローカルイメージ復元とコンテナ起動
 
 ```bash
-# named volume がある場合
+# named volume（ts-ubuntu-at-exit-state など）を復元
 systemctl stop docker
 cp -a /path/to/backup/docker-volumes/. /var/lib/docker/volumes/
 systemctl start docker
@@ -417,11 +424,15 @@ systemctl start docker
 # ローカルビルドの Docker イメージを読み戻す（または FindSenryu4Discord で docker compose build）
 zstd -dc /path/to/backup/docker-images/findsenryu4discord-app.tar.zst | docker load
 
-# mitac で各 compose ディレクトリから起動
-# 対象: ~/znc, ~/ntopng, ~/FindSenryu4Discord, ArchiveTeam (uploaderjp x2 / ts-ubuntu-at-exit),
-#       watchtower, ~/slowflow-vpn (zstdvpn)
-su - mitac -c 'cd ~/znc && docker compose up -d'
-# 他の compose も同様に `docker compose up -d` で起動し、`docker ps` で確認
+# 単独コンテナ 7 つは NixOS の virtualisation.oci-containers で宣言済み（systemd 管理）
+# home / agenix 復元後に起動・確認する（archiveteam-warrior は autoStart=false のため必要時のみ起動）
+systemctl start docker-znc docker-ts-ubuntu-at-exit docker-uploaderjp-grab docker-uploaderjp-grab-pi docker-watchtower docker-zstdvpn-server
+systemctl status docker-znc docker-ts-ubuntu-at-exit docker-uploaderjp-grab docker-uploaderjp-grab-pi docker-watchtower docker-zstdvpn-server
+
+# compose ファイルがある 2 スタック（~/ntopng, ~/FindSenryu4Discord）は mitac で docker compose 起動
+su - mitac -c 'cd ~/ntopng && docker compose up -d'
+su - mitac -c 'cd ~/FindSenryu4Discord && docker compose up -d'
+docker ps
 ```
 
 ### 手順 7: Hermes / siesta-bot / lecture-asr / lecture-publish の起動確認

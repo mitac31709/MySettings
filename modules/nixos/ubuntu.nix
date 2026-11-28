@@ -9,6 +9,7 @@
 let
   winCredsPath =
     config.age.secrets."ubuntu-win-credentials".path or "/run/agenix/ubuntu-win-credentials";
+  zstdvpnEnvPath = config.age.secrets."ubuntu-zstdvpn-env".path or "/run/agenix/ubuntu-zstdvpn-env";
 
   javaBin = "${pkgs.jdk21_headless}/bin/java";
 
@@ -189,13 +190,21 @@ in
   ];
 
   # ---------------------------------------------------------------------------
-  # Tailscale (exit node; existing /var/lib/tailscale state will be restored)
+  # Tailscale (exit node + home LAN subnet router; /var/lib/tailscale restored)
   # ---------------------------------------------------------------------------
   services.tailscale = {
     enable = true;
     # Exit node / routing server; also enables IPv4/IPv6 forwarding (replacing
     # /etc/sysctl.d/99-tailscale.conf; note live Ubuntu had IPv6 forwarding off).
     useRoutingFeatures = "server";
+    # Overrides modules/nixos/common.nix mkDefault; keep --operator=mitac (needed
+    # by znc-tailscale-cert for `tailscale cert`) and declare exit node + home
+    # LAN subnet route matching live Tailscale prefs.
+    extraSetFlags = [
+      "--operator=mitac"
+      "--advertise-exit-node"
+      "--advertise-routes=192.168.1.0/24"
+    ];
     # Override modules/nixos/secrets.nix mkDefault: restored /var/lib/tailscale
     # already holds the node identity, so do not auto-reauth with an auth key.
     authKeyFile = null;
@@ -217,16 +226,113 @@ in
   };
 
   # ---------------------------------------------------------------------------
-  # Docker (compose stacks restored under /home/mitac; not converted to Nix)
+  # Docker & OCI containers
   # ---------------------------------------------------------------------------
-  # Active Docker stacks kept on compose after home restore:
-  #   ZNC (~/znc), ntopng (~/ntopng), FindSenryu4Discord (~/FindSenryu4Discord),
-  #   ArchiveTeam uploaderjp x2 (+ optional warrior), watchtower,
-  #   zstdvpn (~/slowflow-vpn), ts-ubuntu-at-exit.
+  # Compose stacks restored under /home/mitac (have compose files on live host):
+  #   ntopng (~/ntopng), FindSenryu4Discord (~/FindSenryu4Discord).
   # Stopped apps (data backed up only; no NixOS config):
   #   immich (~/immich-app + immich_model-cache), AdGuard Home (~/AdGuardHome),
   #   kikoune (~/kikoune), CloudflareOS (~/CloudflareOS), DiscordShogi (~/DiscordShogi).
+  # Standalone `docker run` containers (no compose file on live host) are
+  # declared below via virtualisation.oci-containers.
   virtualisation.docker.enable = true;
+
+  virtualisation.oci-containers = {
+    backend = "docker";
+    containers = {
+      znc = {
+        image = "znc:latest";
+        user = "1000:1000";
+        ports = [ "100.124.196.22:6697:6697/tcp" ];
+        volumes = [ "/home/mitac/znc:/znc-data" ];
+      };
+
+      ts-ubuntu-at-exit = {
+        image = "tailscale/tailscale:latest";
+        capabilities = {
+          NET_ADMIN = true;
+          NET_RAW = true;
+        };
+        devices = [ "/dev/net/tun:/dev/net/tun" ];
+        entrypoint = "/entrypoint.sh";
+        volumes = [
+          "/home/mitac/ts-ubuntu-at-exit/entrypoint.sh:/entrypoint.sh:ro"
+          "ts-ubuntu-at-exit-state:/var/lib/tailscale"
+        ];
+      };
+
+      uploaderjp-grab = {
+        image = "atdr.meo.ws/archiveteam/uploaderjp-grab:latest";
+        cmd = [
+          "--concurrent"
+          "5"
+          "mitac"
+        ];
+        labels = {
+          "com.centurylinklabs.watchtower.enable" = "true";
+        };
+      };
+
+      uploaderjp-grab-pi = {
+        image = "atdr.meo.ws/archiveteam/uploaderjp-grab:latest";
+        cmd = [
+          "--concurrent"
+          "5"
+          "mitac"
+        ];
+        labels = {
+          "com.centurylinklabs.watchtower.enable" = "true";
+        };
+        extraOptions = [ "--network=container:ts-ubuntu-at-exit" ];
+        dependsOn = [ "ts-ubuntu-at-exit" ];
+      };
+
+      watchtower = {
+        image = "nickfedor/watchtower";
+        cmd = [
+          "--label-enable"
+          "--cleanup"
+          "--interval"
+          "3600"
+          "--include-restarting"
+        ];
+        volumes = [ "/var/run/docker.sock:/var/run/docker.sock" ];
+        labels = {
+          "com.centurylinklabs.watchtower" = "true";
+        };
+      };
+
+      # TODO: Encrypt SLOWLINK_PSK=... (from ~/slowflow-vpn/psk) into
+      # secrets/ubuntu-zstdvpn-env.age (`secrets edit ubuntu-zstdvpn-env`) and
+      # verify the exact `-tls-auto ...` flags from live `docker inspect zstdvpn-server`.
+      zstdvpn-server = {
+        image = "alpine:3.20";
+        privileged = true;
+        capabilities = {
+          NET_ADMIN = true;
+        };
+        devices = [ "/dev/net/tun:/dev/net/tun" ];
+        extraOptions = [ "--network=host" ];
+        volumes = [
+          "/home/mitac/slowflow-vpn/bin/zstdvpn-server:/usr/local/bin/zstdvpn-server:ro"
+          "/home/mitac/slowflow-vpn/scripts/nat-up.sh:/nat-up.sh:ro"
+        ];
+        environmentFiles = [ zstdvpnEnvPath ];
+        cmd = [
+          "sh"
+          "-c"
+          ''apk add --no-cache iptables iproute2 && zstdvpn-server -listen 0.0.0.0:44123 -psk "$SLOWLINK_PSK" -tls-auto & pid=$!; sleep 2; sh /nat-up.sh sl0 enp3s0; wait "$pid"''
+        ];
+      };
+
+      # Stopped on live host (Exited 130); keep on-demand only.
+      archiveteam-warrior = {
+        image = "atdr.meo.ws/archiveteam/warrior-dockerfile";
+        ports = [ "8001:8001" ];
+        autoStart = false;
+      };
+    };
+  };
 
   # ---------------------------------------------------------------------------
   # nix-ld: dynamic linker + shared libs for prebuilt Python wheels
@@ -441,6 +547,22 @@ in
       };
     };
 
+    # Wait for restored home data / Tailscale / agenix secrets before starting
+    # OCI containers that bind host paths, Tailscale IPs, or secret env files.
+    docker-znc = {
+      after = [ "tailscaled.service" ];
+      unitConfig.ConditionPathExists = "/home/mitac/znc";
+    };
+    docker-ts-ubuntu-at-exit = {
+      unitConfig.ConditionPathExists = "/home/mitac/ts-ubuntu-at-exit/entrypoint.sh";
+    };
+    docker-zstdvpn-server = {
+      unitConfig.ConditionPathExists = [
+        "/home/mitac/slowflow-vpn/bin/zstdvpn-server"
+        zstdvpnEnvPath
+      ];
+    };
+
     # Generic Minecraft template (empty wantedBy: never started at boot).
     # Concrete units for all 6 live instances (ATM10, ATM9-Eureka, latest-vanila,
     # mohist-1.20.1, paper-1.21.11, yower-1.21.1) are merged right below.
@@ -542,7 +664,15 @@ in
     sl
     git
     tmux
+    screen
     htop
+    unzip
+    zip
+    lsof
+    psmisc
+    gcc
+    gnumake
+    pkg-config
     docker-compose
     rsync
     rrsync

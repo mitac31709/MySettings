@@ -1,6 +1,7 @@
 # Declarative disk layout for GMKtec NucBox G3 (single 256GB Apacer NVMe, UEFI).
 # Used by nixos-anywhere + disko: GPT, 1G vfat ESP at /boot, btrfs root with
-# zstd:1 compression (matching other hosts), and a 4G swapfile subvolume.
+# zstd:1 compression (matching other hosts), and an 8G swapfile subvolume
+# (16GB RAM + Minecraft -Xmx12G; matches live /swapfile 8G added after ATM9 OOM).
 { ... }:
 
 {
@@ -66,7 +67,7 @@
                 "/@swap" = {
                   mountpoint = "/.swapvol";
                   mountOptions = [ "noatime" ];
-                  swap.swapfile.size = "4G";
+                  swap.swapfile.size = "8G";
                 };
               };
             };

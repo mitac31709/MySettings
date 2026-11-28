@@ -50,6 +50,7 @@ in
     shellAliases = {
       ll = "ls -la";
       bcat = "bat";
+      batcat = "bat";
       generations = "nixos-rebuild list-generations";
       flake-update = lib.getExe config.mitac.scripts.flakeUpdate;
       flake-update-cursor = lib.getExe config.mitac.scripts.flakeUpdateCursor;

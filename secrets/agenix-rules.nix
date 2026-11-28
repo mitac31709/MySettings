@@ -27,4 +27,5 @@ in
   "lan-mouse-chromebook.pem.age".publicKeys = masterKeys;
   "lan-mouse-vaio.pem.age".publicKeys = masterKeys;
   "ubuntu-win-credentials.age".publicKeys = masterKeys;
+  "ubuntu-zstdvpn-env.age".publicKeys = masterKeys;
 }
