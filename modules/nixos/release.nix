@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "hyprshell-alt-tab" ];
+  system.nixos.tags = [ "fix-hyprland-gaps-out" ];
 }
