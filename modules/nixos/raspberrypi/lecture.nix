@@ -1,5 +1,5 @@
 # Lecture audio recording (USB document camera `hw:CARD=Camera,DEV=0`)
-# and rsync upload to ubuntu (mitac@100.124.196.22:~/lectures/inbox).
+# and rsync upload to ubuntu (`DEST=mitac@100.124.196.22:`, restricted key on ubuntu).
 {
   config,
   lib,
@@ -21,15 +21,28 @@ let
   uploadKeyPath =
     if hasUploadKey then config.age.secrets."raspberrypi-lecture-upload-key".path else null;
 
+  # Known hosts file for `/var/lib/lecrec/.ssh/known_hosts` (matches `KNOWN_HOSTS=` in /etc/lecture-recorder/upload.conf).
+  ubuntuKnownHosts = pkgs.writeText "lecrec-known-hosts" ''
+    100.124.196.22 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHSTbPRFFlZw/Lc0o4CPsaSZpFNnP2/+B67QuwcWkSEH
+    100.124.196.22 ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBOy8Dq6p16YoLs701NKMCp3p9vWeWyn+t97uJMTOdcH+K/qIRPxlY5mjCgDJK4Vxt3Fgap6tZZldbRCGECDGfTA=
+  '';
+
   recorderScript = "/opt/lecture-recorder/lecrec.py";
 in
 {
+  # Live /etc/lecture-recorder/upload.conf uses:
+  #   KEY=/var/lib/lecrec/.ssh/id_ed25519
+  #   KNOWN_HOSTS=/var/lib/lecrec/.ssh/known_hosts
+  #   DEST=mitac@100.124.196.22:
+  # TODO: Populate secrets/raspberrypi-lecture-upload-key.age with the write-only SSH
+  # private key for /var/lib/lecrec/.ssh/id_ed25519, and secrets/raspberrypi-lecture-timetable-env.age.
   systemd.tmpfiles.rules = [
     "d /var/lib/lecrec 0750 lecrec lecrec -"
     "d /var/lib/lecrec/.ssh 0700 lecrec lecrec -"
     "d /etc/lecture-recorder 0750 root lecrec -"
+    "L+ /var/lib/lecrec/.ssh/known_hosts - - - - ${ubuntuKnownHosts}"
   ]
-  ++ lib.optional hasUploadKey "L+ /var/lib/lecrec/.ssh/id_lecture_upload - - - - ${uploadKeyPath}";
+  ++ lib.optional hasUploadKey "L+ /var/lib/lecrec/.ssh/id_ed25519 - - - - ${uploadKeyPath}";
 
   # Runs every minute at :05 (`lecrec.py tick`) to record scheduled classes from the Sunplus USB Camera.
   systemd.services.lecture-recorder = {
@@ -70,10 +83,7 @@ in
   };
 
   # Runs 3min after boot then every 10min (`lecrec.py upload`) as User=lecrec
-  # to rsync recordings over Tailscale to ubuntu:~/lectures/inbox.
-  # TODO: Populate secrets/raspberrypi-lecture-upload-key.age (write-only SSH key for
-  # mitac@100.124.196.22) and verify /etc/lecture-recorder/upload.conf points to
-  # /run/agenix/raspberrypi-lecture-upload-key (or /var/lib/lecrec/.ssh/id_lecture_upload).
+  # to rsync recordings over Tailscale to ubuntu (`DEST=mitac@100.124.196.22:`).
   systemd.services.lecture-upload = {
     description = "Upload recorded lectures to ubuntu:~/lectures/inbox";
     after = [

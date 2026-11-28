@@ -1,4 +1,4 @@
-# FreeWiFi Access Point (freeap0 @ 10.42.0.1/24 on USB TP-Link rtw_8822bu)
+# FreeWiFi Access Point (freeap0 @ 10.42.0.1/24 on USB TP-Link 2357:0138 rtw_8822bu)
 # with hostapd, dnsmasq, Cloudflare WARP/MASQUE upstream (usque0 @ 172.16.0.2/32),
 # fail-closed policy routing (table 142), nftables NAT, conntrack flowlog, and client-count notifier.
 {
@@ -22,25 +22,27 @@ let
     else
       "/etc/usque/config.json";
 
-  hasNotifySecret = config.age.secrets ? "raspberrypi-freeap-notify-env";
-  notifyEnvFile =
-    if hasNotifySecret then
-      config.age.secrets."raspberrypi-freeap-notify-env".path
-    else
-      "-/etc/freeap-notify.env";
-
-  # Invoked by usque `--on-connect`. Runs restored /etc/usque/up.sh if present
-  # (via nixpkgs bash so #!/bin/bash scripts work on NixOS), otherwise brings up
-  # usque0 with 172.16.0.2/32 and routes table `freeap` (142) through it.
-  usqueOnConnect = pkgs.writeShellScript "usque-on-connect" ''
-    set -euo pipefail
-    if [ -f /etc/usque/up.sh ]; then
-      exec ${pkgs.bash}/bin/bash /etc/usque/up.sh "$@"
-    fi
-    ${pkgs.iproute2}/bin/ip addr replace 172.16.0.2/32 dev usque0
-    ${pkgs.iproute2}/bin/ip link set usque0 up
-    ${pkgs.iproute2}/bin/ip route replace default dev usque0 table freeap
+  # Live /etc/usque/up.sh: install default route for table 142 via usque0 on connect/reconnect.
+  usqueUpScript = pkgs.writeShellScript "usque-up.sh" ''
+    ${pkgs.iproute2}/bin/ip route replace default dev "''${USQUE_IFACE:-usque0}" metric 10 table 142
   '';
+
+  # Live /usr/local/sbin/freeap-count-notify.py with Nix store paths for iw and conntrack.
+  # Reads `WEBHOOK=...` from /etc/freeap-notify.env (deployed from secrets/raspberrypi-freeap-notify-env.age).
+  freeapCountNotifyScript = pkgs.writeScript "freeap-count-notify.py" (
+    builtins.replaceStrings
+      [
+        "#!/usr/bin/env python3"
+        ''"/usr/sbin/iw"''
+        ''"/usr/sbin/conntrack"''
+      ]
+      [
+        "#!${pkgs.python3}/bin/python3"
+        ''"${pkgs.iw}/bin/iw"''
+        ''"${pkgs.conntrack-tools}/bin/conntrack"''
+      ]
+      (builtins.readFile ./scripts/freeap-count-notify.py)
+  );
 
   freeapPolicyScript = pkgs.writeShellScript "freeap-policy-setup" ''
     set -euo pipefail
@@ -48,7 +50,7 @@ let
     # unreachable instead of leaking onto campus eth0/wlan0 or tailscale0.
     ${pkgs.iproute2}/bin/ip route replace unreachable default metric 4294967295 table freeap
     if ${pkgs.iproute2}/bin/ip link show usque0 >/dev/null 2>&1; then
-      ${pkgs.iproute2}/bin/ip route replace default dev usque0 table freeap
+      ${pkgs.iproute2}/bin/ip route replace default dev usque0 metric 10 table freeap
     fi
 
     # Rule 99: keep local FreeAP subnet traffic (e.g. to 10.42.0.1 DHCP/DNS) on table main.
@@ -63,11 +65,11 @@ let
   '';
 in
 {
-  # Pin the USB TP-Link 802.11ac adapter (rtw_8822bu) to interface name `freeap0`.
+  # Pin the USB TP-Link 802.11ac adapter (USB 2357:0138, rtw_8822bu, MAC ac:15:a2:eb:82:ab) to `freeap0`.
   systemd.network.links."10-freeap0" = {
     matchConfig = {
+      MACAddress = "ac:15:a2:eb:82:ab";
       Driver = "rtw_8822bu";
-      # TODO: Pin MACAddress = "xx:xx:xx:xx:xx:xx"; from the live Pi's TP-Link USB adapter.
     };
     linkConfig = {
       Name = "freeap0";
@@ -82,27 +84,22 @@ in
     '';
   };
 
-  # nftables NAT + fail-closed forwarding for FreeWiFi -> usque0
-  # (replaces /etc/nftables.d/freeap-usque.nft).
-  # TODO: Compare with /etc/nftables.d/freeap-usque.nft on the live Pi (root)
-  # to confirm any extra MSS clamping or client-isolation rules.
+  # Exact match of live /etc/nftables.d/freeap-usque.nft (fail-closed forwarding + NAT masquerade).
   networking.nftables = {
     enable = true;
-    tables.freeap-usque = {
+    tables.freeap_usque = {
       family = "inet";
       content = ''
         chain forward {
-          type filter hook forward priority filter - 5; policy accept;
-          iifname "freeap0" oifname "usque0" tcp flags syn tcp option maxseg size set rt mtu
-          iifname "freeap0" oifname "usque0" accept
-          iifname "usque0" oifname "freeap0" ct state established,related accept
-          # Fail-closed: never allow FreeAP clients to forward to eth0, wlan0, wwan0, or tailscale0.
-          iifname "freeap0" drop
+          type filter hook forward priority filter - 10; policy accept;
+          # fail-closed: AP clients may only leave via usque0 (or stay on freeap0)
+          iifname "freeap0" oifname != { "usque0", "freeap0" } counter drop
+          oifname "usque0" tcp flags syn tcp option maxseg size set rt mtu
         }
 
         chain postrouting {
           type nat hook postrouting priority srcnat; policy accept;
-          ip saddr 10.42.0.0/24 oifname "usque0" masquerade
+          oifname "usque0" ip saddr 10.42.0.0/24 counter masquerade
         }
       '';
     };
@@ -118,11 +115,20 @@ in
     ];
   };
 
-  # Ensure directories exist for restored scripts/configs/state.
+  # Declarative /etc/usque/up.sh matching the live Pi.
+  environment.etc."usque/up.sh" = {
+    source = usqueUpScript;
+    mode = "0755";
+  };
+
+  # Ensure directories exist and expose freeap-count-notify.py at /usr/local/sbin.
   systemd.tmpfiles.rules = [
     "d /etc/hostapd 0700 root root -"
     "d /etc/usque 0700 root root -"
+    "d /usr/local/sbin 0755 root root -"
     "d /var/lib/freeap-notify 0750 root root -"
+    "d /var/lib/misc 0755 root root -"
+    "L+ /usr/local/sbin/freeap-count-notify.py - - - - ${freeapCountNotifyScript}"
   ];
 
   # Assign 10.42.0.1/24 on freeap0 (since freeap0 is unmanaged by NetworkManager).
@@ -168,6 +174,7 @@ in
   };
 
   # DHCP (10.42.0.10-254, 60m lease) & DNS (10.42.0.1 -> 1.1.1.1 / 1.0.0.1 via usque0 src 172.16.0.2).
+  # Writes leases & DNS/DHCP logs to the exact paths expected by freeap-count-notify.py.
   services.dnsmasq = {
     enable = true;
     resolveLocalQueries = false;
@@ -180,6 +187,10 @@ in
       bogus-priv = true;
       no-resolv = true;
       dhcp-range = "10.42.0.10,10.42.0.254,255.255.255.0,60m";
+      dhcp-leasefile = "/var/lib/misc/freeap.leases";
+      log-facility = "/var/log/freeap-dns.log";
+      log-queries = true;
+      log-dhcp = true;
       dhcp-option = [
         "option:router,10.42.0.1"
         "option:dns-server,10.42.0.1"
@@ -203,27 +214,30 @@ in
     ];
   };
 
+  # Keep /var/log/freeap-dns.log rotated (matches Pi OS logrotate freeap-dns entry).
+  services.logrotate.settings.freeap-dns = {
+    files = "/var/log/freeap-dns.log";
+    frequency = "daily";
+    rotate = 3;
+    missingok = true;
+    notifempty = true;
+    copytruncate = true;
+  };
+
   # Cloudflare WARP / MASQUE TUN upstream (usque0 @ 172.16.0.2/32), matching the live Pi flags.
-  # TODO: Populate secrets/raspberrypi-usque-config.age (or restore /etc/usque/config.json)
-  # and restore /etc/usque/up.sh if custom post-connect commands are needed beyond the default helper.
+  # TODO: Populate secrets/raspberrypi-usque-config.age (or restore /etc/usque/config.json).
   systemd.services.usque = {
     description = "Usque Cloudflare WARP/MASQUE TUN (usque0)";
     wantedBy = [ "multi-user.target" ];
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
-    path = with pkgs; [
-      bash
-      coreutils
-      iproute2
-      nftables
-    ];
     unitConfig = {
       ConditionPathExists = usqueConfigPath;
     };
     serviceConfig = {
       Type = "simple";
       WorkingDirectory = "/etc/usque";
-      ExecStart = "${pkgs.usque}/bin/usque -c ${usqueConfigPath} nativetun --http2 -n usque0 -S --always-reconnect --on-connect ${usqueOnConnect}";
+      ExecStart = "${pkgs.usque}/bin/usque -c ${usqueConfigPath} nativetun --http2 -n usque0 -S --always-reconnect --on-connect /etc/usque/up.sh";
       Restart = "always";
       RestartSec = 5;
     };
@@ -265,22 +279,24 @@ in
   };
 
   # Periodic FreeAP client-count notifier (every minute, matching live Pi timer).
-  # TODO: Populate secrets/raspberrypi-freeap-notify-env.age and restore /usr/local/sbin/freeap-count-notify.py.
+  # Reads `WEBHOOK=...` from /etc/freeap-notify.env (agenix placeholder: secrets/raspberrypi-freeap-notify-env.age).
   systemd.services.freeap-count-notify = {
     description = "FreeWiFi connected client count notifier";
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
     path = with pkgs; [
+      conntrack-tools
+      curl
       iw
       python3
+      systemd
     ];
     unitConfig = {
-      ConditionPathExists = "/usr/local/sbin/freeap-count-notify.py";
+      ConditionPathExists = "/etc/freeap-notify.env";
     };
     serviceConfig = {
       Type = "oneshot";
-      EnvironmentFile = notifyEnvFile;
-      ExecStart = "${pkgs.python3}/bin/python3 /usr/local/sbin/freeap-count-notify.py";
+      ExecStart = "${freeapCountNotifyScript}";
     };
   };
 

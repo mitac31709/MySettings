@@ -34,6 +34,5 @@ in
   "raspberrypi-freeap-notify-env.age".publicKeys = masterKeys;
   "raspberrypi-lecture-timetable-env.age".publicKeys = masterKeys;
   "raspberrypi-lecture-upload-key.age".publicKeys = masterKeys;
-  "raspberrypi-campus-apload-env.age".publicKeys = masterKeys;
   "raspberrypi-code-server-env.age".publicKeys = masterKeys;
 }

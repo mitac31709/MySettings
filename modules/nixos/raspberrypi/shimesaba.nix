@@ -1,6 +1,6 @@
 # shimesaba development stack:
 # - code-server@shimesaba on 127.0.0.1:8080
-# - PostgreSQL 17 on localhost:5438
+# - PostgreSQL 17 on localhost:5438 (live cluster has role `postgres` and default DBs only)
 # - shimesaba.service (Drogon app `sangakusenshu`), defined but disabled as today
 {
   config,
@@ -40,7 +40,7 @@ in
   };
 
   # PostgreSQL 17 listening on localhost:5438 (127.0.0.1 & ::1; default enableTCPIP = false sets listen_addresses = "localhost").
-  # TODO: Add any declarative ensureUsers/ensureDatabases if desired beyond pg_dumpall restore.
+  # Verified against live Pi: only role `postgres` and databases `postgres`, `template0`, `template1` exist (no app DBs).
   services.postgresql = {
     enable = true;
     package = pkgs.postgresql_17;

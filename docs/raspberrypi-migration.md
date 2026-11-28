@@ -210,12 +210,11 @@ SD カードを書き換える前に、手元の PC（このリポジトリ `MyS
    - `secrets/raspberrypi-nm-connections.age`（`Wired connection 1`・`Hazamaru AP-tr`・`eduroam` の 3 つの `.nmconnection` を `# === <名前> ===` 区切りで結合したもの。有線 802.1x がログイン無しで自動接続するよう `autoconnect=true`、`password-flags=0`、ユーザー制限 `permissions=` 無しを確認する）
    - `secrets/raspberrypi-freeap-hostapd.age`（`/etc/hostapd/freeap.conf` の中身）
    - `secrets/raspberrypi-usque-config.age`（`/etc/usque/config.json` の中身）
-   - `secrets/raspberrypi-freeap-notify-env.age`（`/etc/freeap-notify.env` の中身）
+   - `secrets/raspberrypi-freeap-notify-env.age`（`/etc/freeap-notify.env` の中身：`WEBHOOK=...`。`freeap-count-notify` と `campus-apload-report` / `final` で共通利用）
    - `secrets/raspberrypi-lecture-timetable-env.age`（`/etc/lecture-recorder/timetable.env` の中身）
-   - `secrets/raspberrypi-lecture-upload-key.age`（`ubuntu:~/lectures/inbox` 書き込み専用 SSH 秘密鍵、`lecrec` 所有で展開）
-   - `secrets/raspberrypi-campus-apload-env.age`（Discord Webhook 等の環境変数）
+   - `secrets/raspberrypi-lecture-upload-key.age`（`/var/lib/lecrec/.ssh/id_ed25519` に展開される `ubuntu` 書き込み専用 SSH 秘密鍵、`lecrec` 所有）
    - （任意）`secrets/raspberrypi-code-server-env.age`（`config.yaml` ではなく環境変数でパスワードを渡す場合）
-2. コード内の残りの `TODO` を退避ファイルの実測値に合わせて埋める（`grokbot` の SSH 公開鍵、`sudoers.d` の必要ルール、TP-Link アダプタの MAC アドレス、UX302NC の `99-ux302nc.rules` の VID:PID、`/etc/nftables.d/freeap-usque.nft` の差分、必要に応じて `burp-ca.crt`）。
+2. 必要に応じて `/usr/local/share/ca-certificates/burp-ca.crt` を `modules/nixos/raspberrypi/default.nix` の `security.pki.certificateFiles` に追加する（その他の udev / nftables / `up.sh` / 運用スクリプト / sudoers / SSH 公開鍵はすでに Nix 側へ反映済み）。
 
 ---
 

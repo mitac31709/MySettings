@@ -1,8 +1,41 @@
 # NetworkManager (wired & Wi-Fi 802.1x PEAP/MSCHAPv2 via agenix),
-# povo WWAN (Prolific NCXX UX302NC via ModemManager), Tailscale exit node,
-# and IP forwarding / conntrack sysctls.
+# povo WWAN (Prolific NCXX UX302NC via ModemManager + udev + bind/regwatch),
+# Tailscale exit node, and IP forwarding / conntrack sysctls.
 { pkgs, ... }:
 
+let
+  # Live /usr/local/sbin/ux302nc-bind.sh (UX302NC 11f6:1034: serial ports -> option, interface 3 -> qmi_wwan).
+  ux302ncBindScript = pkgs.writeShellScript "ux302nc-bind.sh" ''
+    # UX302NC (11f6:1034): serial ports -> option, interface 3 -> qmi_wwan
+    DEV="$1"   # e.g. 3-1
+    modprobe option; modprobe qmi_wwan
+    grep -q "11f6 1034" /sys/bus/usb-serial/drivers/option1/new_id 2>/dev/null || echo "11f6 1034" > /sys/bus/usb-serial/drivers/option1/new_id 2>/dev/null || true
+    sleep 2
+    IF="''${DEV}:1.3"
+    if [ -e "/sys/bus/usb/drivers/option/$IF" ]; then echo "$IF" > /sys/bus/usb/drivers/option/unbind; fi
+    grep -q "11f6 1034" /sys/bus/usb/drivers/qmi_wwan/new_id 2>/dev/null || echo "11f6 1034" > /sys/bus/usb/drivers/qmi_wwan/new_id 2>/dev/null || true
+    sleep 1
+    [ -e "/sys/bus/usb/drivers/qmi_wwan/$IF" ] || echo "$IF" > /sys/bus/usb/drivers/qmi_wwan/bind 2>/dev/null || true
+    if [ -e "/sys/bus/usb/drivers/qmi_wwan/$IF" ]; then logger -t ux302nc "bound $IF to qmi_wwan"; else logger -t ux302nc "FAILED to bind $IF to qmi_wwan"; fi
+    sleep 1; systemctl restart ModemManager
+  '';
+
+  # Live /usr/local/sbin/ux302nc-regwatch.sh (steer unregistered UX302NC to povo PLMN 44051 then back to automatic).
+  ux302ncRegwatchScript = pkgs.writeShellScript "ux302nc-regwatch.sh" ''
+    # If not registered, steer to povo PLMN 44051 then back to automatic
+    for i in $(seq 1 20); do
+      sleep 15
+      D=$(ls /dev/cdc-wdm* 2>/dev/null | head -1); [ -n "$D" ] || continue
+      if qmicli -p -d "$D" --nas-get-serving-system 2>/dev/null | grep -q "Registration state: .registered."; then exit 0; fi
+      if [ "$i" -ge 4 ]; then
+        logger -t ux302nc "not registered, forcing PLMN 44051"
+        qmicli -p -d "$D" --nas-set-system-selection-preference=lte,manual=44051 >/dev/null 2>&1
+        sleep 30
+        qmicli -p -d "$D" --nas-set-system-selection-preference=lte,automatic >/dev/null 2>&1
+      fi
+    done
+  '';
+in
 {
   networking.networkmanager = {
     enable = true;
@@ -56,55 +89,51 @@
     usb-modeswitch
   ];
 
-  # Bind Prolific NCXX UX302NC USB modem via ux302nc-bind@.service on attach.
-  # TODO: Compare with /etc/udev/rules.d/99-ux302nc.rules on the live Pi to pin the exact
-  # idVendor/idProduct and any modeswitch action if different.
+  # Expose UX302NC helper scripts at their live paths under /usr/local/sbin.
+  systemd.tmpfiles.rules = [
+    "d /usr/local/sbin 0755 root root -"
+    "L+ /usr/local/sbin/ux302nc-bind.sh - - - - ${ux302ncBindScript}"
+    "L+ /usr/local/sbin/ux302nc-regwatch.sh - - - - ${ux302ncRegwatchScript}"
+  ];
+
+  # Matches live /etc/udev/rules.d/99-ux302nc.rules:
+  #   - 11f6:1035 (storage mode) -> usb_modeswitch
+  #   - 11f6:1034 (modem mode)   -> trigger ux302nc-bind@%k.service
   services.udev.extraRules = ''
-    ACTION=="add", SUBSYSTEM=="usb", ATTRS{product}=="*UX302NC*", TAG+="systemd", ENV{SYSTEMD_WANTS}+="ux302nc-bind@%k.service"
+    ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="11f6", ATTR{idProduct}=="1035", RUN+="${pkgs.usb-modeswitch}/bin/usb_modeswitch -v 11f6 -p 1035 -M 55534243123456780000000080000606f50402527000000000000000000000"
+    ACTION=="add", SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="11f6", ATTR{idProduct}=="1034", TAG+="systemd", ENV{SYSTEMD_WANTS}+="ux302nc-bind@%k.service"
   '';
 
-  # TODO: Verify exact script path/args from /etc/systemd/system/ux302nc-bind@.service on the live Pi.
+  # Matches live /etc/systemd/system/ux302nc-bind@.service (no [Install]; triggered by udev).
   systemd.services."ux302nc-bind@" = {
-    description = "Bind Prolific NCXX UX302NC modem (%I)";
-    after = [ "ModemManager.service" ];
+    description = "Bind UX302NC interfaces (%i)";
     path = with pkgs; [
-      bash
       coreutils
+      gnugrep
       kmod
-      libqmi
-      modemmanager
-      usb-modeswitch
+      systemd
+      util-linux
     ];
-    unitConfig = {
-      ConditionPathExists = "/usr/local/sbin/ux302nc-bind.sh";
-    };
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "/usr/local/sbin/ux302nc-bind.sh %i";
+      ExecStart = "${ux302ncBindScript} %i";
+      ExecStartPost = "${pkgs.systemd}/bin/systemctl --no-block start ux302nc-regwatch.service";
     };
   };
 
-  # Matches live Pi unit type (oneshot).
-  # TODO: Verify exact script path/trigger (boot vs timer) from /etc/systemd/system/ux302nc-regwatch.service on the live Pi.
+  # Matches live /etc/systemd/system/ux302nc-regwatch.service (no [Install]; started by ux302nc-bind@).
   systemd.services.ux302nc-regwatch = {
-    description = "Watch UX302NC cellular registration (povo WWAN)";
-    after = [
-      "ModemManager.service"
-      "NetworkManager.service"
-    ];
-    wantedBy = [ "multi-user.target" ];
+    description = "UX302NC registration watchdog (povo 44051)";
+    after = [ "ModemManager.service" ];
     path = with pkgs; [
-      bash
       coreutils
-      modemmanager
-      networkmanager
+      gnugrep
+      libqmi
+      util-linux
     ];
-    unitConfig = {
-      ConditionPathExists = "/usr/local/sbin/ux302nc-regwatch.sh";
-    };
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "/usr/local/sbin/ux302nc-regwatch.sh";
+      ExecStart = "${ux302ncRegwatchScript}";
     };
   };
 

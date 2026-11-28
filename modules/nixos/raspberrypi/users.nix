@@ -1,7 +1,10 @@
-# Users, SSH access, and known hosts for the Raspberry Pi 5 server.
+# Users, SSH access, sudoers, and known hosts for the Raspberry Pi 5 server.
 { lib, ... }:
 
 let
+  # Live authorized key present on both mitac and grokbot (fingerprint SHA256:YxTtd3yHGAgRFGxv1AEt3tFKE1TK3Dw4cfKvcudznMU).
+  grokbotBoxKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINA+Viz0A1SfEl0MwqyLjLicGL+8tTGntansBGu/K8RX grokbot-box";
+
   repoAuthorizedKeys = lib.optional (builtins.pathExists ../../../secrets/id-wsl-builder.pub) (
     lib.trim (builtins.readFile ../../../secrets/id-wsl-builder.pub)
   );
@@ -30,10 +33,7 @@ in
         "gpio"
         "spi"
       ];
-      openssh.authorizedKeys.keys = repoAuthorizedKeys ++ [
-        # TODO: Add mitac's personal SSH public key(s) (e.g. from chromebook/vaio/ubuntu)
-        # if different from secrets/id-wsl-builder.pub.
-      ];
+      openssh.authorizedKeys.keys = [ grokbotBoxKey ] ++ repoAuthorizedKeys;
     };
 
     # Local dev user for code-server & Drogon; intentionally excluded from SSH AllowUsers.
@@ -54,12 +54,10 @@ in
         "dialout"
         "networkmanager"
       ];
-      openssh.authorizedKeys.keys = [
-        # TODO: Add grokbot's SSH public key before deploying.
-      ];
+      openssh.authorizedKeys.keys = [ grokbotBoxKey ];
     };
 
-    # Dedicated system account for lecture-recorder (USB document camera audio).
+    # Dedicated system account for lecture-recorder & lecture-upload (USB document camera audio).
     lecrec = {
       isSystemUser = true;
       group = "lecrec";
@@ -85,11 +83,25 @@ in
     };
   };
 
+  # Match /etc/sudoers.d/010_pi-nopasswd (mitac) and /etc/sudoers.d/90-grokbot (grokbot),
+  # while keeping wheelNeedsPassword = true for shimesaba.
   security.sudo = {
     enable = true;
     wheelNeedsPassword = true;
-    # TODO: Inspect /etc/sudoers.d/90-grokbot and /etc/sudoers.d/010_pi-nopasswd on the
-    # live Pi before migration and add any required passwordless rules via extraRules.
+    extraRules = [
+      {
+        users = [
+          "mitac"
+          "grokbot"
+        ];
+        commands = [
+          {
+            command = "ALL";
+            options = [ "NOPASSWD" ];
+          }
+        ];
+      }
+    ];
   };
 
   # Pre-populate ubuntu's SSH host keys so lecture-upload rsync over Tailscale

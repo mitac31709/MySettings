@@ -11,7 +11,7 @@
   };
 
   # ntopng Community Edition watching freeap0, usque0, and eth0 with localhost-only Web UI.
-  # Mirrors /etc/ntopng/ntopng.conf on the live Pi (-w=127.0.0.1:3000, -W=0, -m local nets).
+  # Matches live /etc/ntopng/ntopng.conf verbatim (with explicit NixOS --redis and --user).
   services.ntopng = {
     enable = true;
     redis = {
@@ -19,14 +19,16 @@
       address = "127.0.0.1:6379";
     };
     configText = ''
-      --interface=freeap0
-      --interface=usque0
-      --interface=eth0
-      --http-port=127.0.0.1:3000
-      --https-port=0
-      --local-networks=10.42.0.0/24,172.18.40.0/21,172.16.0.0/12,100.64.0.0/10
+      -G=/run/ntopng.pid
+      --community
+      -i=freeap0
+      -i=usque0
+      -i=eth0
+      -w=127.0.0.1:3000
+      -W=0
+      -m=10.42.0.0/24,172.18.40.0/21,172.16.0.0/12,100.64.0.0/10
+      -d=/var/lib/ntopng
       --redis=127.0.0.1:6379
-      --data-dir=/var/lib/ntopng
       --user=ntopng
     '';
   };

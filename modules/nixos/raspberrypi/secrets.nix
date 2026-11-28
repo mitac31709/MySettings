@@ -12,13 +12,12 @@
 #         * Wired connection 1 (eth0, 802.1x PEAP/MSCHAPv2, tokyo-ct.ac.jp, autoconnect=true, password-flags=0)
 #         * Hazamaru AP-tr     (wlan0, 802.1x PEAP/MSCHAPv2, tokyo-ct.ac.jp, autoconnect=true, route-metric=600)
 #         * eduroam            (wlan0, 802.1x PEAP/MSCHAPv2, autoconnect=true)
-#   - secrets/raspberrypi-freeap-hostapd.age     (/etc/hostapd/freeap.conf with SSID + passphrase)
-#   - secrets/raspberrypi-usque-config.age       (/etc/usque/config.json with WARP/MASQUE credentials)
-#   - secrets/raspberrypi-freeap-notify-env.age  (/etc/freeap-notify.env)
+#   - secrets/raspberrypi-freeap-hostapd.age      (/etc/hostapd/freeap.conf with SSID + passphrase)
+#   - secrets/raspberrypi-usque-config.age        (/etc/usque/config.json with WARP/MASQUE credentials)
+#   - secrets/raspberrypi-freeap-notify-env.age   (/etc/freeap-notify.env containing `WEBHOOK=...`, shared by freeap-count-notify and campus-apload-report)
 #   - secrets/raspberrypi-lecture-timetable-env.age (/etc/lecture-recorder/timetable.env)
-#   - secrets/raspberrypi-lecture-upload-key.age (write-only SSH private key for ubuntu:~/lectures/inbox)
-#   - secrets/raspberrypi-campus-apload-env.age  (Discord webhook env for campus-apload-final)
-#   - secrets/raspberrypi-code-server-env.age    (optional PASSWORD/HASHED_PASSWORD env for code-server)
+#   - secrets/raspberrypi-lecture-upload-key.age  (/var/lib/lecrec/.ssh/id_ed25519 write-only SSH private key for ubuntu:~/lectures/inbox)
+#   - secrets/raspberrypi-code-server-env.age     (optional PASSWORD/HASHED_PASSWORD env for code-server)
 {
   config,
   inputs,
@@ -169,14 +168,6 @@ in
         mode = "0400";
       };
     })
-    (lib.optionalAttrs (hasSecretFile "raspberrypi-campus-apload-env.age") {
-      "raspberrypi-campus-apload-env" = {
-        file = secretsDir + "/raspberrypi-campus-apload-env.age";
-        owner = "root";
-        group = "root";
-        mode = "0600";
-      };
-    })
     (lib.optionalAttrs (hasSecretFile "raspberrypi-code-server-env.age") {
       "raspberrypi-code-server-env" = {
         file = secretsDir + "/raspberrypi-code-server-env.age";
@@ -187,9 +178,20 @@ in
     })
   ];
 
+  # Keep /etc/agenix strictly root-only, and link decrypted agenix secrets into
+  # their canonical /etc paths when present so scripts reading those paths directly work.
   systemd.tmpfiles.rules = [
     "d /etc/agenix 0700 root root -"
-  ];
+  ]
+  ++ lib.optional (hasSecretFile "raspberrypi-freeap-notify-env.age") "L+ /etc/freeap-notify.env - - - - ${
+    config.age.secrets."raspberrypi-freeap-notify-env".path
+  }"
+  ++ lib.optional (hasSecretFile "raspberrypi-usque-config.age") "L+ /etc/usque/config.json - - - - ${
+    config.age.secrets."raspberrypi-usque-config".path
+  }"
+  ++ lib.optional (hasSecretFile "raspberrypi-freeap-hostapd.age") "L+ /etc/hostapd/freeap.conf - - - - ${
+    config.age.secrets."raspberrypi-freeap-hostapd".path
+  }";
 
   # Run before NetworkManager.service so wired 802.1x (eth0) and campus Wi-Fi
   # profiles are present on cold boot without requiring any user login.
