@@ -11,7 +11,8 @@
 }
 
 .side-bar-container .side-bar-centerbox > * > box:not(.transparent),
-.side-bar-container .side-bar-centerbox > * > button {
+.side-bar-container .side-bar-centerbox > * > button,
+.side-bar-container .services-list > button {
   border-radius: calc(var(--radius) - var(--padding));
   margin: 0 var(--padding);
   padding: 6px 2px;
@@ -20,21 +21,66 @@
 }
 
 .side-bar-container .side-bar-centerbox > * > box:not(.transparent):hover,
-.side-bar-container .side-bar-centerbox > * > button:hover {
+.side-bar-container .side-bar-centerbox > * > button:hover,
+.side-bar-container .services-list > button:hover {
   background: var(--color-hover);
 }
 
 .side-bar-container .side-bar-centerbox > * > box:not(.transparent):active,
-.side-bar-container .side-bar-centerbox > * > button:active {
+.side-bar-container .side-bar-centerbox > * > button:active,
+.side-bar-container .services-list > button:active {
   box-shadow: 0 0 0 2px var(--color-hover);
 }
 
 .side-bar-container .updates,
 .side-bar-container .startup-sound,
 .side-bar-container .jquake,
-.side-bar-container .services {
+.side-bar-container .service-item {
   min-width: 30px;
   padding: 6px 2px;
+}
+
+.side-bar-container .service-item image {
+  -gtk-icon-size: 14px;
+  color: var(--fg-disabled);
+}
+
+.side-bar-container .service-item.active image {
+  color: var(--fg-primary);
+}
+
+.side-bar-container .service-item.running image {
+  color: #38bdf8;
+}
+
+.side-bar-container .service-item.warn image {
+  color: #f0b866;
+}
+
+.side-bar-container .service-item.failed image {
+  color: #f06d7d;
+}
+
+.side-bar-container .service-item .svc-dot {
+  min-width: 5px;
+  min-height: 5px;
+  border-radius: 999px;
+}
+
+.side-bar-container .service-item .svc-dot.active {
+  background: #52d699;
+}
+
+.side-bar-container .service-item .svc-dot.running {
+  background: #38bdf8;
+}
+
+.side-bar-container .service-item .svc-dot.warn {
+  background: #f0b866;
+}
+
+.side-bar-container .service-item .svc-dot.failed {
+  background: #f06d7d;
 }
 
 .side-bar-container .updates .count {

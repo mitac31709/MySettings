@@ -8,6 +8,7 @@ function ServiceCard({ item, svc }: { item: ServiceItem; svc: ServicesMonitor })
     return (
         <Gtk.Box class={`svc-card ${item.level}`} orientation={Gtk.Orientation.VERTICAL} spacing={6} hexpand>
             <Gtk.Box spacing={8} hexpand>
+                <Gtk.Image iconName={item.iconName} valign={Gtk.Align.CENTER} />
                 <Gtk.Box class={`svc-dot ${item.level}`} valign={Gtk.Align.CENTER} />
                 <Gtk.Box orientation={Gtk.Orientation.VERTICAL} hexpand>
                     <Gtk.Label class="svc-name" label={item.name} xalign={0} />

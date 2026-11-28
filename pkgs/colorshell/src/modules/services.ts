@@ -8,6 +8,7 @@ export type ServiceLevel = "active" | "running" | "warn" | "failed";
 export interface ServiceItem {
     id: string;
     name: string;
+    iconName: string;
     level: ServiceLevel;
     statusText: string;
     unitScope: "user" | "system";
@@ -18,39 +19,27 @@ export interface ServiceItem {
     extraAction?: () => void;
 }
 
+export interface ServiceDef {
+    id: string;
+    name: string;
+    iconName: string;
+}
+
+export const SERVICE_DEFS: ReadonlyArray<ServiceDef> = [
+    { id: "uniclipd", name: "UniClipboard", iconName: "edit-copy-symbolic" },
+    { id: "lan-mouse", name: "LAN Mouse", iconName: "input-mouse-symbolic" },
+    { id: "taildrop", name: "Taildrop Receive", iconName: "folder-download-symbolic" },
+    { id: "cliphist", name: "Cliphist (text/image)", iconName: "edit-paste-symbolic" },
+    { id: "tailscale", name: "Tailscale", iconName: "network-vpn-symbolic" },
+    { id: "restic", name: "Restic Backup", iconName: "drive-harddisk-symbolic" },
+];
+
 @register({ GTypeName: "ClshServices" })
 class ServicesMonitor extends GObject.Object {
     private static instance: ServicesMonitor | null = null;
 
     #pollId: number | null = null;
     #refreshing = false;
-
-    @property(String)
-    overall = "ok";
-
-    @property(String)
-    cssClass = "services ok";
-
-    @property(String)
-    tooltip = "裏方デーモン・システム状態を確認中…";
-
-    @property(String)
-    dot0Class = "svc-dot active";
-
-    @property(String)
-    dot1Class = "svc-dot active";
-
-    @property(String)
-    dot2Class = "svc-dot active";
-
-    @property(String)
-    dot3Class = "svc-dot active";
-
-    @property(String)
-    dot4Class = "svc-dot active";
-
-    @property(String)
-    dot5Class = "svc-dot active";
 
     @property(Array)
     items: Array<ServiceItem> = [];
@@ -218,6 +207,7 @@ class ServicesMonitor extends GObject.Object {
                     {
                         id: "uniclipd",
                         name: "UniClipboard",
+                        iconName: "edit-copy-symbolic",
                         level: this.#levelFromUnitState(ucS),
                         statusText: ucS,
                         unitScope: "user",
@@ -230,6 +220,7 @@ class ServicesMonitor extends GObject.Object {
                     {
                         id: "lan-mouse",
                         name: "LAN Mouse",
+                        iconName: "input-mouse-symbolic",
                         level: this.#levelFromUnitState(lmS),
                         statusText: lmS,
                         unitScope: "user",
@@ -242,6 +233,7 @@ class ServicesMonitor extends GObject.Object {
                     {
                         id: "taildrop",
                         name: "Taildrop Receive",
+                        iconName: "folder-download-symbolic",
                         level: this.#levelFromUnitState(tdS),
                         statusText: tdS,
                         unitScope: "user",
@@ -254,6 +246,7 @@ class ServicesMonitor extends GObject.Object {
                     {
                         id: "cliphist",
                         name: "Cliphist (text/image)",
+                        iconName: "edit-paste-symbolic",
                         level: clipLevel,
                         statusText: clipStatus,
                         unitScope: "user",
@@ -266,6 +259,7 @@ class ServicesMonitor extends GObject.Object {
                     {
                         id: "tailscale",
                         name: "Tailscale",
+                        iconName: "network-vpn-symbolic",
                         level: tsLevel,
                         statusText: tsStatus,
                         unitScope: "system",
@@ -278,6 +272,7 @@ class ServicesMonitor extends GObject.Object {
                     {
                         id: "restic",
                         name: "Restic Backup",
+                        iconName: "drive-harddisk-symbolic",
                         level: rbLevel,
                         statusText: rbStatus,
                         unitScope: "system",
@@ -289,40 +284,7 @@ class ServicesMonitor extends GObject.Object {
                     },
                 ];
 
-                let overall = "ok";
-                for (const it of items) {
-                    if (it.level === "failed") {
-                        overall = "failed";
-                        break;
-                    }
-                    if (it.level === "warn" && overall === "ok") {
-                        overall = "degraded";
-                    }
-                }
-
-                const prefixFor = (lvl: ServiceLevel): string => {
-                    if (lvl === "failed") return "✗";
-                    if (lvl === "warn") return "!";
-                    if (lvl === "running") return "↻";
-                    return "•";
-                };
-                const tipLines = [
-                    "裏方デーモン・システム状態",
-                    ...items.map((it) => `${prefixFor(it.level)} ${it.name}: ${it.statusText}`),
-                    "",
-                    "左クリック: コントロールセンターで管理 / 右クリック: Rofi メニュー",
-                ];
-
                 this.items = items;
-                this.overall = overall;
-                this.cssClass = `services ${overall}`;
-                this.tooltip = tipLines.join("\n");
-                this.dot0Class = `svc-dot ${items[0].level}`;
-                this.dot1Class = `svc-dot ${items[1].level}`;
-                this.dot2Class = `svc-dot ${items[2].level}`;
-                this.dot3Class = `svc-dot ${items[3].level}`;
-                this.dot4Class = `svc-dot ${items[4].level}`;
-                this.dot5Class = `svc-dot ${items[5].level}`;
             })
             .catch((err) => {
                 console.warn("ServicesMonitor poll failed:", err);
