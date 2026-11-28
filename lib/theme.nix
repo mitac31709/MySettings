@@ -12,10 +12,12 @@ let
     surfaceHex = "131922";
 
     surfaceAlt = "#1a2330";
+    surfaceHover = "#222e3f";
 
     # Borders
     border = "#263344";
     borderHex = "263344";
+    borderStrong = "#35475e";
 
     # Typography
     fg = "#e8eef5";
@@ -43,6 +45,7 @@ let
     warningHex = "f2b866";
     danger = "#f07178";
     dangerHex = "f07178";
+    dangerSoft = "#3b1c24";
   };
 
   font = {
