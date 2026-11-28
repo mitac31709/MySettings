@@ -2438,7 +2438,9 @@ in
       config = {
         general = {
           gaps_in = 5;
-          gaps_out = 10;
+          # Exact 16:9 display area on 1920x1080 with top-bar (45px) + side-bar (80px):
+          # work area = 1840x1035 (16:9), single tiled window with 2px border = 1808x1017 (16:9).
+          gaps_out = "7, 14, 7, 14";
           border_size = 2;
           resize_on_border = true;
           allow_tearing = false;
@@ -2894,6 +2896,9 @@ in
       };
       clock = {
         date_format = "%a %m-%d %H:%M:%S";
+      };
+      workspaces = {
+        always_show_id = true;
       };
       notifications = {
         position_h = "right";

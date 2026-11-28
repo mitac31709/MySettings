@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "colorshell-net-popup" ];
+  system.nixos.tags = [ "colorshell-side-bar-16-9" ];
 }

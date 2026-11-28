@@ -19,23 +19,25 @@ export const SideBar = Windows.forMonitors(() => {
                 Astal.WindowAnchor.BOTTOM
             }
             exclusivity={Astal.Exclusivity.EXCLUSIVE}
-            widthRequest={46}
+            widthRequest={80}
             canFocus={false}
         >
             <Gtk.Box
                 class={"bar-container side-bar-container"}
                 orientation={Gtk.Orientation.VERTICAL}
+                hexpand
             >
                 <Gtk.CenterBox
                     class={"side-bar-centerbox"}
                     orientation={Gtk.Orientation.VERTICAL}
+                    hexpand
                     vexpand
                 >
                     <Gtk.Box
                         class={"widgets-top"}
                         orientation={Gtk.Orientation.VERTICAL}
                         valign={Gtk.Align.START}
-                        halign={Gtk.Align.CENTER}
+                        halign={Gtk.Align.FILL}
                         spacing={widgetSpacing}
                         $type="start"
                     >
@@ -45,7 +47,7 @@ export const SideBar = Windows.forMonitors(() => {
                         class={"widgets-bottom"}
                         orientation={Gtk.Orientation.VERTICAL}
                         valign={Gtk.Align.END}
-                        halign={Gtk.Align.CENTER}
+                        halign={Gtk.Align.FILL}
                         spacing={widgetSpacing}
                         $type="end"
                     >
