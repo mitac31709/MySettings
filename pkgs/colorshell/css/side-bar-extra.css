@@ -1,23 +1,23 @@
 /* MySettings: Left vertical side-bar (mirrors top-bar visual language) */
 
 .side-bar-container {
-  padding: 6px 0px 6px 6px;
+  padding: 4px 0px 4px 4px;
 }
 
 .side-bar-container .side-bar-centerbox > * {
   background: var(--bg-translucent-primary);
   border-radius: var(--radius);
-  padding: var(--padding) 0;
+  padding: 3px 0;
 }
 
 .side-bar-container .side-bar-centerbox > * > box:not(.transparent),
 .side-bar-container .side-bar-centerbox > * > button,
 .side-bar-container .services-list > button {
   border-radius: calc(var(--radius) - var(--padding));
-  margin: 0 var(--padding);
-  padding: 6px 2px;
-  min-width: 30px;
-  min-height: 30px;
+  margin: 0 3px;
+  padding: 4px 2px;
+  min-width: 28px;
+  min-height: 28px;
 }
 
 .side-bar-container .side-bar-centerbox > * > box:not(.transparent):hover,
@@ -36,8 +36,8 @@
 .side-bar-container .startup-sound,
 .side-bar-container .jquake,
 .side-bar-container .service-item {
-  min-width: 30px;
-  padding: 6px 2px;
+  min-width: 28px;
+  padding: 4px 2px;
 }
 
 .side-bar-container .service-item image {

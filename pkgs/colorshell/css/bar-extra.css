@@ -1,5 +1,10 @@
 /* MySettings: Top-bar native widgets & status highlights */
 
+/* Tighter outer padding matching Hyprland gaps_out (4px) */
+.bar-container {
+  padding: 4px 4px 0px 4px;
+}
+
 /* Agent run pill (hidden until a T3 Code thread is working or waiting) */
 .bar-container .agent-run {
   background: var(--bg-secondary);

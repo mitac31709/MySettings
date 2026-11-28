@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "hyprshell-live-preview" ];
+  system.nixos.tags = [ "tighter-desktop-gaps" ];
 }

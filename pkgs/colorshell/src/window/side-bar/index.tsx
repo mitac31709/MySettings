@@ -19,7 +19,7 @@ export const SideBar = Windows.forMonitors(() => {
                 Astal.WindowAnchor.BOTTOM
             }
             exclusivity={Astal.Exclusivity.EXCLUSIVE}
-            widthRequest={46}
+            widthRequest={42}
             canFocus={false}
         >
             <Gtk.Box
