@@ -6,17 +6,23 @@ let
 
   powerSaveCpuOn = pkgs.writeShellScript "power-save-cpu-on" ''
     set -euo pipefail
-    ${autoCpufreqBin} --force=powersave
-    ${autoCpufreqBin} --turbo=never || true
+    exec 9>/run/power-save-cpu.lock
+    ${pkgs.util-linux}/bin/flock 9
     for f in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do
       [ -w "$f" ] && printf 'power\n' > "$f" 2>/dev/null || true
     done
+    ${autoCpufreqBin} --force=powersave &
+    p1=$!
+    ${autoCpufreqBin} --turbo=never &
+    p2=$!
+    wait "$p1"
+    wait "$p2" || true
   '';
 
   powerSaveCpuOff = pkgs.writeShellScript "power-save-cpu-off" ''
     set -euo pipefail
-    ${autoCpufreqBin} --force=reset
-    ${autoCpufreqBin} --turbo=auto || true
+    exec 9>/run/power-save-cpu.lock
+    ${pkgs.util-linux}/bin/flock 9
     ac_online=0
     for ps in /sys/class/power_supply/*; do
       [ -r "$ps/type" ] || continue
@@ -34,6 +40,12 @@ let
     for f in /sys/devices/system/cpu/cpu*/cpufreq/energy_performance_preference; do
       [ -w "$f" ] && printf '%s\n' "$target_epp" > "$f" 2>/dev/null || true
     done
+    ${autoCpufreqBin} --force=reset &
+    p1=$!
+    ${autoCpufreqBin} --turbo=auto &
+    p2=$!
+    wait "$p1"
+    wait "$p2" || true
   '';
 in
 {

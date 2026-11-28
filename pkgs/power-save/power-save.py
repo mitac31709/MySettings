@@ -254,20 +254,24 @@ def send_notification(title: str, body: str) -> None:
     notify = shutil.which("notify-send")
     if not notify:
         return
-    run_cmd(
-        [
-            notify,
-            "-a",
-            "省電力モード",
-            "-i",
-            "power-profile-power-saver-symbolic",
-            "-h",
-            "string:x-canonical-private-synchronous:power-save",
-            title,
-            body,
-        ],
-        timeout=3.0,
-    )
+    try:
+        subprocess.Popen(
+            [
+                notify,
+                "-a",
+                "省電力モード",
+                "-i",
+                "power-profile-power-saver-symbolic",
+                "-h",
+                "string:x-canonical-private-synchronous:power-save",
+                title,
+                body,
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        pass
 
 
 # --- Feature controllers ---
@@ -275,7 +279,7 @@ def send_notification(title: str, body: str) -> None:
 
 def apply_cpu(enable: bool) -> tuple[bool, str | None]:
     unit = "power-save-cpu-on.service" if enable else "power-save-cpu-off.service"
-    rc, _out, err = run_cmd(["systemctl", "start", unit], timeout=12.0)
+    rc, _out, err = run_cmd(["systemctl", "start", "--no-block", unit], timeout=5.0)
     if rc != 0:
         return False, f"CPU切替失敗 ({unit}): {err or f'rc={rc}'}"
     return True, None
@@ -387,25 +391,36 @@ def apply_bluetooth(enable: bool, st: dict[str, Any]) -> tuple[bool, str | None]
 
 def apply_services(enable: bool, st: dict[str, Any]) -> tuple[bool, str | None]:
     if enable:
-        paused: list[str] = []
-        for unit in DEFAULT_SERVICES:
-            rc, out, _ = run_cmd(
-                ["systemctl", "--user", "is-active", unit],
-                timeout=3.0,
+        rc, out, _ = run_cmd(
+            ["systemctl", "--user", "show", "-p", "ActiveState", "--value", *DEFAULT_SERVICES],
+            timeout=3.0,
+        )
+        if rc != 0:
+            st["paused_services"] = []
+            return False, None
+        states = [line.strip() for line in out.splitlines()]
+        active_units = [
+            unit for unit, state in zip(DEFAULT_SERVICES, states) if state in ("active", "activating")
+        ]
+        if active_units:
+            rc_stop, _o, err = run_cmd(
+                ["systemctl", "--user", "stop", "--no-block", *active_units],
+                timeout=4.0,
             )
-            if rc == 0 and out == "active":
-                rc_stop, _o, _e = run_cmd(["systemctl", "--user", "stop", unit], timeout=8.0)
-                if rc_stop == 0:
-                    paused.append(unit)
-        st["paused_services"] = paused
+            if rc_stop != 0:
+                st["paused_services"] = []
+                return False, f"裏方サービス停止失敗: {err or f'rc={rc_stop}'}"
+        st["paused_services"] = active_units
         return True, None
     else:
         paused = st.get("paused_services") or []
         st["paused_services"] = []
         if paused:
-            # Start in reverse order so servers (e.g. activitywatch) start before watchers.
-            for unit in reversed(paused):
-                run_cmd(["systemctl", "--user", "start", unit], timeout=8.0)
+            # Start in reverse order so servers (e.g. activitywatch) are queued before watchers.
+            run_cmd(
+                ["systemctl", "--user", "start", "--no-block", *reversed(paused)],
+                timeout=4.0,
+            )
         return True, None
 
 
@@ -440,12 +455,6 @@ def turn_on(reason: str = "manual", notify: bool = True) -> dict[str, Any]:
     errors: list[str] = []
     applied = default_state()["applied"]
 
-    if cfg["cpu"]:
-        ok, err = apply_cpu(True)
-        applied["cpu"] = ok
-        if err:
-            errors.append(err)
-
     if cfg["hyprland"]:
         ok, err = apply_hyprland(True, st)
         applied["hyprland"] = ok
@@ -458,15 +467,21 @@ def turn_on(reason: str = "manual", notify: bool = True) -> dict[str, Any]:
         if err:
             errors.append(err)
 
-    if cfg["bluetooth"]:
-        ok, err = apply_bluetooth(True, st)
-        applied["bluetooth"] = ok
+    if cfg["cpu"]:
+        ok, err = apply_cpu(True)
+        applied["cpu"] = ok
         if err:
             errors.append(err)
 
     if cfg["services"]:
         ok, err = apply_services(True, st)
         applied["services"] = ok
+        if err:
+            errors.append(err)
+
+    if cfg["bluetooth"]:
+        ok, err = apply_bluetooth(True, st)
+        applied["bluetooth"] = ok
         if err:
             errors.append(err)
 
@@ -506,11 +521,6 @@ def turn_off(reason: str = "manual", notify: bool = True) -> dict[str, Any]:
     errors: list[str] = []
     applied = st.get("applied") or {}
 
-    if applied.get("cpu"):
-        _ok, err = apply_cpu(False)
-        if err:
-            errors.append(err)
-
     if applied.get("hyprland"):
         _ok, err = apply_hyprland(False, st)
         if err:
@@ -521,13 +531,18 @@ def turn_off(reason: str = "manual", notify: bool = True) -> dict[str, Any]:
         if err:
             errors.append(err)
 
-    if applied.get("bluetooth"):
-        _ok, err = apply_bluetooth(False, st)
+    if applied.get("cpu"):
+        _ok, err = apply_cpu(False)
         if err:
             errors.append(err)
 
     if applied.get("services"):
         _ok, err = apply_services(False, st)
+        if err:
+            errors.append(err)
+
+    if applied.get("bluetooth"):
+        _ok, err = apply_bluetooth(False, st)
         if err:
             errors.append(err)
 
