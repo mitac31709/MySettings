@@ -26,4 +26,14 @@ in
   "opencode-service.json.age".publicKeys = masterKeys;
   "lan-mouse-chromebook.pem.age".publicKeys = masterKeys;
   "lan-mouse-vaio.pem.age".publicKeys = masterKeys;
+
+  # Raspberry Pi 5 server secrets (placeholders; populate via `agenix -e`).
+  "raspberrypi-nm-connections.age".publicKeys = masterKeys;
+  "raspberrypi-freeap-hostapd.age".publicKeys = masterKeys;
+  "raspberrypi-usque-config.age".publicKeys = masterKeys;
+  "raspberrypi-freeap-notify-env.age".publicKeys = masterKeys;
+  "raspberrypi-lecture-timetable-env.age".publicKeys = masterKeys;
+  "raspberrypi-lecture-upload-key.age".publicKeys = masterKeys;
+  "raspberrypi-campus-apload-env.age".publicKeys = masterKeys;
+  "raspberrypi-code-server-env.age".publicKeys = masterKeys;
 }
