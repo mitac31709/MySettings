@@ -10,36 +10,44 @@ GMKtec NucBox G3（Intel N100 / 16GB RAM / Apacer 256GB NVMe）で動いてい�
 
 - 対象機: GMKtec NucBox G3（UEFI、内蔵 NVMe 1 本 `/dev/nvme0n1`、実容量 238.5 GiB）
 - 現在のディスク構成（Ubuntu 24.04）:
-  - `nvme0n1p1`: 1 GiB vfat（`/boot/efi`）
-  - `nvme0n1p2`: 2 GiB ext4（`/boot`）
-  - `nvme0n1p3`: 235.4 GiB LVM（`ubuntu-vg/ubuntu-lv`、使用約 74 GiB）
+  - `nvme0n1p1`: 1 GiB vfat（`/boot/efi`、使用約 6 MiB）
+  - `nvme0n1p2`: 2 GiB ext4（`/boot`、使用約 202 MiB）
+  - `nvme0n1p3`: 235.4 GiB LVM（PV・LV ともに 235.4 GiB いっぱい、`ubuntu-vg/ubuntu-lv`、使用約 75 GiB / 空き 147 GiB）
+  - スワップ: `/swapfile` 8 GiB（使用中）+ `/swap.img` 4 GiB（未使用）
 - 新しいディスク構成（`hosts/ubuntu/disko.nix`）:
   - GPT、1 GiB vfat ESP（`/boot`）、残りを btrfs（`compress=zstd:1`、`@` / `@home` / `@nix` / `@log` / `@swap` 4 GiB swapfile）
 - ネットワーク:
   - 有線 LAN `enp3s0`（MAC `e0:51:d8:1e:90:95`）
   - ルーターの DHCP 予約で `192.168.1.50` が割り当てられる前提
   - ルーター転送ポート: TCP `22`, `443`, `25565` / UDP `500`, `4500`, `1194`
+  - Tailscale アドレス: `100.124.196.22` / `fd7a:115c:a1e0::f101:c484`（SSH の `Match LocalAddress` もこのアドレスを前提にしています）
+- 現行 Ubuntu からの意図的な変更・廃止:
+  - **`nfas26.service`（ユーザー unit、`workerd` 0.0.0.0:8787 + Tailscale Serve `:8443`）と `code-server@mitac.service`（0.0.0.0:8080）は、現在も実機で enabled / active ですが、移行方針どおり意図的に廃止しています。** 移行当日に実機側で停止し、必要ならデータ（`~/NFAS26`・`~/.config/code-server`）を念のため退避してから切り替えてください。
+  - `cloudflared`・Node 18・`snapd`・`cloud-init`・`open-vm-tools` も意図的に除外しています。
+  - タイムゾーンは現行の `Etc/UTC` から `Asia/Tokyo` へ変更しています。
+  - `services.tailscale.useRoutingFeatures = "server"` により IPv4 に加えて IPv6 転送も有効になります（現行 Ubuntu は IPv4 のみ転送）。
 - 移行前に `modules/nixos/ubuntu.nix` の `TODO` 箇所を確認・反映しておくこと:
-  - 現行 `ubuntu` の `~/.ssh/authorized_keys` の残り 3 本の公開鍵
-  - `~/.config/systemd/user/` の実際の `ExecStart`（`hermes-gateway`, `siesta-bot`, `lecture-asr`, `lecture-publish`）と inbox パス
-  - `~/minecraft/` の 6 インスタンスの起動スクリプト確認
+  - 現行 `ubuntu` の `~/.ssh/authorized_keys` の残り 3 本の公開鍵（制限付き `pi-lecture-upload` 鍵を含む。未登録だと `nixos-anywhere` 直後から `/home/mitac` 復元までの間、Raspberry Pi からの講義アップロードが失敗します）
+  - `~/.config/systemd/user/` の実際の `ExecStart`（`hermes-gateway`, `siesta-bot`, `lecture-asr`, `lecture-publish`）と inbox 監視パス・タイマー間隔
+  - `~/minecraft/` の 6 インスタンス（`ATM10`, `ATM9-Eureka`, `latest-vanila`, `mohist-1.20.1`, `paper-1.21.11`, `yower-1.21.1`）の起動スクリプトとヒープ指定（10–12G）の確認
   - `/etc/win-credentials` の agenix 暗号化（`secrets/ubuntu-win-credentials.age`）
 
 ---
 
 ## 1. フルディスクバックアップ（Clonezilla Live USB → Google Drive）
 
-ファイル単位の退避とは別に、**元の Ubuntu へ丸ごと戻せるディスクイメージ**を先に作ります。
-使用量が約 74 GiB あるため、zstd 圧縮後のイメージは **45〜70 GiB** 程度になります。Google Drive に 2 TB 以上の空きがあるため、Clonezilla Live の中で `rclone` を使って Google Drive へ直接保存できます。
+ファイル単位の退避とは別に、**元の Ubuntu へ丸ごと戻せるディスクイメージ**を先に作ります（ロールバックの本命）。
+使用量が約 75 GiB あるため、zstd 圧縮後のイメージは **45〜70 GiB** 程度になります。Google Drive に 2 TB 以上の空きがあるため、Clonezilla Live の中で `rclone` を使って Google Drive へ直接保存できます。
 
 ### 1-1. 準備するもの
 
 - USB メモリ（Clonezilla Live amd64 / UEFI 版を書き込んだもの）
 - キーボード・モニター（NucBox G3 に直接つなぐ）
 - 既存の `rclone.conf`（`gdrive` リモート設定済みのファイル。USB メモリ等に一時コピーするか、Live 内で `rclone config` で新規認証する）
-- （任意）整合性を上げるため、シャットダウン前に現行 Ubuntu で Docker と SoftEther を止めておくと安心です:
+- （任意）整合性を上げるため、シャットダウン前に現行 Ubuntu で常駐サービスを止めておくと安心です:
   ```bash
-  sudo systemctl stop vpnserver docker
+  sudo systemctl stop vpnserver docker code-server@mitac
+  systemctl --user stop nfas26 hermes-gateway siesta-bot
   ```
 
 ### 1-2. Clonezilla Live の起動と rclone の用意
@@ -139,6 +147,48 @@ NixOS 移行をやり直したい・元の Ubuntu に戻したいときの手順
 5. 確認画面で `y` を入力して復元を実行します。完了したらアンマウントして USB を抜き、再起動します。
 6. 起動後、LAN（`192.168.1.50`）、SSH、Tailscale、SoftEther が元どおり動くことを確認します。
 
+### 1-5. 補足: 再起動せず取るライブ（ファイル単位）バックアップ
+
+Clonezilla 用の物理アクセスを取る前に、**起動したまま二重の保険としてデータと設定を Google Drive へ逃がしたい場合**の補足手順です。
+
+> **重要**: **元の Ubuntu へ丸ごと戻すロールバックの本命は、あくまで 1-1〜1-4 の Clonezilla オフラインイメージです。**
+> 現行の LVM は PV・LV ともに 235.4 GiB いっぱいで VG にスナップショット用の空き PE が無いため LVM スナップショットは使えず、稼働中の ext4 を `dd` / `partclone` するとジャーナル不整合の危険があります。またファイル単位からのベアメタル復元はパーティション・EFI・LVM・GRUB・fstab の手作業再構築が必要で手間が大きいため、ライブバックアップは **ホーム・Docker・SoftEther 設定などのデータ保険** として位置付けてください。
+
+前提と目安:
+
+- 現行 `ubuntu` には `rsync`・`dd`・`zstd` は入っていますが、**`rclone` / `restic` / `borg` / `partclone` は未導入** です（`sudo` はパスワード必須）。`rclone` を導入するか、`rclone` 設定済みの別マシン（VAIO / Chromebook 等）経由で Google Drive へ送ります。
+- 対象約 75 GiB + `/boot` 202 MiB + EFI 6 MiB → 圧縮後 **45〜65 GiB** 程度。初回アップロードは回線次第で **3〜8 時間** が目安です。`ubuntu` 自身の空き 147 GiB は一時置きにしか使えません（同じ NVMe 故障時に消えるため）。
+
+コマンド例（`ubuntu` 上で実行）:
+
+```bash
+# 1. ディスク構成メタデータ（小さいので必ず取る）
+sudo sfdisk --dump /dev/nvme0n1 > ubuntu-nvme0n1.sfdisk
+sudo dd if=/dev/nvme0n1p1 bs=4M status=progress | zstd -T0 -10 -o ubuntu-efi.img.zst
+sudo tar -C /boot -cpf - . | zstd -T0 -10 -o ubuntu-boot.tar.zst
+sudo vgcfgbackup -f ubuntu-vg.cfg ubuntu-vg
+
+# 2. 整合性のため短時間サービスを止める
+sudo systemctl stop vpnserver
+# 可能なら Docker も止める（止めずに取る場合は named volume を別途 docker run --rm -v ... tar）
+sudo systemctl stop docker
+
+# 3a. restic + rclone を入れて Google Drive へ直接送る例
+# restic -r rclone:gdrive:restic/ubuntu-live --verbose backup \
+#   --one-file-system / /boot /boot/efi \
+#   --exclude /tmp --exclude /var/tmp --exclude /var/cache \
+#   --exclude /swapfile --exclude /swap.img
+
+# 3b. rclone 未導入のままアーカイブを作り、別ディスクや rclone 済み端末へ送る例
+sudo tar --acls --xattrs --numeric-owner --one-file-system \
+  --exclude=/tmp --exclude=/var/tmp --exclude=/var/cache \
+  --exclude=/swapfile --exclude=/swap.img \
+  -cpf - / | zstd -T0 -10 > /path/on-other-disk/ubuntu-root.tar.zst
+
+# 4. サービスを再開
+sudo systemctl start docker vpnserver
+```
+
 ---
 
 ## 2. 個別に退避するデータ（NixOS 移行後に戻す分）
@@ -149,28 +199,38 @@ NixOS 移行をやり直したい・元の Ubuntu に戻したいときの手順
 
 ### 2-1. 退避リスト
 
-| 項目 | 現行 Ubuntu 上のパス | 権限・備考 |
+| 項目 | 現行 Ubuntu 上のパス / コマンド | 権限・備考 |
 |---|---|---|
-| ホーム全体 | `/home/mitac/` | `.hermes`, `siesta-bot`, `lectures`, `minecraft`（6 インスタンス）, `znc`, `ntopng`, `FindSenryu4Discord`, `slowflow-vpn`, `bin/`, `.ssh/`, `.gnupg/`, `.config/gh/`, `.config/lecture-asr/`, `.config/btop/`, `.config/systemd/user/` などを含む |
-| 停止中アプリのデータ（退避のみ） | `~/immich-app`, `~/AdGuardHome`, `~/kikoune`, `~/CloudflareOS`, `~/DiscordShogi` | NixOS 側には設定を作らずデータだけ保持 |
+| ホーム全体 | `/home/mitac/` | `.hermes`（3.3G）、`siesta-bot`、`lectures`（モデル 1.5G 含む）、`minecraft`（6 インスタンス: `ATM10` / `ATM9-Eureka` / `latest-vanila` / `mohist-1.20.1` / `paper-1.21.11` / `yower-1.21.1`）、`znc`、`ntopng`、`FindSenryu4Discord`、`slowflow-vpn`、`bin/`、`.ssh/`、`.gnupg/`、`.config/gh/`、`.config/lecture-asr/`、`.config/btop/`、`.config/systemd/user/` などを含む |
+| 停止中アプリのデータ（退避のみ） | `~/immich-app`（+ volume `immich_model-cache` 5.6G）、`~/AdGuardHome`、`~/kikoune`、`~/CloudflareOS`、`~/DiscordShogi` | NixOS 側には設定を作らずデータだけ保持 |
+| 廃止予定アプリのデータ（任意） | `~/NFAS26`、`~/.config/code-server` | 意図的に廃止する対象。念のため残したい場合のみ退避（`/home/mitac` 丸ごとコピーなら自動的に含まれる） |
 | SoftEther 設定・証明書 | `/usr/local/vpnserver/vpn_server.config` と同フォルダ内の証明書・`chain_certs` 等 | root 所有。`sudo` が必要 |
 | SSH ホスト鍵 | `/etc/ssh/ssh_host_*` | 再インストール後も他端末から `WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED` を出さないため。root 所有 |
-| Tailscale 状態 | `/var/lib/tailscale/` | ノード ID と `100.124.196.22` を維持するため。root 所有 |
-| Docker ボリューム | `/var/lib/docker/volumes/`（特に `immich_model-cache` や各 compose の named volume） | bind mount 分は `/home/mitac` に含まれる。named volume は `docker volume ls` で確認し、`tar` で抜くか停止中にコピー |
-| 各種 `.env`・認証ファイル | `~/.hermes/.env`, `~/.hermes/auth.json`, `~/siesta-bot/.env`, `~/.config/lecture-asr/gemini.env`, `~/slowflow-vpn/psk`, 各 compose の `.env` | `/home/mitac` に含まれるが、漏れがないか個別確認する |
+| Tailscale 状態 | `/var/lib/tailscale/` | ノード ID と `100.124.196.22` / `fd7a:115c:a1e0::f101:c484` を維持するため（SSH の `Match LocalAddress` にも必要）。root 所有 |
+| Docker ボリューム | `/var/lib/docker/volumes/`（`immich_model-cache` や各 compose の named volume） | bind mount 分は `/home/mitac` に含まれる。named volume は `docker volume ls` で確認し、Docker 停止中にコピーまたは `tar` で抜く |
+| ローカルビルドの Docker イメージ | `docker save findsenryu4discord-app`（その他 `docker images` でローカルビルド扱いがあれば同様） | `/var/lib/docker/volumes/` には含まれないため、そのまま戻す場合は `docker save` で退避する（または移行後に `docker compose build` で再ビルド） |
+| 各種 `.env`・認証ファイル | `~/.hermes/.env`、`~/.hermes/auth.json`、`~/siesta-bot/.env`、`~/.config/lecture-asr/gemini.env`、`~/slowflow-vpn/psk`、各 compose の `.env` | `/home/mitac` に含まれるが、漏れがないか個別確認する |
 | CIFS 資格情報 | `/etc/win-credentials` | root 所有（0600）。NixOS では agenix（`secrets/ubuntu-win-credentials.age`）へ暗号化して管理する |
 
 ### 2-2. 退避コマンドの例（現行 Ubuntu 上で実行）
 
-移行前に現行のユニット定義も必ず控えておき、`modules/nixos/ubuntu.nix` の `TODO` を埋める材料にします:
+移行前に現行のユニット定義と Minecraft 起動スクリプトも必ず控えておき、`modules/nixos/ubuntu.nix` の `TODO` を埋める材料にします:
 
 ```bash
 # ユーザー systemd ユニットの確認（TODO 解消用）
 head -n 100 ~/.config/systemd/user/*.service ~/.config/systemd/user/*.path ~/.config/systemd/user/*.timer
 
-# Docker コンテナ・ボリューム一覧の記録
+# Minecraft 6 インスタンスの起動スクリプト確認
+ls -la ~/minecraft/{ATM10,ATM9-Eureka,latest-vanila,mohist-1.20.1,paper-1.21.11,yower-1.21.1}
+
+# Docker コンテナ・イメージ・ボリューム一覧の記録
 docker ps -a
+docker images
 docker volume ls
+
+# ローカルビルドの Docker イメージ保存（FindSenryu4Discord）
+mkdir -p /tmp/ubuntu-docker-images
+docker save findsenryu4discord-app | zstd -T0 -10 -o /tmp/ubuntu-docker-images/findsenryu4discord-app.tar.zst
 
 # root 領域のまとめ退避（一時的に /tmp/ubuntu-sys-backup へ集めて転送する例）
 sudo mkdir -p /tmp/ubuntu-sys-backup/{softether,ssh,tailscale,cifs,docker-volumes}
@@ -305,7 +365,7 @@ chown -R root:root /var/lib/tailscale
 chmod 700 /var/lib/tailscale
 systemctl start tailscaled
 
-# 確認（元のアドレス 100.124.196.22 で Online になっていること）
+# 確認（元のアドレス 100.124.196.22 / fd7a:115c:a1e0::f101:c484 で Online になっていること）
 tailscale status
 ```
 
@@ -342,13 +402,16 @@ chown -R mitac:users /home/mitac
 su - mitac -c 'test -d ~/MySettings || git clone -b main https://github.com/mitac31709/MySettings.git ~/MySettings'
 ```
 
-### 手順 6: Docker ボリューム復元と compose スタック起動
+### 手順 6: Docker ボリューム・ローカルイメージ復元と compose スタック起動
 
 ```bash
 # named volume がある場合
 systemctl stop docker
 cp -a /path/to/backup/docker-volumes/. /var/lib/docker/volumes/
 systemctl start docker
+
+# ローカルビルドの Docker イメージを読み戻す（または FindSenryu4Discord で docker compose build）
+zstd -dc /path/to/backup/docker-images/findsenryu4discord-app.tar.zst | docker load
 
 # mitac で各 compose ディレクトリから起動
 # 対象: ~/znc, ~/ntopng, ~/FindSenryu4Discord, ArchiveTeam (uploaderjp x2 / ts-ubuntu-at-exit),
@@ -373,7 +436,9 @@ su - mitac -c 'cd ~/znc && docker compose up -d'
 # CIFS（GALLERIA 192.168.1.33 が起動しているときに自動マウントを確認）
 ls /mnt/windows-hdd
 
-# Minecraft（必要なときだけ手動起動。自動起動はしない）
+# Minecraft（必要なときだけ手動起動。自動起動はしない。ポート 25565 競合防止のため排他）
+# 対象 6 インスタンス:
+#   ATM10 / ATM9-Eureka（直近使用）/ latest-vanila / mohist-1.20.1 / paper-1.21.11 / yower-1.21.1
 # sudo systemctl start minecraft@ATM9-Eureka
 # journalctl -u minecraft@ATM9-Eureka -f
 

@@ -10,29 +10,76 @@ let
   winCredsPath =
     config.age.secrets."ubuntu-win-credentials".path or "/run/agenix/ubuntu-win-credentials";
 
+  # Confirmed Minecraft instance directories under /home/mitac/minecraft/.
+  # All 6 stay disabled at boot (wantedBy = [ ]) and share port 25565 (only one
+  # runs at a time). ATM9-Eureka was the most recently used instance.
+  minecraftInstances = [
+    "ATM10"
+    "ATM9-Eureka"
+    "latest-vanila"
+    "mohist-1.20.1"
+    "paper-1.21.11"
+    "yower-1.21.1"
+  ];
+
   # On-demand launcher for Minecraft instances under /home/mitac/minecraft/<name>.
-  # Checks instance start scripts first (modpacks like ATM9-Eureka ship run.sh/start.sh),
-  # then falls back to server.jar.
+  # Checks instance start scripts first (modpacks like ATM9-Eureka / ATM10 ship
+  # startserver.sh, start.sh, or run.sh), then falls back to server.jar.
   minecraftRunner = pkgs.writeShellScript "minecraft-instance-runner" ''
     set -euo pipefail
     instance="$1"
     dir="/home/mitac/minecraft/$instance"
     cd "$dir"
-    if [ -x "./start.sh" ]; then
-      exec ./start.sh
-    elif [ -x "./run.sh" ]; then
-      exec ./run.sh
-    elif [ -f "./start.sh" ]; then
-      exec ${pkgs.bash}/bin/bash ./start.sh
-    elif [ -f "./run.sh" ]; then
-      exec ${pkgs.bash}/bin/bash ./run.sh
-    elif [ -f "./server.jar" ]; then
+    for script in ./startserver.sh ./start.sh ./run.sh; do
+      if [ -x "$script" ]; then
+        exec "$script"
+      elif [ -f "$script" ]; then
+        exec ${pkgs.bash}/bin/bash "$script"
+      fi
+    done
+    if [ -f "./server.jar" ]; then
       exec ${pkgs.jdk21_headless}/bin/java ''${JAVA_OPTS:--Xms4G -Xmx10G} -jar ./server.jar nogui
     else
-      echo "minecraft@$instance: no start.sh, run.sh, or server.jar found in $dir" >&2
+      echo "minecraft@$instance: no startserver.sh, start.sh, run.sh, or server.jar found in $dir" >&2
       exit 1
     fi
   '';
+
+  mkMinecraftUnit = instance: {
+    description = "Minecraft Server (${instance})";
+    after = [ "network-online.target" ];
+    wants = [ "network-online.target" ];
+    # Only one instance may bind TCP 25565 at a time.
+    conflicts = map (other: "minecraft@${other}.service") (
+      lib.filter (other: other != instance) minecraftInstances
+    );
+    wantedBy = [ ];
+    unitConfig = {
+      ConditionPathExists = "/home/mitac/minecraft/${instance}";
+    };
+    path = [
+      pkgs.jdk21_headless
+      pkgs.bash
+      pkgs.coreutils
+    ];
+    serviceConfig = {
+      Type = "simple";
+      User = "mitac";
+      Group = "users";
+      WorkingDirectory = "/home/mitac/minecraft/${instance}";
+      Environment = [ "HOME=/home/mitac" ];
+      EnvironmentFile = "-/home/mitac/minecraft/${instance}/.env";
+      # TODO: Verify exact start script and JVM heap flags (10-12G on modpacks)
+      # inside /home/mitac/minecraft/${instance} before first launch.
+      ExecStart = "${minecraftRunner} ${lib.escapeShellArg instance}";
+      SuccessExitStatus = [
+        0
+        143
+      ];
+      TimeoutStopSec = 60;
+      Restart = "no";
+    };
+  };
 in
 {
   # Headless server: skip bootvine on the boot console so remote installs stay lean.
@@ -72,10 +119,14 @@ in
   # ---------------------------------------------------------------------------
   # SSH & authorized keys
   # ---------------------------------------------------------------------------
-  # Key-only globally (including public IP port 22); password auth allowed only
-  # from LAN (192.168.1.0/24), loopback, and Tailscale (100.64.0.0/10, CGNAT/ULA).
-  # PermitRootLogin = "prohibit-password" allows key-only root SSH right after
-  # nixos-anywhere finishes (before `passwd mitac` and state restore).
+  # Matches live ubuntu /etc/ssh/sshd_config exactly:
+  # - Key-only globally (including public IP port 22).
+  # - Password auth allowed from LAN (192.168.1.0/24) and loopback.
+  # - Password auth allowed from Tailscale range (100.64.0.0/10, fd7a:115c:a1e0::/48)
+  #   ONLY when arriving on the host's Tailscale LocalAddress (100.124.196.22 /
+  #   fd7a:115c:a1e0::f101:c484, preserved by restoring /var/lib/tailscale).
+  # - PermitRootLogin = "prohibit-password" allows key-only root SSH right after
+  #   nixos-anywhere finishes (before `passwd mitac` and state restore).
   services.openssh = {
     enable = true;
     settings = {
@@ -86,7 +137,12 @@ in
       AuthenticationMethods = "publickey";
     };
     extraConfig = ''
-      Match Address 192.168.1.0/24,127.0.0.1/32,::1/128,100.64.0.0/10,fd7a:115c:a1e0::/48
+      Match Address 192.168.1.0/24,127.0.0.1/32,::1/128
+        PasswordAuthentication yes
+        KbdInteractiveAuthentication yes
+        AuthenticationMethods any
+
+      Match LocalAddress 100.124.196.22,fd7a:115c:a1e0::f101:c484 Address 100.64.0.0/10,fd7a:115c:a1e0::/48
         PasswordAuthentication yes
         KbdInteractiveAuthentication yes
         AuthenticationMethods any
@@ -94,8 +150,8 @@ in
   };
 
   # TODO: Add the remaining 3 public keys from current ubuntu's ~/.ssh/authorized_keys
-  # (including the restricted pi-lecture-upload key) into keys = [ ... ] before
-  # deploying, or rely on restoring /home/mitac/.ssh/authorized_keys after boot.
+  # (including the restricted pi-lecture-upload key, otherwise lecture uploads from
+  # raspberrypi fail between nixos-anywhere and /home/mitac restore) into keys = [ ... ].
   users.users.mitac = {
     extraGroups = [ "docker" ];
     openssh.authorizedKeys.keyFiles = [
@@ -112,7 +168,7 @@ in
   services.tailscale = {
     enable = true;
     # Exit node / routing server; also enables IPv4/IPv6 forwarding (replacing
-    # /etc/sysctl.d/99-tailscale.conf).
+    # /etc/sysctl.d/99-tailscale.conf; note live Ubuntu had IPv6 forwarding off).
     useRoutingFeatures = "server";
     # Override modules/nixos/secrets.nix mkDefault: restored /var/lib/tailscale
     # already holds the node identity, so do not auto-reauth with an auth key.
@@ -199,85 +255,176 @@ in
   };
 
   # ---------------------------------------------------------------------------
-  # Restored home-directory services (User=mitac, guarded with ConditionPathExists
-  # so first boot stays clean before /home/mitac is restored)
+  # Restored home-directory services & on-demand Minecraft instances
+  # (User=mitac, guarded with ConditionPathExists so first boot stays clean
+  # before /home/mitac is restored)
   # ---------------------------------------------------------------------------
+  systemd.services = {
+    # Hermes Agent gateway (~/.hermes + ~/.local/bin/hermes*)
+    hermes-gateway = {
+      description = "Hermes Agent Gateway";
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
+      wantedBy = [ "multi-user.target" ];
+      unitConfig = {
+        ConditionPathExists = "/home/mitac/.hermes";
+      };
+      serviceConfig = {
+        Type = "simple";
+        User = "mitac";
+        Group = "users";
+        WorkingDirectory = "/home/mitac/.hermes";
+        Environment = [
+          "HOME=/home/mitac"
+          "HERMES_HOME=/home/mitac/.hermes"
+          "PATH=/home/mitac/.local/bin:/run/current-system/sw/bin"
+        ];
+        EnvironmentFile = "-/home/mitac/.hermes/.env";
+        # TODO: Verify exact ExecStart from ubuntu's ~/.config/systemd/user/hermes-gateway.service
+        ExecStart = "/home/mitac/.local/bin/hermes gateway run";
+        Restart = "on-failure";
+        RestartSec = 10;
+      };
+    };
 
-  # Hermes Agent gateway (~/.hermes + ~/.local/bin/hermes*)
-  systemd.services.hermes-gateway = {
-    description = "Hermes Agent Gateway";
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
-    wantedBy = [ "multi-user.target" ];
-    unitConfig = {
-      ConditionPathExists = "/home/mitac/.hermes";
+    # siesta-bot (Python venv under ~/siesta-bot, NOT Docker — per inventory)
+    siesta-bot = {
+      description = "siesta-bot Discord Bot";
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
+      wantedBy = [ "multi-user.target" ];
+      unitConfig = {
+        ConditionPathExists = "/home/mitac/siesta-bot/.venv/bin/python";
+      };
+      serviceConfig = {
+        Type = "simple";
+        User = "mitac";
+        Group = "users";
+        WorkingDirectory = "/home/mitac/siesta-bot";
+        Environment = [
+          "HOME=/home/mitac"
+          "PATH=/home/mitac/siesta-bot/.venv/bin:/run/current-system/sw/bin"
+        ];
+        EnvironmentFile = "-/home/mitac/siesta-bot/.env";
+        # TODO: Verify exact ExecStart from ubuntu's ~/.config/systemd/user/siesta-bot.service
+        ExecStart = "/home/mitac/siesta-bot/.venv/bin/python main.py";
+        Restart = "on-failure";
+        RestartSec = 10;
+      };
     };
-    serviceConfig = {
-      Type = "simple";
-      User = "mitac";
-      Group = "users";
-      WorkingDirectory = "/home/mitac/.hermes";
-      Environment = [
-        "HOME=/home/mitac"
-        "HERMES_HOME=/home/mitac/.hermes"
-        "PATH=/home/mitac/.local/bin:/run/current-system/sw/bin"
-      ];
-      EnvironmentFile = "-/home/mitac/.hermes/.env";
-      # TODO: Verify exact ExecStart from ubuntu's ~/.config/systemd/user/hermes-gateway.service
-      ExecStart = "/home/mitac/.local/bin/hermes gateway run";
-      Restart = "on-failure";
-      RestartSec = 10;
-    };
-  };
 
-  # siesta-bot (Python venv under ~/siesta-bot, NOT Docker — per inventory)
-  systemd.services.siesta-bot = {
-    description = "siesta-bot Discord Bot";
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
-    wantedBy = [ "multi-user.target" ];
-    unitConfig = {
-      ConditionPathExists = "/home/mitac/siesta-bot/.venv/bin/python";
+    # lecture-asr (~/lectures, uv Python 3.12 venv, kotoba-whisper-v2.0-faster)
+    lecture-asr = {
+      description = "Lecture ASR pipeline";
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
+      unitConfig = {
+        ConditionPathExists = "/home/mitac/lectures/asr-config.yaml";
+      };
+      serviceConfig = {
+        Type = "oneshot";
+        User = "mitac";
+        Group = "users";
+        WorkingDirectory = "/home/mitac/lectures";
+        Environment = [
+          "HOME=/home/mitac"
+          "PATH=/home/mitac/.local/bin:/run/current-system/sw/bin"
+        ];
+        EnvironmentFile = "-/home/mitac/.config/lecture-asr/gemini.env";
+        # TODO: Verify exact venv path and ExecStart from ubuntu's ~/.config/systemd/user/lecture-asr.service
+        ExecStart = "/home/mitac/lectures/.venv/bin/python -m lecture_asr --config /home/mitac/lectures/asr-config.yaml";
+      };
     };
-    serviceConfig = {
-      Type = "simple";
-      User = "mitac";
-      Group = "users";
-      WorkingDirectory = "/home/mitac/siesta-bot";
-      Environment = [
-        "HOME=/home/mitac"
-        "PATH=/home/mitac/siesta-bot/.venv/bin:/run/current-system/sw/bin"
-      ];
-      EnvironmentFile = "-/home/mitac/siesta-bot/.env";
-      # TODO: Verify exact ExecStart from ubuntu's ~/.config/systemd/user/siesta-bot.service
-      ExecStart = "/home/mitac/siesta-bot/.venv/bin/python main.py";
-      Restart = "on-failure";
-      RestartSec = 10;
-    };
-  };
 
-  # lecture-asr (~/lectures, uv Python 3.12 venv, kotoba-whisper-v2.0-faster)
-  systemd.services.lecture-asr = {
-    description = "Lecture ASR pipeline";
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
-    unitConfig = {
-      ConditionPathExists = "/home/mitac/lectures/asr-config.yaml";
+    # lecture-publish (hourly timer)
+    lecture-publish = {
+      description = "Lecture publish pipeline";
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
+      unitConfig = {
+        ConditionPathExists = "/home/mitac/lectures";
+      };
+      serviceConfig = {
+        Type = "oneshot";
+        User = "mitac";
+        Group = "users";
+        WorkingDirectory = "/home/mitac/lectures";
+        Environment = [
+          "HOME=/home/mitac"
+          "PATH=/home/mitac/.local/bin:/run/current-system/sw/bin"
+        ];
+        EnvironmentFile = "-/home/mitac/.config/lecture-asr/gemini.env";
+        # TODO: Verify exact ExecStart from ubuntu's ~/.config/systemd/user/lecture-publish.service
+        ExecStart = "/home/mitac/lectures/.venv/bin/python -m lecture_publish";
+      };
     };
-    serviceConfig = {
-      Type = "oneshot";
-      User = "mitac";
-      Group = "users";
-      WorkingDirectory = "/home/mitac/lectures";
-      Environment = [
-        "HOME=/home/mitac"
-        "PATH=/home/mitac/.local/bin:/run/current-system/sw/bin"
+
+    # ZNC Tailscale certificate renewal (replaces user cron `17 4 1 * *` UTC = 13:17 JST)
+    znc-tailscale-cert = {
+      description = "Renew Tailscale TLS certificate for ZNC";
+      after = [
+        "network-online.target"
+        "tailscaled.service"
+        "docker.service"
       ];
-      EnvironmentFile = "-/home/mitac/.config/lecture-asr/gemini.env";
-      # TODO: Verify exact venv path and ExecStart from ubuntu's ~/.config/systemd/user/lecture-asr.service
-      ExecStart = "/home/mitac/lectures/.venv/bin/python -m lecture_asr --config /home/mitac/lectures/asr-config.yaml";
+      wants = [ "network-online.target" ];
+      unitConfig = {
+        ConditionPathExists = "/home/mitac/bin/renew-znc-tailscale-cert.sh";
+      };
+      path = [
+        pkgs.bash
+        pkgs.coreutils
+        pkgs.docker
+        pkgs.tailscale
+      ];
+      serviceConfig = {
+        Type = "oneshot";
+        User = "mitac";
+        Group = "users";
+        Environment = [ "HOME=/home/mitac" ];
+        ExecStart = "${pkgs.bash}/bin/bash /home/mitac/bin/renew-znc-tailscale-cert.sh";
+      };
     };
-  };
+
+    # Generic Minecraft template (empty wantedBy: never started at boot).
+    # Concrete units for the 6 confirmed instances (ATM10, ATM9-Eureka, latest-vanila,
+    # mohist-1.20.1, paper-1.21.11, yower-1.21.1) are merged right below.
+    "minecraft@" = {
+      description = "Minecraft Server (%i)";
+      after = [ "network-online.target" ];
+      wants = [ "network-online.target" ];
+      wantedBy = [ ];
+      unitConfig = {
+        ConditionPathExists = "/home/mitac/minecraft/%i";
+      };
+      path = [
+        pkgs.jdk21_headless
+        pkgs.bash
+        pkgs.coreutils
+      ];
+      serviceConfig = {
+        Type = "simple";
+        User = "mitac";
+        Group = "users";
+        WorkingDirectory = "/home/mitac/minecraft/%i";
+        Environment = [ "HOME=/home/mitac" ];
+        EnvironmentFile = "-/home/mitac/minecraft/%i/.env";
+        ExecStart = "${minecraftRunner} %i";
+        SuccessExitStatus = [
+          0
+          143
+        ];
+        TimeoutStopSec = 60;
+        Restart = "no";
+      };
+    };
+  }
+  // lib.listToAttrs (
+    map (name: {
+      name = "minecraft@${name}";
+      value = mkMinecraftUnit name;
+    }) minecraftInstances
+  );
 
   systemd.paths.lecture-asr = {
     description = "Watch lecture ASR inbox for new recordings";
@@ -293,122 +440,37 @@ in
     };
   };
 
-  systemd.timers.lecture-asr = {
-    description = "Fallback timer for lecture ASR pipeline (every 30 min)";
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      # TODO: Verify schedule against ubuntu's ~/.config/systemd/user/lecture-asr.timer
-      OnUnitActiveSec = "30min";
-      OnBootSec = "5min";
-      Unit = "lecture-asr.service";
+  systemd.timers = {
+    lecture-asr = {
+      description = "Fallback timer for lecture ASR pipeline (every 30 min)";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        # TODO: Verify schedule against ubuntu's ~/.config/systemd/user/lecture-asr.timer
+        OnUnitActiveSec = "30min";
+        OnBootSec = "5min";
+        Unit = "lecture-asr.service";
+      };
     };
-  };
 
-  # lecture-publish (hourly timer)
-  systemd.services.lecture-publish = {
-    description = "Lecture publish pipeline";
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
-    unitConfig = {
-      ConditionPathExists = "/home/mitac/lectures";
+    lecture-publish = {
+      description = "Hourly timer for lecture publish pipeline";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        # TODO: Verify schedule against ubuntu's ~/.config/systemd/user/lecture-publish.timer
+        OnCalendar = "hourly";
+        Persistent = true;
+        Unit = "lecture-publish.service";
+      };
     };
-    serviceConfig = {
-      Type = "oneshot";
-      User = "mitac";
-      Group = "users";
-      WorkingDirectory = "/home/mitac/lectures";
-      Environment = [
-        "HOME=/home/mitac"
-        "PATH=/home/mitac/.local/bin:/run/current-system/sw/bin"
-      ];
-      EnvironmentFile = "-/home/mitac/.config/lecture-asr/gemini.env";
-      # TODO: Verify exact ExecStart from ubuntu's ~/.config/systemd/user/lecture-publish.service
-      ExecStart = "/home/mitac/lectures/.venv/bin/python -m lecture_publish";
-    };
-  };
 
-  systemd.timers.lecture-publish = {
-    description = "Hourly timer for lecture publish pipeline";
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      # TODO: Verify schedule against ubuntu's ~/.config/systemd/user/lecture-publish.timer
-      OnCalendar = "hourly";
-      Persistent = true;
-      Unit = "lecture-publish.service";
-    };
-  };
-
-  # ZNC Tailscale certificate renewal (replaces user cron `17 4 1 * *` UTC = 13:17 JST)
-  systemd.services.znc-tailscale-cert = {
-    description = "Renew Tailscale TLS certificate for ZNC";
-    after = [
-      "network-online.target"
-      "tailscaled.service"
-      "docker.service"
-    ];
-    wants = [ "network-online.target" ];
-    unitConfig = {
-      ConditionPathExists = "/home/mitac/bin/renew-znc-tailscale-cert.sh";
-    };
-    path = [
-      pkgs.bash
-      pkgs.coreutils
-      pkgs.docker
-      pkgs.tailscale
-    ];
-    serviceConfig = {
-      Type = "oneshot";
-      User = "mitac";
-      Group = "users";
-      Environment = [ "HOME=/home/mitac" ];
-      ExecStart = "${pkgs.bash}/bin/bash /home/mitac/bin/renew-znc-tailscale-cert.sh";
-    };
-  };
-
-  systemd.timers.znc-tailscale-cert = {
-    description = "Monthly ZNC Tailscale certificate renewal";
-    wantedBy = [ "timers.target" ];
-    timerConfig = {
-      OnCalendar = "*-*-01 13:17:00";
-      Persistent = true;
-      Unit = "znc-tailscale-cert.service";
-    };
-  };
-
-  # ---------------------------------------------------------------------------
-  # Minecraft on-demand template (6 instances under ~/minecraft; port 25565)
-  # ---------------------------------------------------------------------------
-  # Empty wantedBy: never started at boot. Start one instance on demand, e.g.:
-  #   sudo systemctl start minecraft@ATM9-Eureka
-  # TODO: Verify each of the 6 instance directory names under ~/minecraft and
-  # whether any instance needs custom JAVA_OPTS / start command beyond start.sh/run.sh.
-  systemd.services."minecraft@" = {
-    description = "Minecraft Server (%i)";
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
-    wantedBy = [ ];
-    unitConfig = {
-      ConditionPathExists = "/home/mitac/minecraft/%i";
-    };
-    path = [
-      pkgs.jdk21_headless
-      pkgs.bash
-      pkgs.coreutils
-    ];
-    serviceConfig = {
-      Type = "simple";
-      User = "mitac";
-      Group = "users";
-      WorkingDirectory = "/home/mitac/minecraft/%i";
-      Environment = [ "HOME=/home/mitac" ];
-      EnvironmentFile = "-/home/mitac/minecraft/%i/.env";
-      ExecStart = "${minecraftRunner} %i";
-      SuccessExitStatus = [
-        0
-        143
-      ];
-      TimeoutStopSec = 60;
-      Restart = "no";
+    znc-tailscale-cert = {
+      description = "Monthly ZNC Tailscale certificate renewal";
+      wantedBy = [ "timers.target" ];
+      timerConfig = {
+        OnCalendar = "*-*-01 13:17:00";
+        Persistent = true;
+        Unit = "znc-tailscale-cert.service";
+      };
     };
   };
 
