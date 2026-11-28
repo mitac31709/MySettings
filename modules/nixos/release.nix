@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "colorshell-service-icons" ];
+  system.nixos.tags = [ "hyprshell-alt-tab" ];
 }

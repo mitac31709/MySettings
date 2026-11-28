@@ -838,8 +838,8 @@ let
     }
     {
       section = "起動・終了";
-      label = "ワークスペース俯瞰 (Hyprspace: クリック切替 / ドラッグ移動 / Esc終了)";
-      keys = "Alt+Tab / Alt+Shift+Tab / 縦スワイプ";
+      label = "ウィンドウ切替 (Hyprshell: Alt長押し中にTab/Shift+Tabで選択)";
+      keys = "Alt+Tab / Alt+Shift+Tab";
     }
     {
       section = "起動・終了";
@@ -2379,7 +2379,42 @@ in
     openFlakeUpdate
     agentRunStatus
     pkgs.hyprendfield
+    pkgs.hyprshell
   ];
+
+  # Hyprshell (Windows-style Alt+Tab window switcher daemon; registers Alt+Tab binds via Hyprland Lua IPC).
+  xdg.configFile."hyprshell/config.ron".text = ''
+    (
+        version: 4,
+        windows: (
+            scale: 8.5,
+            items_per_row: 5,
+            switch: (
+                modifier: "alt",
+                filter_by: [],
+                switch_workspaces: false,
+            ),
+        ),
+    )
+  '';
+
+  systemd.user.services.hyprshell = {
+    Unit = {
+      Description = "Hyprshell Window Switcher Daemon";
+      PartOf = [ "graphical-session.target" ];
+      After = [ "graphical-session.target" ];
+      StartLimitIntervalSec = 30;
+      StartLimitBurst = 5;
+    };
+    Service = {
+      ExecStart = "${lib.getExe pkgs.hyprshell} run";
+      Restart = "on-failure";
+      RestartSec = 2;
+    };
+    Install = {
+      WantedBy = [ "graphical-session.target" ];
+    };
+  };
 
   # HyprEndfield (Arknights: Endfield HUD overlay) background daemon.
   systemd.user.services.hyprendfield = {
@@ -2425,7 +2460,6 @@ in
     portalPackage = null; # Provided by NixOS xdg.portal
     systemd.enable = false; # UWSM manages graphical-session.target
     xwayland.enable = true;
-    plugins = [ pkgs.hyprlandPlugins.hyprspace ];
 
     settings = {
       monitor = {
@@ -2797,39 +2831,7 @@ in
       hl.bind("XF86MonBrightnessDown", hl.dsp.exec_cmd(${builtins.toJSON "${brightnessctl} set 5%-"}), { locked = true, repeating = true })
       hl.bind(mod .. " + Escape",      hl.dsp.exec_cmd(${builtins.toJSON "${idleDpmsOffCmd}"}), { locked = true })
 
-      -- Hyprspace: workspace overview (Alt+Tab / Alt+Shift+Tab, Esc to close)
-      hl.config({
-        plugin = {
-          overview = {
-            panelColor = "${p.bg}",
-            panelBorderColor = "${p.border}",
-            workspaceActiveBackground = "${p.surfaceAlt}",
-            workspaceInactiveBackground = "${p.surface}",
-            workspaceActiveBorder = "${p.accent}",
-            workspaceInactiveBorder = "${p.borderStrong}",
-            panelHeight = 200,
-            panelBorderWidth = 2,
-            workspaceBorderSize = 2,
-            centerAligned = true,
-            affectStrut = false,
-            autoDrag = true,
-            exitOnClick = true,
-            exitOnSwitch = true,
-            showNewWorkspace = true,
-            showEmptyWorkspace = true,
-          },
-        },
-      })
-      hl.bind("ALT + TAB", function()
-        if hl.plugin and hl.plugin.overview then
-          hl.plugin.overview.toggle()
-        end
-      end)
-      hl.bind("ALT + SHIFT + TAB", function()
-        if hl.plugin and hl.plugin.overview then
-          hl.plugin.overview.toggle("all")
-        end
-      end)
+      -- Alt+Tab / Alt+Shift+Tab window switching is managed by hyprshell.service.
 
       -- Interactive resize submap
       hl.define_submap("resize", "escape", function()
