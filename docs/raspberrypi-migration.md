@@ -145,7 +145,7 @@ sudo systemctl start redis-server ntopng lecture-recorder.timer lecture-upload.t
 
 | 退避対象 | パス / 取得方法（実測サイズ目安） | 移行後の使い道 |
 |---|---|---|
-| ホームフォルダ一式 | `/home/mitac`（約 1.7GB）、`/home/shimesaba`（**約 1.9GB**）、`/home/grokbot`（約 1.3MB） | lecture 関連、Drogon リポジトリ（`sangakusenshu`）、code-server 設定（`~/.config/code-server/config.yaml`）、WoL 中継スクリプト（`~/wol`, `~/wol-pc`）等（不要な `factorio.tar` や `.sdkman` は除いて OK） |
+| ホームフォルダ一式 | `/home/mitac`（約 1.7GB）、`/home/shimesaba`（**約 1.9GB**）、`/home/grokbot`（約 1.3MB） | lecture 関連、Drogon リポジトリ（`sangakusenshu`）、code-server 設定（`~/.config/code-server/config.yaml`）、WoL 中継スクリプト（`~/wol`, `~/wol-pc`）等（不要な `factorio.tar`・`.sdkman`、および認証情報が混入している `/home/shimesaba/.bash_history` は除いて OK） |
 | NetworkManager 接続 | `/etc/NetworkManager/system-connections/` | `Wired connection 1`（有線 802.1x）、`Hazamaru AP-tr`、`eduroam` を `secrets/raspberrypi-nm-connections.age` に暗号化登録 |
 | Tailscale 状態 | `/var/lib/tailscale/` | 同じ Tailscale ノード名・IP（`100.71.240.112`）・exit node 設定を認証キー無しで引き継ぐ |
 | PostgreSQL 17 ダンプ | `sudo -u postgres pg_dumpall -p 5438 > pg17-all.sql`（クラスタ実測 約 39MB） | NixOS の PostgreSQL 17（ポート 5438）へそのままリストア（`/var/lib/postgresql` の生コピーより安全） |

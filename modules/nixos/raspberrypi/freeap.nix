@@ -123,13 +123,16 @@ in
     mode = "0755";
   };
 
-  # Ensure directories exist and expose freeap-count-notify.py at /usr/local/sbin.
+  # Ensure directories/files exist with proper ownership (dnsmasq drops to user `dnsmasq`)
+  # and expose freeap-count-notify.py at /usr/local/sbin.
   systemd.tmpfiles.rules = [
     "d /etc/hostapd 0700 root root -"
     "d /etc/usque 0700 root root -"
     "d /usr/local/sbin 0755 root root -"
     "d /var/lib/freeap-notify 0750 root root -"
-    "d /var/lib/misc 0755 root root -"
+    "d /var/lib/misc 0755 dnsmasq dnsmasq -"
+    "f /var/lib/misc/freeap.leases 0644 dnsmasq dnsmasq -"
+    "f /var/log/freeap-dns.log 0644 dnsmasq dnsmasq -"
     "L+ /usr/local/sbin/freeap-count-notify.py - - - - ${freeapCountNotifyScript}"
   ];
 
@@ -195,6 +198,7 @@ in
       dhcp-range = "10.42.0.10,10.42.0.254,255.255.255.0,60m";
       dhcp-leasefile = "/var/lib/misc/freeap.leases";
       log-facility = "/var/log/freeap-dns.log";
+      log-async = true;
       log-queries = true;
       log-dhcp = true;
       dhcp-option = [

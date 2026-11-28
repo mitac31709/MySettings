@@ -81,6 +81,7 @@ in
   };
 
   # Matches live /etc/systemd/system/campus-apload-report.service & .timer (18:00 JST).
+  # Intentionally disabled (wantedBy = []) to match the live Pi (replaced by 00:00:30 final timer).
   systemd.services.campus-apload-report = {
     description = "Post daily campus AP load graph to Discord";
     after = [ "network-online.target" ];
@@ -97,7 +98,7 @@ in
 
   systemd.timers.campus-apload-report = {
     description = "Daily campus AP load graph at 18:00 JST";
-    wantedBy = [ "timers.target" ];
+    wantedBy = [ ];
     timerConfig = {
       OnCalendar = "*-*-* 18:00:00";
       Persistent = true;
