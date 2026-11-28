@@ -104,6 +104,10 @@ in
   # Headless server: skip bootvine on the boot console so remote installs stay lean.
   services.bootvine.enable = false;
 
+  # Match live NucBox G3 SSD TRIM and Intel thermal management.
+  services.fstrim.enable = true;
+  services.thermald.enable = true;
+
   # Match current Ubuntu server locale (timezone Asia/Tokyo comes from common.nix).
   i18n.defaultLocale = "en_US.UTF-8";
   i18n.extraLocaleSettings = lib.mkForce { };
@@ -158,13 +162,11 @@ in
     extraConfig = ''
       Match Address 192.168.1.0/24,127.0.0.1/32,::1/128
         PasswordAuthentication yes
-        KbdInteractiveAuthentication yes
-        AuthenticationMethods any
+        AuthenticationMethods publickey password
 
       Match LocalAddress 100.124.196.22,fd7a:115c:a1e0::f101:c484 Address 100.64.0.0/10,fd7a:115c:a1e0::/48
         PasswordAuthentication yes
-        KbdInteractiveAuthentication yes
-        AuthenticationMethods any
+        AuthenticationMethods publickey password
     '';
   };
 
@@ -172,7 +174,9 @@ in
   # - mitac@NixOS comes from ../../secrets/id-wsl-builder.pub (no duplication).
   # - pi-lecture-upload keeps command=rrsync (using pkgs.rrsync on NixOS),
   #   restrict, and from="100.71.240.112" (raspberrypi Tailscale IP).
+  # Pin uid = 1000 to match live ubuntu (and znc container user 1000:1000).
   users.users.mitac = {
+    uid = 1000;
     extraGroups = [ "docker" ];
     openssh.authorizedKeys = {
       keyFiles = [
@@ -303,8 +307,8 @@ in
       };
 
       # TODO: Encrypt SLOWLINK_PSK=... (from ~/slowflow-vpn/psk) into
-      # secrets/ubuntu-zstdvpn-env.age (`secrets edit ubuntu-zstdvpn-env`) and
-      # verify the exact `-tls-auto ...` flags from live `docker inspect zstdvpn-server`.
+      # secrets/ubuntu-zstdvpn-env.age (`secrets edit ubuntu-zstdvpn-env`).
+      # Cmd matches live `docker inspect zstdvpn-server` verbatim.
       zstdvpn-server = {
         image = "alpine:3.20";
         privileged = true;
@@ -321,7 +325,12 @@ in
         cmd = [
           "sh"
           "-c"
-          ''apk add --no-cache iptables iproute2 && zstdvpn-server -listen 0.0.0.0:44123 -psk "$SLOWLINK_PSK" -tls-auto & pid=$!; sleep 2; sh /nat-up.sh sl0 enp3s0; wait "$pid"''
+          ''
+            apk add --no-cache iptables iproute2 >/dev/null && \
+              /usr/local/bin/zstdvpn-server -listen 0.0.0.0:44123 -psk "$SLOWLINK_PSK" -tls-auto > /tmp/server.log 2>&1 & \
+              sleep 1; sh /nat-up.sh sl0 enp3s0; \
+              tail -f /tmp/server.log
+          ''
         ];
       };
 
@@ -377,6 +386,9 @@ in
       "credentials=${winCredsPath}"
       "uid=mitac"
       "gid=users"
+      "dir_mode=0775"
+      "file_mode=0664"
+      "iocharset=utf8"
       "nofail"
       "_netdev"
       "x-systemd.automount"
@@ -470,6 +482,20 @@ in
         StartLimitIntervalSec = 0;
         ConditionPathExists = "/home/mitac/.local/share/lecture-asr/venv/bin/python";
       };
+      # publish_hook in asr-config.yaml invokes ~/lectures/bin/publish-transcripts.sh,
+      # which uses flock, python3, rsync, git, gh, sed, grep.
+      path = [
+        pkgs.bash
+        pkgs.coreutils
+        pkgs.util-linux
+        pkgs.python3
+        pkgs.rsync
+        pkgs.git
+        pkgs.gh
+        pkgs.openssh
+        pkgs.gnused
+        pkgs.gnugrep
+      ];
       serviceConfig = {
         Type = "oneshot";
         User = "mitac";
@@ -503,9 +529,14 @@ in
       path = [
         pkgs.bash
         pkgs.coreutils
+        pkgs.util-linux # flock
+        pkgs.python3 # publish-excludes.py
+        pkgs.rsync
         pkgs.git
         pkgs.gh
         pkgs.openssh
+        pkgs.gnused
+        pkgs.gnugrep
       ];
       serviceConfig = {
         Type = "oneshot";
@@ -515,7 +546,8 @@ in
           "HOME=/home/mitac"
           "PATH=/home/mitac/.local/bin:/run/current-system/sw/bin"
         ];
-        ExecStart = "/home/mitac/lectures/bin/publish-transcripts.sh";
+        # Run via pkgs.bash because live script starts with `#!/bin/bash` (absent on NixOS).
+        ExecStart = "${pkgs.bash}/bin/bash /home/mitac/lectures/bin/publish-transcripts.sh";
         Nice = 10;
       };
     };
@@ -535,6 +567,8 @@ in
       path = [
         pkgs.bash
         pkgs.coreutils
+        pkgs.diffutils # cmp
+        pkgs.util-linux # logger
         pkgs.docker
         pkgs.tailscale
       ];
@@ -661,6 +695,7 @@ in
     wakeonlan
     neovim
     uv
+    python3
     sl
     git
     tmux

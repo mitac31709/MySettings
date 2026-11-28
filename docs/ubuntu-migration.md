@@ -26,12 +26,12 @@ GMKtec NucBox G3（Intel N100 / 16GB RAM / Apacer 256GB NVMe）で動いてい�
   - `cloudflared`・Node 18・`snapd`・`cloud-init`・`open-vm-tools` も意図的に除外しています。
   - タイムゾーンは現行の `Etc/UTC` から `Asia/Tokyo` へ変更しています。
   - `services.tailscale.useRoutingFeatures = "server"` により IPv4 に加えて IPv6 転送も有効になります（現行 Ubuntu は IPv4 のみ転送）。
-- 移行前に残っている `TODO`（秘密・確認項目のみ）:
+- 移行前に残っている `TODO`（秘密・任意項目のみ）:
   - `/etc/win-credentials` の agenix 暗号化（`secrets/ubuntu-win-credentials.age`）
-  - `zstdvpn-server` 用の `SLOWLINK_PSK`（`~/slowflow-vpn/psk`）の agenix 暗号化（`secrets/ubuntu-zstdvpn-env.age`、`SLOWLINK_PSK=...` 形式）および `-tls-auto ...` 引数の実機確認
-  - ユニット外の秘密ファイル（`~/.hermes/.env`・`auth.json`、`~/siesta-bot/.env`、`~/.config/lecture-asr/gemini.env` 等）は退避から復元するか agenix へ移行
+  - `zstdvpn-server` 用の `SLOWLINK_PSK`（`~/slowflow-vpn/psk`）の agenix 暗号化（`secrets/ubuntu-zstdvpn-env.age`、`SLOWLINK_PSK=...` 形式）
+  - ユニット外の秘密ファイル（`~/.hermes/.env`・`auth.json`、`~/siesta-bot/.env`、`~/.config/lecture-asr/gemini.env`、`publish-transcripts.sh` 用 git/gh 認証等）は退避から復元するか agenix へ移行
   - （任意）NVMe を増設する予定があれば `hosts/ubuntu/disko.nix` の `/dev/nvme0n1` を `/dev/disk/by-id/...` に固定
-  - 公開鍵 4 本（`pi-lecture-upload` の `rrsync` 制限含む）、`hermes-gateway` / `siesta-bot` / `lecture-asr` / `lecture-publish` の実ユニット値、Minecraft 6 インスタンスの起動コマンド、単独 `docker run` の 7 コンテナ（`oci-containers`）は `modules/nixos/ubuntu.nix` へ実測値を反映済み
+  - 公開鍵 4 本（`pi-lecture-upload` の `rrsync` 制限含む）、`hermes-gateway` / `siesta-bot` / `lecture-asr` / `lecture-publish` の実ユニット値、Minecraft 6 インスタンスの起動コマンド、単独 `docker run` の 7 コンテナ（`oci-containers`、`zstdvpn-server` の実 `Cmd` 含む）は `modules/nixos/ubuntu.nix` へ実測値を反映済み
 
 ---
 
@@ -202,14 +202,14 @@ sudo systemctl start docker vpnserver
 
 | 項目 | 現行 Ubuntu 上のパス / コマンド | 権限・備考 |
 |---|---|---|
-| ホーム全体 | `/home/mitac/` | `.hermes`（3.3G）、`siesta-bot`、`lectures`（モデル 1.5G 含む）、`minecraft`（6 インスタンス: `ATM10` / `ATM9-Eureka` / `latest-vanila` / `mohist-1.20.1` / `paper-1.21.11` / `yower-1.21.1`）、`znc`、`ntopng`、`FindSenryu4Discord`、`slowflow-vpn`、`ts-ubuntu-at-exit`、`bin/`、`.ssh/`、`.gnupg/`、`.config/gh/`、`.config/lecture-asr/`、`.config/btop/`、`.config/systemd/user/` などを含む |
+| ホーム全体 | `/home/mitac/` | `.hermes`（3.3G）、`siesta-bot`、`lectures`（モデル 1.5G 含む）、`repos/Teiki-Test`（`lecture-publish` の push 先）、`minecraft`（6 インスタンス + `mcl` シンボリックリンク・`ATM9-server-fixes`）、`znc`、`ntopng`、`FindSenryu4Discord`、`slowflow-vpn`、`ts-ubuntu-at-exit`、`bin/`、`.ssh/`、`.gnupg/`、`.config/gh/`、`.config/lecture-asr/`、`.config/btop/`、`.config/systemd/user/` などを含む |
 | 停止中アプリのデータ（退避のみ） | `~/immich-app`（+ volume `immich_model-cache` 5.6G）、`~/AdGuardHome`、`~/kikoune`、`~/CloudflareOS`、`~/DiscordShogi` | NixOS 側には設定を作らずデータだけ保持 |
 | 廃止予定アプリのデータ（任意） | `~/NFAS26`、`~/.config/code-server` | 意図的に廃止する対象。念のため残したい場合のみ退避（`/home/mitac` 丸ごとコピーなら自動的に含まれる） |
 | SoftEther 設定・証明書 | `/usr/local/vpnserver/vpn_server.config` と同フォルダ内の証明書・`chain_certs` 等 | root 所有。`sudo` が必要 |
 | SSH ホスト鍵 | `/etc/ssh/ssh_host_*` | 再インストール後も他端末から `WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED` を出さないため。root 所有 |
 | Tailscale 状態 | `/var/lib/tailscale/` | ノード ID と `100.124.196.22` / `fd7a:115c:a1e0::f101:c484` を維持するため（SSH の `Match LocalAddress` にも必要）。root 所有 |
 | Docker ボリューム | `/var/lib/docker/volumes/`（`ts-ubuntu-at-exit-state`、`immich_model-cache`、各 compose の named volume） | bind mount 分は `/home/mitac` に含まれる。named volume は `docker volume ls` で確認し、Docker 停止中にコピーまたは `tar` で抜く |
-| ローカルビルドの Docker イメージ | `docker save findsenryu4discord-app`（その他 `docker images` でローカルビルド扱いがあれば同様） | `/var/lib/docker/volumes/` には含まれないため、そのまま戻す場合は `docker save` で退避する（または移行後に `docker compose build` で再ビルド） |
+| ローカルビルドの Docker イメージ | `docker save findsenryu4discord-app findsenryu4discord-migrate`（その他ローカルビルドがあれば同様） | `/var/lib/docker/volumes/` には含まれないため、そのまま戻す場合は `docker save` で退避する（または移行後に `docker compose build` で再ビルド） |
 | 各種 `.env`・認証ファイル | `~/.hermes/.env`、`~/.hermes/auth.json`、`~/siesta-bot/.env`、`~/.config/lecture-asr/gemini.env`、`~/slowflow-vpn/psk`、各 compose の `.env` | `/home/mitac` に含まれるが、漏れがないか個別確認する。`~/slowflow-vpn/psk` は agenix（`secrets/ubuntu-zstdvpn-env.age` に `SLOWLINK_PSK=...`）へ暗号化して管理する |
 | CIFS 資格情報 | `/etc/win-credentials` | root 所有（0600）。NixOS では agenix（`secrets/ubuntu-win-credentials.age`）へ暗号化して管理する |
 
@@ -231,7 +231,8 @@ docker volume ls
 
 # ローカルビルドの Docker イメージ保存（FindSenryu4Discord）
 mkdir -p /tmp/ubuntu-docker-images
-docker save findsenryu4discord-app | zstd -T0 -10 -o /tmp/ubuntu-docker-images/findsenryu4discord-app.tar.zst
+docker save findsenryu4discord-app findsenryu4discord-migrate \
+  | zstd -T0 -10 -o /tmp/ubuntu-docker-images/findsenryu4discord-images.tar.zst
 
 # root 領域のまとめ退避（一時的に /tmp/ubuntu-sys-backup へ集めて転送する例）
 sudo mkdir -p /tmp/ubuntu-sys-backup/{softether,ssh,tailscale,cifs,docker-volumes}
@@ -422,7 +423,7 @@ cp -a /path/to/backup/docker-volumes/. /var/lib/docker/volumes/
 systemctl start docker
 
 # ローカルビルドの Docker イメージを読み戻す（または FindSenryu4Discord で docker compose build）
-zstd -dc /path/to/backup/docker-images/findsenryu4discord-app.tar.zst | docker load
+zstd -dc /path/to/backup/docker-images/findsenryu4discord-images.tar.zst | docker load
 
 # 単独コンテナ 7 つは NixOS の virtualisation.oci-containers で宣言済み（systemd 管理）
 # home / agenix 復元後に起動・確認する（archiveteam-warrior は autoStart=false のため必要時のみ起動）
@@ -453,7 +454,11 @@ docker ps
    systemctl start hermes-gateway siesta-bot
    systemctl status hermes-gateway siesta-bot lecture-asr.path lecture-asr.timer lecture-publish.timer znc-tailscale-cert.timer
    ```
-3. `lecture-asr` の venv（`~/.local/share/lecture-asr/venv`）や `siesta-bot/.venv` が古い Ubuntu の `/usr/bin/python3` への壊れたシンボリックリンクを指している場合は、`uv` で venv を張り直します（`programs.nix-ld` が有効なので `ctranslate2` / `onnxruntime` の wheel もそのまま動きます）。
+3. `lecture-asr` の `publish_hook` が直接呼ぶ `~/lectures/bin/publish-transcripts.sh`（および手動実行する `~/bin/renew-znc-tailscale-cert.sh`）の先頭 shebang が `#!/bin/bash` のままだと NixOS では `/bin/bash` が無いため、復元後に `#!/usr/bin/env bash` へ直しておきます:
+   ```bash
+   su - mitac -c 'sed -i "1s|^#!/bin/bash$|#!/usr/bin/env bash|" ~/lectures/bin/publish-transcripts.sh ~/bin/renew-znc-tailscale-cert.sh'
+   ```
+4. `lecture-asr` の venv（`~/.local/share/lecture-asr/venv`）や `siesta-bot/.venv` が古い Ubuntu の `/usr/bin/python3` への壊れたシンボリックリンクを指している場合は、`uv` で venv を張り直します（`programs.nix-ld` が有効なので `ctranslate2` / `onnxruntime` の wheel もそのまま動きます）。
 
 ### 手順 8: CIFS マウント・Minecraft・restic バックアップの確認
 
