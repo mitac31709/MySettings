@@ -703,6 +703,8 @@ in
       # Qalculate! scientific calculator (Qt GUI `qalculate-qt` + CLI `qalc`).
       qalculate-qt
       libqalculate
+      # CrystalDiskInfo-like S.M.A.R.T. disk health GUI (Qt6, wraps smartctl).
+      qdiskinfo
       # Tilion Fortress: local stealth Chromium engine + `tilion` / `tilion-mcp` CLI (pkgs/tilion-fortress).
       tilion-fortress
     ]

@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "disable-ws10-autostart" ];
+  system.nixos.tags = [ "add-qdiskinfo" ];
 }
