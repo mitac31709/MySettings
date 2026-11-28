@@ -27,9 +27,9 @@ let
   backupUnit = "restic-backups-home.service";
 
   # Google Drive destination: rclone remote "gdrive" plus a per-host subpath
-  # (`<flakeTarget>-home`, e.g. chromebook-home / vaio-home) so multiple devices
-  # never fight over a single restic repo lock or overwrite each other's
-  # snapshots.
+  # (`<flakeTarget>-home`, e.g. chromebook-home / vaio-home / ubuntu-home) so
+  # multiple devices never fight over a single restic repo lock or overwrite
+  # each other's snapshots.
   repository = "rclone:gdrive:restic/${flakeTarget}-home";
 
   # Shared with `backup status` so the displayed retention matches the timer.

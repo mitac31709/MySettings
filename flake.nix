@@ -1,5 +1,5 @@
 {
-  description = "NixOS configuration for mitac (Hyprland (UWSM) + greetd, Chromebook delbin & VAIO)";
+  description = "NixOS configuration for mitac (Chromebook delbin, VAIO, & ubuntu home server)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -10,6 +10,11 @@
     # Declarative age-encrypted secrets (decrypted at activation using Bitwarden-backed master key).
     agenix = {
       url = "github:ryantm/agenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    # Declarative disk partitioning for nixos-anywhere hosts (e.g. ubuntu).
+    disko = {
+      url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     # Live systemd job tree on the boot console.
@@ -76,6 +81,7 @@
       nixpkgs,
       home-manager,
       agenix,
+      disko,
       alsa-ucm-conf-cros,
       bootvine,
       ...
@@ -93,6 +99,8 @@
         {
           flakeTarget,
           hostModule,
+          homeModule ? ./home/mitac.nix,
+          extraModules ? [ ],
         }:
         nixpkgs.lib.nixosSystem {
           inherit system;
@@ -102,6 +110,9 @@
             home-manager.nixosModules.home-manager
             agenix.nixosModules.default
             bootvine.nixosModules.default
+          ]
+          ++ extraModules
+          ++ [
             {
               # Links this generation to a git commit (shows in
               # `nixos-rebuild list-generations` / `nixos-version --json`).
@@ -183,7 +194,7 @@
                 # (e.g. ~/.config/user-dirs.dirs from xdg-user-dirs).
                 backupFileExtension = "backup";
                 extraSpecialArgs = { inherit inputs flakeTarget; };
-                users.mitac = import ./home/mitac.nix;
+                users.mitac = import homeModule;
               };
             }
           ];
@@ -200,6 +211,12 @@
         vaio = mkHost {
           flakeTarget = "vaio";
           hostModule = ./hosts/vaio;
+        };
+        ubuntu = mkHost {
+          flakeTarget = "ubuntu";
+          hostModule = ./hosts/ubuntu;
+          homeModule = ./home/server.nix;
+          extraModules = [ disko.nixosModules.disko ];
         };
         # Legacy alias so existing `.#mitac` rebuild commands keep working.
         mitac = chromebook;

@@ -26,4 +26,5 @@ in
   "opencode-service.json.age".publicKeys = masterKeys;
   "lan-mouse-chromebook.pem.age".publicKeys = masterKeys;
   "lan-mouse-vaio.pem.age".publicKeys = masterKeys;
+  "ubuntu-win-credentials.age".publicKeys = masterKeys;
 }

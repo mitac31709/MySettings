@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "cc-click-rqs-minimized" ];
+  system.nixos.tags = [ "add-ubuntu-host" ];
 }
