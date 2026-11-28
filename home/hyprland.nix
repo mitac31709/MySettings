@@ -2809,6 +2809,7 @@ in
             panelBorderWidth = 2,
             workspaceBorderSize = 2,
             centerAligned = true,
+            affectStrut = false,
             autoDrag = true,
             exitOnClick = true,
             exitOnSwitch = true,
