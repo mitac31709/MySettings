@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "backup-containers-agenix-hint" ];
+  system.nixos.tags = [ "power-save-mode" ];
 }

@@ -6,6 +6,7 @@
 # - 2-2: Background daemons (6 services) bar health pill + Control Center PageServices
 # - 2-3: JQuake live status indicator (systemd units + Hyprland open-window detection)
 # - 2-4: Unified Keep Screen On + Capsomnia (bar KeepAwake pill + Control Center TileKeepAwake & PageKeepAwake)
+# - 2-8: Power-save mode (bar PowerSave pill + Control Center TilePowerSave & PagePowerSave)
 # - 2-5: Startup sound bar indicator (state watcher + menu / toggle / play)
 # - 2-6: Direct bar launchers (Cheatsheet `?`, CPU/Mem -> btop, Network right-click & PageNetwork -> nmtui)
 # - 2-7: T3 Code agent-run pill + card (watches XDG_RUNTIME_DIR/agent-run-status.json)
@@ -21,6 +22,7 @@ baseColorshell.overrideAttrs (old: {
     cp ${./src/modules/updates.ts} src/modules/updates.ts
     cp ${./src/modules/cc-nav.ts} src/modules/cc-nav.ts
     cp ${./src/modules/keep-awake.ts} src/modules/keep-awake.ts
+    cp ${./src/modules/power-save.ts} src/modules/power-save.ts
     cp ${./src/modules/restic.ts} src/modules/restic.ts
     cp ${./src/modules/services.ts} src/modules/services.ts
     cp ${./src/modules/jquake.ts} src/modules/jquake.ts
@@ -32,6 +34,7 @@ baseColorshell.overrideAttrs (old: {
     cp ${./src/window/bar/widgets/Clock.tsx} src/window/bar/widgets/Clock.tsx
     cp ${./src/window/bar/widgets/JQuake.tsx} src/window/bar/widgets/JQuake.tsx
     cp ${./src/window/bar/widgets/KeepAwake.tsx} src/window/bar/widgets/KeepAwake.tsx
+    cp ${./src/window/bar/widgets/PowerSave.tsx} src/window/bar/widgets/PowerSave.tsx
     cp ${./src/window/bar/widgets/ResticBackup.tsx} src/window/bar/widgets/ResticBackup.tsx
     cp ${./src/window/bar/widgets/Services.tsx} src/window/bar/widgets/Services.tsx
     cp ${./src/window/bar/widgets/StartupSound.tsx} src/window/bar/widgets/StartupSound.tsx
@@ -46,7 +49,9 @@ baseColorshell.overrideAttrs (old: {
 
     cp ${./src/window/control-center/widgets/BatteryInfo.tsx} src/window/control-center/widgets/BatteryInfo.tsx
     cp ${./src/window/control-center/widgets/tiles/KeepAwake.tsx} src/window/control-center/widgets/tiles/KeepAwake.tsx
+    cp ${./src/window/control-center/widgets/tiles/PowerSave.tsx} src/window/control-center/widgets/tiles/PowerSave.tsx
     cp ${./src/window/control-center/widgets/pages/KeepAwake.tsx} src/window/control-center/widgets/pages/KeepAwake.tsx
+    cp ${./src/window/control-center/widgets/pages/PowerSave.tsx} src/window/control-center/widgets/pages/PowerSave.tsx
     cp ${./src/window/control-center/widgets/pages/Network.tsx} src/window/control-center/widgets/pages/Network.tsx
     cp ${./src/window/control-center/widgets/pages/Services.tsx} src/window/control-center/widgets/pages/Services.tsx
 
@@ -70,13 +75,13 @@ baseColorshell.overrideAttrs (old: {
     substituteInPlace src/window/bar/index.tsx \
       --replace-fail \
         'import { Tray } from "./widgets/Tray";' \
-        $'import { Tray } from "./widgets/Tray";\nimport { Cheatsheet } from "./widgets/Cheatsheet";\nimport { ResticBackup } from "./widgets/ResticBackup";\nimport { SystemStats } from "./widgets/SystemStats";\nimport { KeepAwake } from "./widgets/KeepAwake";\nimport { Services } from "./widgets/Services";\nimport { JQuake } from "./widgets/JQuake";\nimport { StartupSound } from "./widgets/StartupSound";\nimport { Updates } from "./widgets/Updates";\nimport { AgentRun } from "./widgets/AgentRun";' \
+        $'import { Tray } from "./widgets/Tray";\nimport { Cheatsheet } from "./widgets/Cheatsheet";\nimport { ResticBackup } from "./widgets/ResticBackup";\nimport { SystemStats } from "./widgets/SystemStats";\nimport { KeepAwake } from "./widgets/KeepAwake";\nimport { PowerSave } from "./widgets/PowerSave";\nimport { Services } from "./widgets/Services";\nimport { JQuake } from "./widgets/JQuake";\nimport { StartupSound } from "./widgets/StartupSound";\nimport { Updates } from "./widgets/Updates";\nimport { AgentRun } from "./widgets/AgentRun";' \
       --replace-fail \
         '<Apps />' \
         $'<Apps />\n                    <Cheatsheet />' \
       --replace-fail \
         '<Tray />' \
-        $'<AgentRun />\n                    <ResticBackup />\n                    <SystemStats />\n                    <KeepAwake />\n                    <Services />\n                    <JQuake />\n                    <StartupSound />\n                    <Updates />\n                    <Tray />'
+        $'<AgentRun />\n                    <ResticBackup />\n                    <SystemStats />\n                    <PowerSave />\n                    <KeepAwake />\n                    <Services />\n                    <JQuake />\n                    <StartupSound />\n                    <Updates />\n                    <Tray />'
 
     substituteInPlace src/widget/Notification.tsx \
       --replace-fail \
@@ -89,10 +94,10 @@ baseColorshell.overrideAttrs (old: {
     substituteInPlace src/window/control-center/index.tsx \
       --replace-fail \
         'import { Sliders } from "./widgets/Sliders";' \
-        $'import { Sliders } from "./widgets/Sliders";\nimport { BatteryInfo } from "./widgets/BatteryInfo";\nimport { PageKeepAwake } from "./widgets/pages/KeepAwake";\nimport { PageServices } from "./widgets/pages/Services";\nimport { registerControlCenterPages } from "../../modules/cc-nav";' \
+        $'import { Sliders } from "./widgets/Sliders";\nimport { BatteryInfo } from "./widgets/BatteryInfo";\nimport { PageKeepAwake } from "./widgets/pages/KeepAwake";\nimport { PagePowerSave } from "./widgets/pages/PowerSave";\nimport { PageServices } from "./widgets/pages/Services";\nimport { registerControlCenterPages } from "../../modules/cc-nav";' \
       --replace-fail \
         '<PageMicrophone $type="page" />' \
-        $'<PageMicrophone $type="page" />\n                                <PageKeepAwake $type="page" />\n                                <PageServices $type="page" />' \
+        $'<PageMicrophone $type="page" />\n                                <PageKeepAwake $type="page" />\n                                <PagePowerSave $type="page" />\n                                <PageServices $type="page" />' \
       --replace-fail \
         '<Sliders ccWindow={this as ControlCenterWindow} />' \
         $'<Sliders ccWindow={this as ControlCenterWindow} />\n                                    <BatteryInfo />' \
@@ -103,10 +108,10 @@ baseColorshell.overrideAttrs (old: {
     substituteInPlace src/window/control-center/widgets/tiles/index.tsx \
       --replace-fail \
         'import { TileNightLight } from "./NightLight";' \
-        $'import { TileNightLight } from "./NightLight";\nimport { TileKeepAwake } from "./KeepAwake";' \
+        $'import { TileNightLight } from "./NightLight";\nimport { TileKeepAwake } from "./KeepAwake";\nimport { TilePowerSave } from "./PowerSave";' \
       --replace-fail \
         '    TileNightLight' \
-        $'    TileNightLight,\n    TileKeepAwake'
+        $'    TileNightLight,\n    TileKeepAwake,\n    TilePowerSave'
 
     # Fix Chinese strings left in upstream ja_JP locale
     substituteInPlace src/i18n/lang/ja_JP.ts \

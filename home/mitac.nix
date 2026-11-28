@@ -23,6 +23,7 @@
     ./vivaldi-pwa-desktop.nix
     ./jquake.nix
     ./capsomnia.nix
+    ./power-save.nix
     ./activitywatch.nix
     ./whatpulse.nix
     ./hyprland.nix

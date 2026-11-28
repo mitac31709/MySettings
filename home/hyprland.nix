@@ -2112,6 +2112,18 @@ let
     }
     {
       section = powerSection;
+      label = "省電力モード ON/OFF 切替（CPU・描画・輝度・BT・裏方サービス）";
+      run = "${lib.getExe config.mitac.scripts.powerSave} toggle";
+      mode = "exec";
+    }
+    {
+      section = powerSection;
+      label = "省電力モード状態確認";
+      run = "${lib.getExe config.mitac.scripts.powerSave} status";
+      mode = "term";
+    }
+    {
+      section = powerSection;
       label = "輝度 40%（消費の主因を下げる）";
       run = "${brightnessctl} set 40%";
       mode = "exec";
@@ -2943,6 +2955,7 @@ in
         "COLORSHELL_CAPS_CMD=${capsomniaPkg}/bin/cpsm"
         "COLORSHELL_CAPS_SETTINGS_CMD=${capsomniaPkg}/bin/capsomnia-settings"
         "COLORSHELL_CAPS_MENU_CMD=${capsomniaPkg}/bin/capsomnia-menu"
+        "COLORSHELL_POWER_SAVE_CMD=${lib.getExe config.mitac.scripts.powerSave}"
         "COLORSHELL_JQUAKE_OPEN_CMD=${lib.getExe jquakeOpen}"
         "COLORSHELL_JQUAKE_TOGGLE_CMD=${lib.getExe jquakeToggle}"
         "COLORSHELL_JQUAKE_MENU_CMD=${lib.getExe jquakeMenu}"

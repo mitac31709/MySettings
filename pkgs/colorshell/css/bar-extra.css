@@ -132,6 +132,52 @@
   box-shadow: 0 0 6px #f06d7d;
 }
 
+/* Power-save mode pill */
+.bar-container .power-save {
+  padding: 0 7px;
+}
+.bar-container .power-save image {
+  -gtk-icon-size: 14px;
+}
+.bar-container .power-save.off image {
+  color: var(--fg-disabled);
+}
+.bar-container .power-save.on {
+  background: var(--bg-secondary);
+}
+.bar-container .power-save.on image,
+.bar-container .power-save.on .ps-label {
+  color: #52d699;
+}
+.bar-container .power-save.error {
+  background: var(--bg-secondary);
+}
+.bar-container .power-save.error image,
+.bar-container .power-save.error .ps-label {
+  color: #f06d7d;
+}
+.bar-container .power-save .ps-label {
+  font-size: 11px;
+  font-weight: 700;
+}
+.bar-container .power-save .ps-dot {
+  min-width: 7px;
+  min-height: 7px;
+  border-radius: 999px;
+}
+.bar-container .power-save .ps-dot.off {
+  background: var(--fg-disabled);
+  opacity: 0.45;
+}
+.bar-container .power-save .ps-dot.on {
+  background: #34c759;
+  box-shadow: 0 0 6px #34c759;
+}
+.bar-container .power-save .ps-dot.error {
+  background: #f06d7d;
+  box-shadow: 0 0 6px #f06d7d;
+}
+
 /* Background 6-daemon status pill */
 .bar-container .services {
   padding: 0 7px;
