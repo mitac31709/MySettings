@@ -1595,6 +1595,12 @@ let
       run = "atuin stats";
       mode = "term";
     }
+    {
+      section = "開発";
+      label = "直前のコマンドを sudo 付きで再実行（権限エラー時）";
+      run = "sudo !!  # bash の履歴展開 !! = 直前のコマンド";
+      mode = "show";
+    }
     # ディスク容量
     {
       section = "ディスク容量";
