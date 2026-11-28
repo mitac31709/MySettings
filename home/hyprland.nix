@@ -1052,13 +1052,8 @@ let
     }
     {
       section = inputSection;
-      label = "←↓↑→ ・ … など";
+      label = "←↓↑→ ・ … など（Meltype 日本語入力時・ZSymbols）";
       keys = "zh/zj/zk/zl / z/ z.";
-    }
-    {
-      section = inputSection;
-      label = "矢印キー ←↓↑→（keyd・Shift/Ctrl併用可）";
-      keys = "Z+H/J/K/L（同時押し）";
     }
     {
       section = inputSection;

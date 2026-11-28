@@ -43,6 +43,7 @@ let
         ]' '
         .SettingsVersion = (.SettingsVersion // 10)
         | .ModeIndicator = (.ModeIndicator // "OnSwitchAndFocus")
+        | .ZSymbols = true
         | (
             if (.AppRules | type) == "array" and (.AppRules | length) > 0 then .AppRules
             elif ($defaults | length) > 0 and ($defaults[0].AppRules | type) == "array"
