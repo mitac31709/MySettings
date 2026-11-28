@@ -351,7 +351,7 @@ git diff --stat -- flake.nix flake.lock pkgs/ || true
 if [[ -t 0 ]]; then
   host="${MITAC_FLAKE_HOST:-$(hostname)}"
   case "$host" in
-    vaio|chromebook) ;;
+    vaio|chromebook|ubuntu) ;;
     *) host="chromebook" ;;
   esac
   hiragino_dir="${MITAC_HIRAGINO_DIR:-/home/mitac/.local/share/fonts/hiragino-otf}"
