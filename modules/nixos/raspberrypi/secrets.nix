@@ -164,8 +164,8 @@ in
     (lib.optionalAttrs (hasSecretFile "raspberrypi-lecture-upload-key.age") {
       "raspberrypi-lecture-upload-key" = {
         file = secretsDir + "/raspberrypi-lecture-upload-key.age";
-        owner = "mitac";
-        group = "users";
+        owner = "lecrec";
+        group = "lecrec";
         mode = "0400";
       };
     })

@@ -1,9 +1,8 @@
 # FreeWiFi Access Point (freeap0 @ 10.42.0.1/24 on USB TP-Link rtw_8822bu)
 # with hostapd, dnsmasq, Cloudflare WARP/MASQUE upstream (usque0 @ 172.16.0.2/32),
-# fail-closed policy routing, nftables NAT, conntrack flowlog, and client-count notifier.
+# fail-closed policy routing (table 142), nftables NAT, conntrack flowlog, and client-count notifier.
 {
   config,
-  lib,
   pkgs,
   ...
 }:
@@ -30,32 +29,31 @@ let
     else
       "-/etc/freeap-notify.env";
 
-  usqueUpHelper = pkgs.writeShellScript "usque-up-helper" ''
+  # Invoked by usque `--on-connect`. Runs restored /etc/usque/up.sh if present
+  # (via nixpkgs bash so #!/bin/bash scripts work on NixOS), otherwise brings up
+  # usque0 with 172.16.0.2/32 and routes table `freeap` (142) through it.
+  usqueOnConnect = pkgs.writeShellScript "usque-on-connect" ''
     set -euo pipefail
-    if [ -x /etc/usque/up.sh ]; then
-      exec /etc/usque/up.sh
+    if [ -f /etc/usque/up.sh ]; then
+      exec ${pkgs.bash}/bin/bash /etc/usque/up.sh "$@"
     fi
-    for _ in $(seq 1 30); do
-      if ${pkgs.iproute2}/bin/ip link show usque0 >/dev/null 2>&1; then
-        ${pkgs.iproute2}/bin/ip addr replace 172.16.0.2/32 dev usque0
-        ${pkgs.iproute2}/bin/ip link set usque0 up
-        ${pkgs.iproute2}/bin/ip route replace default dev usque0 table freeap
-        exit 0
-      fi
-      sleep 0.5
-    done
-    echo "usque-up-helper: timed out waiting for usque0" >&2
-    exit 1
+    ${pkgs.iproute2}/bin/ip addr replace 172.16.0.2/32 dev usque0
+    ${pkgs.iproute2}/bin/ip link set usque0 up
+    ${pkgs.iproute2}/bin/ip route replace default dev usque0 table freeap
   '';
 
   freeapPolicyScript = pkgs.writeShellScript "freeap-policy-setup" ''
     set -euo pipefail
-    # Fail-closed fallback in table `freeap`: if usque0 goes down, clients get
+    # Fail-closed fallback in table `freeap` (142): if usque0 goes down, clients get
     # unreachable instead of leaking onto campus eth0/wlan0 or tailscale0.
     ${pkgs.iproute2}/bin/ip route replace unreachable default metric 4294967295 table freeap
     if ${pkgs.iproute2}/bin/ip link show usque0 >/dev/null 2>&1; then
       ${pkgs.iproute2}/bin/ip route replace default dev usque0 table freeap
     fi
+
+    # Rule 99: keep local FreeAP subnet traffic (e.g. to 10.42.0.1 DHCP/DNS) on table main.
+    ${pkgs.iproute2}/bin/ip rule del pref 99 2>/dev/null || true
+    ${pkgs.iproute2}/bin/ip rule add pref 99 from all to 10.42.0.0/24 iif freeap0 lookup main
 
     ${pkgs.iproute2}/bin/ip rule del pref 100 2>/dev/null || true
     ${pkgs.iproute2}/bin/ip rule add pref 100 from 10.42.0.0/24 iif freeap0 lookup freeap
@@ -76,11 +74,11 @@ in
     };
   };
 
-  # Routing table `freeap` (replaces /etc/iproute2/rt_tables.d/freeap.conf).
+  # Routing table `freeap` = 142 (matches /etc/iproute2/rt_tables.d/freeap.conf on the live Pi).
   networking.iproute2 = {
     enable = true;
     rttablesExtraConfig = ''
-      200 freeap
+      142 freeap
     '';
   };
 
@@ -169,7 +167,7 @@ in
     };
   };
 
-  # DHCP (10.42.0.10-254) & DNS (10.42.0.1 -> 1.1.1.1 / 1.0.0.1 via usque0 src 172.16.0.2).
+  # DHCP (10.42.0.10-254, 60m lease) & DNS (10.42.0.1 -> 1.1.1.1 / 1.0.0.1 via usque0 src 172.16.0.2).
   services.dnsmasq = {
     enable = true;
     resolveLocalQueries = false;
@@ -181,7 +179,7 @@ in
       domain-needed = true;
       bogus-priv = true;
       no-resolv = true;
-      dhcp-range = "10.42.0.10,10.42.0.254,255.255.255.0,12h";
+      dhcp-range = "10.42.0.10,10.42.0.254,255.255.255.0,60m";
       dhcp-option = [
         "option:router,10.42.0.1"
         "option:dns-server,10.42.0.1"
@@ -205,28 +203,33 @@ in
     ];
   };
 
-  # Cloudflare WARP / MASQUE TUN upstream (usque0 @ 172.16.0.2/32).
+  # Cloudflare WARP / MASQUE TUN upstream (usque0 @ 172.16.0.2/32), matching the live Pi flags.
   # TODO: Populate secrets/raspberrypi-usque-config.age (or restore /etc/usque/config.json)
-  # and verify exact usque CLI flags + /etc/usque/up.sh from the live Pi.
+  # and restore /etc/usque/up.sh if custom post-connect commands are needed beyond the default helper.
   systemd.services.usque = {
     description = "Usque Cloudflare WARP/MASQUE TUN (usque0)";
     wantedBy = [ "multi-user.target" ];
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
+    path = with pkgs; [
+      bash
+      coreutils
+      iproute2
+      nftables
+    ];
     unitConfig = {
       ConditionPathExists = usqueConfigPath;
     };
     serviceConfig = {
       Type = "simple";
       WorkingDirectory = "/etc/usque";
-      ExecStart = "${pkgs.usque}/bin/usque -c ${usqueConfigPath} nativetun --interface-name usque0 --mtu 1280";
-      ExecStartPost = "${usqueUpHelper}";
+      ExecStart = "${pkgs.usque}/bin/usque -c ${usqueConfigPath} nativetun --http2 -n usque0 -S --always-reconnect --on-connect ${usqueOnConnect}";
       Restart = "always";
       RestartSec = 5;
     };
   };
 
-  # Policy routing rules (fail-closed table `freeap`).
+  # Policy routing rules (fail-closed table `freeap` = 142, rules 99/100/101).
   systemd.services.freeap-policy = {
     description = "FreeWiFi fail-closed policy routing (freeap0 -> usque0)";
     wantedBy = [ "multi-user.target" ];
@@ -247,22 +250,22 @@ in
     };
   };
 
-  # Log conntrack DESTROY events for FreeAP traffic auditing.
+  # Log conntrack DESTROY events for FreeAP traffic auditing (matches live Pi args & log path).
   systemd.services.freeap-flowlog = {
     description = "FreeWiFi conntrack DESTROY flow logger";
     wantedBy = [ "multi-user.target" ];
     after = [ "network.target" ];
     serviceConfig = {
       Type = "simple";
-      ExecStart = "${pkgs.conntrack-tools}/bin/conntrack -E -e DESTROY -o timestamp";
+      ExecStart = "${pkgs.conntrack-tools}/bin/conntrack -E -e DESTROY -s 10.42.0.0/24 -o id,extended";
+      StandardOutput = "append:/var/lib/freeap-notify/destroy.log";
       Restart = "always";
       RestartSec = 5;
     };
   };
 
-  # Periodic FreeAP client-count notifier.
-  # TODO: Verify exact script path (/usr/local/sbin/freeap-count-notify.py vs /home/mitac/...),
-  # timer cadence, and populate secrets/raspberrypi-freeap-notify-env.age.
+  # Periodic FreeAP client-count notifier (every minute, matching live Pi timer).
+  # TODO: Populate secrets/raspberrypi-freeap-notify-env.age and restore /usr/local/sbin/freeap-count-notify.py.
   systemd.services.freeap-count-notify = {
     description = "FreeWiFi connected client count notifier";
     after = [ "network-online.target" ];
@@ -282,12 +285,11 @@ in
   };
 
   systemd.timers.freeap-count-notify = {
-    description = "Run FreeWiFi client count notifier periodically";
+    description = "Run FreeWiFi client count notifier every minute";
     wantedBy = [ "timers.target" ];
     timerConfig = {
-      # TODO: Confirm exact OnCalendar cadence from /etc/systemd/system/freeap-count-notify.timer on live Pi.
-      OnCalendar = "*:0/15";
-      Persistent = true;
+      OnBootSec = "2min";
+      OnUnitActiveSec = "1min";
     };
   };
 

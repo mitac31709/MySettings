@@ -1,6 +1,11 @@
 # Lecture audio recording (USB document camera `hw:CARD=Camera,DEV=0`)
 # and rsync upload to ubuntu (mitac@100.124.196.22:~/lectures/inbox).
-{ config, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 let
   lecturePython = pkgs.python3.withPackages (ps: [ ps.pyyaml ]);
@@ -12,21 +17,23 @@ let
     else
       "-/etc/lecture-recorder/timetable.env";
 
-  # TODO: Confirm whether the live scripts stay under /opt/lecture-recorder or are
-  # relocated under /home/mitac/lecture-recorder, and verify the exact upload script
-  # path & arguments from /etc/systemd/system/lecture-{recorder,upload}.service.
+  hasUploadKey = config.age.secrets ? "raspberrypi-lecture-upload-key";
+  uploadKeyPath =
+    if hasUploadKey then config.age.secrets."raspberrypi-lecture-upload-key".path else null;
+
   recorderScript = "/opt/lecture-recorder/lecrec.py";
-  uploadScript = "/opt/lecture-recorder/upload.sh";
 in
 {
   systemd.tmpfiles.rules = [
     "d /var/lib/lecrec 0750 lecrec lecrec -"
+    "d /var/lib/lecrec/.ssh 0700 lecrec lecrec -"
     "d /etc/lecture-recorder 0750 root lecrec -"
-  ];
+  ]
+  ++ lib.optional hasUploadKey "L+ /var/lib/lecrec/.ssh/id_lecture_upload - - - - ${uploadKeyPath}";
 
-  # Runs every minute at :05 to record scheduled classes from the Sunplus USB Camera.
+  # Runs every minute at :05 (`lecrec.py tick`) to record scheduled classes from the Sunplus USB Camera.
   systemd.services.lecture-recorder = {
-    description = "Lecture audio recorder (USB document camera)";
+    description = "Lecture audio recorder tick (USB document camera)";
     after = [ "sound.target" ];
     path = with pkgs; [
       alsa-utils
@@ -44,13 +51,17 @@ in
       SupplementaryGroups = [ "audio" ];
       WorkingDirectory = "/var/lib/lecrec";
       EnvironmentFile = timetableEnvFile;
-      # TODO: Verify exact ExecStart flags (and whether the script lives under /home/mitac/...).
-      ExecStart = "${lecturePython}/bin/python3 ${recorderScript}";
+      ExecStart = "${lecturePython}/bin/python3 ${recorderScript} tick";
+      NoNewPrivileges = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      PrivateTmp = true;
+      ReadWritePaths = [ "/var/lib/lecrec" ];
     };
   };
 
   systemd.timers.lecture-recorder = {
-    description = "Trigger lecture-recorder every minute at :05";
+    description = "Trigger lecture-recorder tick every minute at :05";
     wantedBy = [ "timers.target" ];
     timerConfig = {
       OnCalendar = "*-*-* *:*:05";
@@ -58,10 +69,11 @@ in
     };
   };
 
-  # Runs every 10 minutes to rsync recordings over Tailscale to ubuntu:~/lectures/inbox.
+  # Runs 3min after boot then every 10min (`lecrec.py upload`) as User=lecrec
+  # to rsync recordings over Tailscale to ubuntu:~/lectures/inbox.
   # TODO: Populate secrets/raspberrypi-lecture-upload-key.age (write-only SSH key for
-  # mitac@100.124.196.22) and confirm whether lecture-upload runs as User=lecrec or User=mitac
-  # and what script path under /opt/lecture-recorder or /home/mitac it invokes.
+  # mitac@100.124.196.22) and verify /etc/lecture-recorder/upload.conf points to
+  # /run/agenix/raspberrypi-lecture-upload-key (or /var/lib/lecrec/.ssh/id_lecture_upload).
   systemd.services.lecture-upload = {
     description = "Upload recorded lectures to ubuntu:~/lectures/inbox";
     after = [
@@ -76,15 +88,24 @@ in
       rsync
       lecturePython
     ];
+    environment = lib.optionalAttrs hasUploadKey {
+      LECTURE_UPLOAD_KEY = uploadKeyPath;
+    };
     unitConfig = {
-      ConditionPathExists = uploadScript;
+      ConditionPathExists = recorderScript;
     };
     serviceConfig = {
       Type = "oneshot";
-      User = "mitac";
-      Group = "users";
+      User = "lecrec";
+      Group = "lecrec";
       WorkingDirectory = "/var/lib/lecrec";
-      ExecStart = "${pkgs.bash}/bin/bash ${uploadScript}";
+      EnvironmentFile = timetableEnvFile;
+      ExecStart = "${lecturePython}/bin/python3 ${recorderScript} upload";
+      NoNewPrivileges = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      PrivateTmp = true;
+      ReadWritePaths = [ "/var/lib/lecrec" ];
     };
   };
 
@@ -92,8 +113,8 @@ in
     description = "Upload recorded lectures to ubuntu every 10 minutes";
     wantedBy = [ "timers.target" ];
     timerConfig = {
-      OnCalendar = "*:0/10";
-      Persistent = true;
+      OnBootSec = "3min";
+      OnUnitActiveSec = "10min";
     };
   };
 }

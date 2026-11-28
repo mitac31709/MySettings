@@ -12,9 +12,7 @@
 let
   hasCodeServerEnv = config.age.secrets ? "raspberrypi-code-server-env";
 
-  # TODO: Confirm exact binary path & working directory from /etc/systemd/system/shimesaba.service
-  # on the live Pi (inventory: `/home/shimesaba/repo/drogon/...`, app `sangakusenshu`).
-  shimesabaBinary = "/home/shimesaba/repo/drogon/build/sangakusenshu";
+  shimesabaBinary = "/home/shimesaba/repo/drogon/sangakusenshu/build/sangakusenshu";
 in
 {
   # code-server running as shimesaba on 127.0.0.1:8080.
@@ -70,7 +68,7 @@ in
       Type = "simple";
       User = "shimesaba";
       Group = "users";
-      WorkingDirectory = "/home/shimesaba/repo/drogon";
+      WorkingDirectory = "/home/shimesaba/repo/drogon/sangakusenshu";
       ExecStart = shimesabaBinary;
       Restart = "on-failure";
       RestartSec = 5;

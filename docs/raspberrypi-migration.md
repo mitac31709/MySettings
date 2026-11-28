@@ -104,6 +104,37 @@ sync
 
 書き終わったら SD カードを Raspberry Pi 5 に戻して電源を入れるだけで、移行前の Raspberry Pi OS がそのまま起動します（EEPROM の起動順は変えていないため変更不要です）。起動後、学内有線 802.1x と Tailscale が繋がることを確認してください。
 
+### 補助：再起動せずに取るライブ（ファイル単位）バックアップ
+
+**元の Raspberry Pi OS へ丸ごと戻す本命は、上の「SD カードを抜いて別 PC で取る zstd イメージ（または Clonezilla）」のままです。** 現在の Pi には LVM スナップショットが無く、稼働中の SD カード全体をそのまま `dd` するとファイルシステムの不整合が起きるおそれがあります。またファイル単位からの起動復旧は、新しい SD に vfat + ext4 を切り直して `cmdline.txt` / `fstab` の PARTUUID を合わせる手間がかかります。
+
+あくまで「移行前に停止できない間のデータ保険」として、起動したままファイル単位のアーカイブを `ubuntu`（空き 147GB）や Google Drive へ二重に残したい場合の手順です（現在の Pi には `rclone` が入っていないため、別マシン経由で Google Drive へ送ります）。
+
+- 目安サイズ：不要な `factorio` / `.sdkman` / `journal` を除いて約 13GB → **zstd 圧縮後 8〜14GB**（初回アップロード目安 30〜90 分）。SD 自身の空き（9.7GB）には収まらないため、必ず別ホストや外付け先へ出力します。
+
+```bash
+# 1. PostgreSQL 17 をダンプし、書き込みが発生する timer / DB 系だけ短時間止める
+sudo -u postgres pg_dumpall -p 5438 | zstd > /tmp/pg17-all.sql.zst
+sudo systemctl stop lecture-recorder.timer lecture-upload.timer ntopng redis-server
+
+# 2. `/` と `/boot/firmware` をファイル単位でアーカイブ（例: SSH 経由で ubuntu へ直接書き出す）
+sudo tar --acls --xattrs --numeric-owner --one-file-system \
+  --exclude='/home/mitac/factorio' \
+  --exclude='/home/mitac/.sdkman' \
+  --exclude='/var/log/journal' \
+  --exclude='/tmp' \
+  --exclude='/var/tmp' \
+  -cpf - / /boot/firmware \
+  | zstd -T0 -10 \
+  | ssh mitac@100.124.196.22 'cat > ~/backups/raspberrypi-live.tar.zst'
+
+# 3. 止めたサービス・タイマーを戻す
+sudo systemctl start redis-server ntopng lecture-recorder.timer lecture-upload.timer
+
+# 4. rclone のある別マシンから Google Drive へ送る
+# rclone copy -P raspberrypi-live.tar.zst pg17-all.sql.zst gdrive:backups/raspberrypi/
+```
+
 ---
 
 ## 2. 個別に退避しておくデータ一覧
@@ -112,17 +143,18 @@ sync
 
 退避先の例として、手元の PC または `ubuntu`（空き容量十分）へ保存します。秘密情報（802.1x パスワード・SSH 秘密鍵・usque 設定・hostapd パスフレーズ等）を含むため、**Git には絶対にコミットせず**、権限 `0700` の一時フォルダで扱ってください。
 
-| 退避対象 | パス / 取得方法 | 移行後の使い道 |
+| 退避対象 | パス / 取得方法（実測サイズ目安） | 移行後の使い道 |
 |---|---|---|
-| ホームフォルダ一式 | `/home/mitac`, `/home/shimesaba`, `/home/grokbot` | lecture 関連、Drogon リポジトリ、code-server 設定（`~/.config/code-server/config.yaml`）、`wol-pc` 等（不要な `factorio.tar` や `.sdkman` は除いて OK） |
+| ホームフォルダ一式 | `/home/mitac`（約 1.7GB）、`/home/shimesaba`（**約 1.9GB**）、`/home/grokbot`（約 1.3MB） | lecture 関連、Drogon リポジトリ（`sangakusenshu`）、code-server 設定（`~/.config/code-server/config.yaml`）、`wol-pc` 等（不要な `factorio.tar` や `.sdkman` は除いて OK） |
 | NetworkManager 接続 | `/etc/NetworkManager/system-connections/` | `Wired connection 1`（有線 802.1x）、`Hazamaru AP-tr`、`eduroam` を `secrets/raspberrypi-nm-connections.age` に暗号化登録 |
 | Tailscale 状態 | `/var/lib/tailscale/` | 同じ Tailscale ノード名・IP（`100.71.240.112`）・exit node 設定を認証キー無しで引き継ぐ |
-| PostgreSQL 17 ダンプ | `sudo -u postgres pg_dumpall -p 5438 > pg17-all.sql` | NixOS の PostgreSQL 17（ポート 5438）へそのままリストア（`/var/lib/postgresql` の生コピーより安全） |
-| usque 設定 | `/etc/usque/`（`config.json`, `up.sh`） | `config.json` は `secrets/raspberrypi-usque-config.age` へ。`up.sh` の内容も確認・配置 |
-| hostapd / FreeAP 設定 | `/etc/hostapd/freeap.conf`, `/etc/freeap-notify.env`, `/etc/nftables.d/freeap-usque.nft`, `/var/lib/freeap-notify` | `freeap.conf` は `secrets/raspberrypi-freeap-hostapd.age` へ、`freeap-notify.env` は `secrets/raspberrypi-freeap-notify-env.age` へ |
-| ntopng / Redis データ | `/var/lib/ntopng/`, `/var/lib/redis/`, `/etc/ntopng/ntopng.conf` | 計測履歴の引き継ぎ＋`-m`（ローカルネット指定）の確認 |
+| PostgreSQL 17 ダンプ | `sudo -u postgres pg_dumpall -p 5438 > pg17-all.sql`（クラスタ実測 約 39MB） | NixOS の PostgreSQL 17（ポート 5438）へそのままリストア（`/var/lib/postgresql` の生コピーより安全） |
+| usque 設定 | `/etc/usque/`（`config.json`, `up.sh`、約 12KB） | `config.json` は `secrets/raspberrypi-usque-config.age` へ。`up.sh` も配置して `--on-connect` から利用 |
+| hostapd / FreeAP 設定 | `/etc/hostapd/freeap.conf`, `/etc/freeap-notify.env`, `/etc/nftables.d/freeap-usque.nft`, `/var/lib/freeap-notify`（約 964KB） | `freeap.conf` は `secrets/raspberrypi-freeap-hostapd.age` へ、`freeap-notify.env` は `secrets/raspberrypi-freeap-notify-env.age` へ |
+| ntopng / Redis データ | `/var/lib/ntopng/`（**約 728MB**）、`/var/lib/redis/`（約 100KB）、`/etc/ntopng/ntopng.conf` | 計測履歴の引き継ぎ（`/var/lib/ntopng` は 728MB あるため退避先の空きに注意） |
+| 追加 CA 証明書 | `/usr/local/share/ca-certificates/burp-ca.crt`（939B） | 継続利用する場合、`modules/nixos/raspberrypi/default.nix` の `security.pki.certificateFiles` に追加 |
 | SSH ホスト鍵 | `/etc/ssh/ssh_host_*` | 再インストール後も他端末から `REMOTE HOST IDENTIFICATION HAS CHANGED` が出ないように引き継ぐ |
-| カスタムスクリプト・設定 | `/opt/lecture-recorder/`, `/etc/lecture-recorder/`, `/var/lib/lecrec/`, `/usr/local/sbin/{campus-apload,freeap,ux302nc}*`, `/var/lib/campus-apload/`, `/etc/udev/rules.d/99-ux302nc.rules`, `/etc/systemd/system/*.{service,timer}`, `/etc/sudoers.d/90-grokbot` | NixOS 側の TODO プレースホルダ（パス・env・udev ルール・grokbot 公開鍵）を埋めて復元 |
+| カスタムスクリプト・設定 | `/opt/lecture-recorder/`, `/etc/lecture-recorder/`, `/var/lib/lecrec/`（約 96KB）, `/usr/local/sbin/{campus-apload,freeap,ux302nc}*`, `/var/lib/campus-apload/`（約 7.4MB）, `/etc/udev/rules.d/99-ux302nc.rules`, `/etc/systemd/system/*.{service,timer}`, `/etc/sudoers.d/90-grokbot` | スクリプト本体の復元と、残りの TODO（udev の VID:PID・`grokbot` 公開鍵・sudoers 等）の最終確認 |
 
 ### 退避コマンド例（現在の Raspberry Pi 上で実行）
 
@@ -151,6 +183,7 @@ sudo tar --acls --xattrs --numeric-owner \
   /etc/ntopng/ntopng.conf \
   /var/lib/ntopng \
   /var/lib/redis \
+  /usr/local/share/ca-certificates/burp-ca.crt \
   /etc/ssh/ssh_host_* \
   /opt/lecture-recorder \
   /etc/lecture-recorder \
@@ -179,10 +212,10 @@ SD カードを書き換える前に、手元の PC（このリポジトリ `MyS
    - `secrets/raspberrypi-usque-config.age`（`/etc/usque/config.json` の中身）
    - `secrets/raspberrypi-freeap-notify-env.age`（`/etc/freeap-notify.env` の中身）
    - `secrets/raspberrypi-lecture-timetable-env.age`（`/etc/lecture-recorder/timetable.env` の中身）
-   - `secrets/raspberrypi-lecture-upload-key.age`（`ubuntu:~/lectures/inbox` 書き込み専用 SSH 秘密鍵）
+   - `secrets/raspberrypi-lecture-upload-key.age`（`ubuntu:~/lectures/inbox` 書き込み専用 SSH 秘密鍵、`lecrec` 所有で展開）
    - `secrets/raspberrypi-campus-apload-env.age`（Discord Webhook 等の環境変数）
    - （任意）`secrets/raspberrypi-code-server-env.age`（`config.yaml` ではなく環境変数でパスワードを渡す場合）
-2. コード内の `TODO` を退避ファイルの実測値に合わせて埋める（`grokbot` の SSH 公開鍵、TP-Link アダプタの MAC アドレス、UX302NC の udev ルール、`lecture-recorder` / `campus-apload` / `shimesaba` の実パス等）。
+2. コード内の残りの `TODO` を退避ファイルの実測値に合わせて埋める（`grokbot` の SSH 公開鍵、`sudoers.d` の必要ルール、TP-Link アダプタの MAC アドレス、UX302NC の `99-ux302nc.rules` の VID:PID、`/etc/nftables.d/freeap-usque.nft` の差分、必要に応じて `burp-ca.crt`）。
 
 ---
 

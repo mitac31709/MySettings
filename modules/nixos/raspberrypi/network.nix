@@ -56,14 +56,14 @@
     usb-modeswitch
   ];
 
-  # TODO: Copy the exact udev rules from /etc/udev/rules.d/99-ux302nc.rules on the
-  # live Pi (UX302NC VID:PID modeswitch & ux302nc-bind@ trigger) into extraRules below.
+  # Bind Prolific NCXX UX302NC USB modem via ux302nc-bind@.service on attach.
+  # TODO: Compare with /etc/udev/rules.d/99-ux302nc.rules on the live Pi to pin the exact
+  # idVendor/idProduct and any modeswitch action if different.
   services.udev.extraRules = ''
-    # TODO: Populate UX302NC rules from /etc/udev/rules.d/99-ux302nc.rules
+    ACTION=="add", SUBSYSTEM=="usb", ATTRS{product}=="*UX302NC*", TAG+="systemd", ENV{SYSTEMD_WANTS}+="ux302nc-bind@%k.service"
   '';
 
-  # TODO: Verify exact script path and arguments from /etc/systemd/system/ux302nc-bind@.service
-  # and /usr/local/sbin/ux302nc-*.sh on the live Pi.
+  # TODO: Verify exact script path/args from /etc/systemd/system/ux302nc-bind@.service on the live Pi.
   systemd.services."ux302nc-bind@" = {
     description = "Bind Prolific NCXX UX302NC modem (%I)";
     after = [ "ModemManager.service" ];
@@ -84,8 +84,8 @@
     };
   };
 
-  # TODO: Verify exact script path and schedule/type from /etc/systemd/system/ux302nc-regwatch.service
-  # on the live Pi.
+  # Matches live Pi unit type (oneshot).
+  # TODO: Verify exact script path/trigger (boot vs timer) from /etc/systemd/system/ux302nc-regwatch.service on the live Pi.
   systemd.services.ux302nc-regwatch = {
     description = "Watch UX302NC cellular registration (povo WWAN)";
     after = [
@@ -103,10 +103,8 @@
       ConditionPathExists = "/usr/local/sbin/ux302nc-regwatch.sh";
     };
     serviceConfig = {
-      Type = "simple";
+      Type = "oneshot";
       ExecStart = "/usr/local/sbin/ux302nc-regwatch.sh";
-      Restart = "on-failure";
-      RestartSec = 10;
     };
   };
 

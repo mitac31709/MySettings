@@ -12,10 +12,10 @@ let
     else
       "-/etc/campus-apload.env";
 
-  # TODO: Verify exact script paths and arguments from /etc/systemd/system/campus-apload-*.service
-  # on the live Pi (and move the Discord webhook URL into secrets/raspberrypi-campus-apload-env.age).
+  # TODO: Move the Discord webhook URL into secrets/raspberrypi-campus-apload-env.age
+  # if campus-apload-report.py currently hardcodes it.
   logScript = "/usr/local/sbin/campus-apload-log.py";
-  finalScript = "/usr/local/sbin/campus-apload-final.py";
+  reportScript = "/usr/local/sbin/campus-apload-report.py";
 in
 {
   systemd.tmpfiles.rules = [
@@ -57,13 +57,13 @@ in
       curl
     ];
     unitConfig = {
-      ConditionPathExists = finalScript;
+      ConditionPathExists = reportScript;
     };
     serviceConfig = {
       Type = "oneshot";
       WorkingDirectory = "/var/lib/campus-apload";
       EnvironmentFile = aploadEnvFile;
-      ExecStart = "${aploadPython}/bin/python3 ${finalScript}";
+      ExecStart = "${aploadPython}/bin/python3 ${reportScript} --final";
     };
   };
 
