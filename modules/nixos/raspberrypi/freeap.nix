@@ -46,6 +46,8 @@ let
 
   freeapPolicyScript = pkgs.writeShellScript "freeap-policy-setup" ''
     set -euo pipefail
+    # Keep FreeAP's own subnet reachable in table `freeap` (142) (matches live freeap-policy.sh).
+    ${pkgs.iproute2}/bin/ip route replace 10.42.0.0/24 dev freeap0 table freeap || true
     # Fail-closed fallback in table `freeap` (142): if usque0 goes down, clients get
     # unreachable instead of leaking onto campus eth0/wlan0 or tailscale0.
     ${pkgs.iproute2}/bin/ip route replace unreachable default metric 4294967295 table freeap
@@ -168,6 +170,10 @@ in
     serviceConfig = {
       Type = "simple";
       ExecStart = "${pkgs.hostapd}/bin/hostapd ${hostapdConfigPath}";
+      # Matches live freeap-hostapd.service: ensure table 142 has the local freeap0 subnet route.
+      ExecStartPost = pkgs.writeShellScript "freeap-hostapd-route" ''
+        ${pkgs.iproute2}/bin/ip route replace 10.42.0.0/24 dev freeap0 table 142 || true
+      '';
       Restart = "on-failure";
       RestartSec = 5;
     };

@@ -146,6 +146,7 @@ in
     extraSetFlags = [
       "--operator=mitac"
       "--advertise-exit-node"
+      "--accept-dns=false"
     ];
   };
 

@@ -49,11 +49,23 @@ in
     };
   };
 
-  # Drogon library available for rebuilding/running sangakusenshu if re-enabled.
-  environment.systemPackages = [ pkgs.drogon ];
+  # Drogon library and native build toolchain for rebuilding sangakusenshu on the Pi.
+  environment.systemPackages = with pkgs; [
+    drogon
+    cmake
+    gnumake
+    gcc
+    gdb
+    pkg-config
+    jsoncpp
+    openssl
+    zlib
+    libpq
+  ];
 
   # Defined as a systemd unit but intentionally disabled (wantedBy = []),
-  # matching the current Raspberry Pi OS state. Start manually with `systemctl start shimesaba`.
+  # matching the current Raspberry Pi OS unit (runs as root in build/ so relative
+  # resources/ resolves, with Restart=always). Start manually with `systemctl start shimesaba`.
   systemd.services.shimesaba = {
     description = "shimesaba Drogon web service (sangakusenshu)";
     wantedBy = [ ];
@@ -66,11 +78,9 @@ in
     };
     serviceConfig = {
       Type = "simple";
-      User = "shimesaba";
-      Group = "users";
-      WorkingDirectory = "/home/shimesaba/repo/drogon/sangakusenshu";
+      WorkingDirectory = "/home/shimesaba/repo/drogon/sangakusenshu/build";
       ExecStart = shimesabaBinary;
-      Restart = "on-failure";
+      Restart = "always";
       RestartSec = 5;
     };
   };

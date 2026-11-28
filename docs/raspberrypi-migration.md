@@ -145,7 +145,7 @@ sudo systemctl start redis-server ntopng lecture-recorder.timer lecture-upload.t
 
 | 退避対象 | パス / 取得方法（実測サイズ目安） | 移行後の使い道 |
 |---|---|---|
-| ホームフォルダ一式 | `/home/mitac`（約 1.7GB）、`/home/shimesaba`（**約 1.9GB**）、`/home/grokbot`（約 1.3MB） | lecture 関連、Drogon リポジトリ（`sangakusenshu`）、code-server 設定（`~/.config/code-server/config.yaml`）、`wol-pc` 等（不要な `factorio.tar` や `.sdkman` は除いて OK） |
+| ホームフォルダ一式 | `/home/mitac`（約 1.7GB）、`/home/shimesaba`（**約 1.9GB**）、`/home/grokbot`（約 1.3MB） | lecture 関連、Drogon リポジトリ（`sangakusenshu`）、code-server 設定（`~/.config/code-server/config.yaml`）、WoL 中継スクリプト（`~/wol`, `~/wol-pc`）等（不要な `factorio.tar` や `.sdkman` は除いて OK） |
 | NetworkManager 接続 | `/etc/NetworkManager/system-connections/` | `Wired connection 1`（有線 802.1x）、`Hazamaru AP-tr`、`eduroam` を `secrets/raspberrypi-nm-connections.age` に暗号化登録 |
 | Tailscale 状態 | `/var/lib/tailscale/` | 同じ Tailscale ノード名・IP（`100.71.240.112`）・exit node 設定を認証キー無しで引き継ぐ |
 | PostgreSQL 17 ダンプ | `sudo -u postgres pg_dumpall -p 5438 > pg17-all.sql`（クラスタ実測 約 39MB） | NixOS の PostgreSQL 17（ポート 5438）へそのままリストア（`/var/lib/postgresql` の生コピーより安全） |
@@ -214,7 +214,9 @@ SD カードを書き換える前に、手元の PC（このリポジトリ `MyS
    - `secrets/raspberrypi-lecture-timetable-env.age`（`/etc/lecture-recorder/timetable.env` の中身）
    - `secrets/raspberrypi-lecture-upload-key.age`（`/var/lib/lecrec/.ssh/id_ed25519` に展開される `ubuntu` 書き込み専用 SSH 秘密鍵、`lecrec` 所有）
    - （任意）`secrets/raspberrypi-code-server-env.age`（`config.yaml` ではなく環境変数でパスワードを渡す場合）
-2. 必要に応じて `/usr/local/share/ca-certificates/burp-ca.crt` を `modules/nixos/raspberrypi/default.nix` の `security.pki.certificateFiles` に追加する（その他の udev / nftables / `up.sh` / 運用スクリプト / sudoers / SSH 公開鍵はすでに Nix 側へ反映済み）。
+2. 残りの確認事項（TODO）：
+   - 必要に応じて `/usr/local/share/ca-certificates/burp-ca.crt` を `modules/nixos/raspberrypi/default.nix` の `security.pki.certificateFiles` に追加する（その他の udev / nftables / `up.sh` / 運用スクリプト / sudoers / SSH 公開鍵はすでに Nix 側へ反映済み）。
+   - TODO: 内蔵 Wi-Fi のファームウェア（`cyfmac43455-sdio.bin`）を minimal のまま残すか要確認（現在は NixOS 標準版のファームウェアを使用。minimal を維持したい場合は `hardware.firmware` を上書きして差し替える）。
 
 ---
 
@@ -336,8 +338,10 @@ tailscale status
 
 ### ステップ 5：ホームフォルダ・カスタムスクリプト・各種状態ディレクトリの復元
 
+`/home/mitac` には WoL 中継用の `~/wol`・`~/wol-pc` も含まれます（`wakeonlan` は Nix 側で導入済み）。`campus-apload`・`freeap-count-notify`・`ux302nc` のスクリプト本体は Nix 側で `/usr/local/sbin` に配置済みのため、ここでは `/opt/lecture-recorder` とデータディレクトリを中心に復元します。
+
 ```bash
-# ホームフォルダ（mitac / shimesaba / grokbot）
+# ホームフォルダ（mitac: ~/wol・~/wol-pc 含む / shimesaba / grokbot）
 sudo rsync -aHAX /path/to/backup/home/mitac/ /home/mitac/
 sudo rsync -aHAX /path/to/backup/home/shimesaba/ /home/shimesaba/
 sudo rsync -aHAX /path/to/backup/home/grokbot/ /home/grokbot/
@@ -345,8 +349,8 @@ sudo chown -R mitac:users /home/mitac
 sudo chown -R shimesaba:users /home/shimesaba
 sudo chown -R grokbot:users /home/grokbot
 
-# lecture-recorder / campus-apload / freeap / ux302nc のスクリプトとデータ
-sudo mkdir -p /opt/lecture-recorder /etc/lecture-recorder /usr/local/sbin
+# lecture-recorder 本体と各種データディレクトリ
+sudo mkdir -p /opt/lecture-recorder /etc/lecture-recorder
 sudo rsync -aHAX /path/to/backup/opt/lecture-recorder/ /opt/lecture-recorder/
 sudo rsync -aHAX /path/to/backup/etc/lecture-recorder/ /etc/lecture-recorder/
 sudo rsync -aHAX /path/to/backup/var/lib/lecrec/ /var/lib/lecrec/

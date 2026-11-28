@@ -21,7 +21,19 @@
   networking.hostName = lib.mkDefault flakeTarget;
 
   time.timeZone = "Asia/Tokyo";
-  services.timesyncd.enable = true;
+  # Matches live /etc/systemd/timesyncd.conf.d/10-campus-ntp.conf.
+  services.timesyncd = {
+    enable = true;
+    servers = [
+      "ntp.tokyo-ct.ac.jp"
+      "172.20.0.19"
+      "172.20.0.18"
+    ];
+    fallbackServers = [
+      "time.google.com"
+      "ntp.nict.jp"
+    ];
+  };
 
   # Match existing Raspberry Pi OS locale while keeping UTF-8 Japanese available
   # for matplotlib graph rendering (campus-apload-final).
@@ -77,8 +89,18 @@
     wget
     rsync
     btop
+    htop
     gh
     tmux
+    screen
+    tree
+    ncdu
+    strace
+    inetutils # telnet
+    unzip
+    zip
+    wakeonlan
+    speedtest-cli
     jq
     iperf3
     iw
