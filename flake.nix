@@ -1,5 +1,12 @@
 {
-  description = "NixOS configuration for mitac (Hyprland (UWSM) + greetd, Chromebook delbin & VAIO)";
+  description = "NixOS configuration for mitac (Hyprland (UWSM) + greetd, Chromebook delbin, VAIO & Raspberry Pi 5)";
+
+  nixConfig = {
+    extra-substituters = [ "https://nixos-raspberrypi.cachix.org" ];
+    extra-trusted-public-keys = [
+      "nixos-raspberrypi.cachix.org-1:4iMO9LXa8BqhU+Rpg6LQKiGa2lsNh/j2oiYLNOQ5sPI="
+    ];
+  };
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -68,6 +75,9 @@
       url = "https://downloads.cursor.com/grokbot/stable/a5927fa2ba82336a29f9343babd28b4c903abbb2/linux/x64/grok-bot_1.2.3_amd64.deb";
       flake = false;
     };
+    # Raspberry Pi 5 vendor kernel, firmware, bootloader, and SD image support.
+    # Do not follow nixpkgs so builds hit nixos-raspberrypi.cachix.org.
+    nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi/main";
   };
 
   outputs =
@@ -78,6 +88,7 @@
       agenix,
       alsa-ucm-conf-cros,
       bootvine,
+      nixos-raspberrypi,
       ...
     }@inputs:
     let
@@ -203,18 +214,47 @@
         };
         # Legacy alias so existing `.#mitac` rebuild commands keep working.
         mitac = chromebook;
+        # Raspberry Pi 5 (8GB, aarch64) headless server.
+        raspberrypi = nixos-raspberrypi.lib.nixosSystem {
+          specialArgs = {
+            inherit inputs;
+            flakeTarget = "raspberrypi";
+          };
+          modules = [
+            agenix.nixosModules.default
+            ./hosts/raspberrypi
+          ];
+        };
       };
 
-      packages.${system} = {
-        # Colorshell's T3 status bridge. Same sources the hosts install.
-        agent-run-status =
-          let
-            pkgs = import nixpkgs {
-              inherit system;
-              config.allowUnfree = true;
-            };
-          in
-          pkgs.callPackage ./pkgs/agent-run-status { };
+      packages = {
+        ${system} = {
+          # Colorshell's T3 status bridge. Same sources the hosts install.
+          agent-run-status =
+            let
+              pkgs = import nixpkgs {
+                inherit system;
+                config.allowUnfree = true;
+              };
+            in
+            pkgs.callPackage ./pkgs/agent-run-status { };
+        };
+
+        aarch64-linux = {
+          # Pre-configured flashable SD card image for Raspberry Pi 5.
+          raspberrypi-sd-image =
+            (nixos-raspberrypi.lib.nixosSystem {
+              specialArgs = {
+                inherit inputs;
+                flakeTarget = "raspberrypi";
+              };
+              modules = [
+                agenix.nixosModules.default
+                nixos-raspberrypi.nixosModules.sd-image
+                ./hosts/raspberrypi
+              ];
+            }).config.system.build.sdImage;
+        };
       };
     };
 }
