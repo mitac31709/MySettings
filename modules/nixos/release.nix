@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "fix-hyprland-gaps-out" ];
+  system.nixos.tags = [ "revert-side-bar-16-9" ];
 }

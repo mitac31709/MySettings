@@ -94,9 +94,6 @@ baseColorshell.overrideAttrs (old: {
 
     substituteInPlace src/window/bar/index.tsx \
       --replace-fail \
-        'heightRequest={46}' \
-        'heightRequest={45}' \
-      --replace-fail \
         'import { Tray } from "./widgets/Tray";' \
         $'import { Cheatsheet } from "./widgets/Cheatsheet";\nimport { ResticBackup } from "./widgets/ResticBackup";\nimport { SystemStats } from "./widgets/SystemStats";\nimport { KeepAwake } from "./widgets/KeepAwake";\nimport { PowerSave } from "./widgets/PowerSave";\nimport { AgentRun } from "./widgets/AgentRun";' \
       --replace-fail \

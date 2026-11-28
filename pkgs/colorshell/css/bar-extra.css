@@ -1,10 +1,5 @@
 /* MySettings: Top-bar native widgets & status highlights */
 
-/* Keep inner bar pill height at 40px inside the 45px (9*5) top-bar reserved zone */
-.bar-container {
-  padding-top: 5px;
-}
-
 /* Agent run pill (hidden until a T3 Code thread is working or waiting) */
 .bar-container .agent-run {
   background: var(--bg-secondary);
