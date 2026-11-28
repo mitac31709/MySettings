@@ -45,9 +45,14 @@ in
   ++ lib.optional hasUploadKey "L+ /var/lib/lecrec/.ssh/id_ed25519 - - - - ${uploadKeyPath}";
 
   # Runs every minute at :05 (`lecrec.py tick`) to record scheduled classes from the Sunplus USB Camera.
+  # Matches live /etc/systemd/system/lecture-recorder.service & .timer.
   systemd.services.lecture-recorder = {
     description = "Lecture audio recorder tick (USB document camera)";
-    after = [ "sound.target" ];
+    after = [
+      "sound.target"
+      "network-online.target"
+    ];
+    wants = [ "network-online.target" ];
     path = with pkgs; [
       alsa-utils
       coreutils
@@ -65,6 +70,10 @@ in
       WorkingDirectory = "/var/lib/lecrec";
       EnvironmentFile = timetableEnvFile;
       ExecStart = "${lecturePython}/bin/python3 ${recorderScript} tick";
+      KillMode = "mixed";
+      TimeoutStopSec = 30;
+      Nice = -5;
+      IOSchedulingClass = "best-effort";
       NoNewPrivileges = true;
       ProtectSystem = "strict";
       ProtectHome = true;
@@ -79,6 +88,7 @@ in
     timerConfig = {
       OnCalendar = "*-*-* *:*:05";
       AccuracySec = "1s";
+      Persistent = false;
     };
   };
 
@@ -111,6 +121,7 @@ in
       WorkingDirectory = "/var/lib/lecrec";
       EnvironmentFile = timetableEnvFile;
       ExecStart = "${lecturePython}/bin/python3 ${recorderScript} upload";
+      Nice = 10;
       NoNewPrivileges = true;
       ProtectSystem = "strict";
       ProtectHome = true;

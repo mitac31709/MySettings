@@ -191,6 +191,9 @@ in
   }"
   ++ lib.optional (hasSecretFile "raspberrypi-freeap-hostapd.age") "L+ /etc/hostapd/freeap.conf - - - - ${
     config.age.secrets."raspberrypi-freeap-hostapd".path
+  }"
+  ++ lib.optional (hasSecretFile "raspberrypi-lecture-timetable-env.age") "L+ /etc/lecture-recorder/timetable.env - - - - ${
+    config.age.secrets."raspberrypi-lecture-timetable-env".path
   }";
 
   # Run before NetworkManager.service so wired 802.1x (eth0) and campus Wi-Fi

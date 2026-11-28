@@ -65,7 +65,7 @@ in
       };
       ipv4 = {
         method = "auto";
-        route-metric = 800;
+        route-metric = 900;
       };
       ipv6 = {
         method = "auto";

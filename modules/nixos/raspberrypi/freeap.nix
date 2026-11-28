@@ -50,7 +50,7 @@ let
     ${pkgs.iproute2}/bin/ip route replace 10.42.0.0/24 dev freeap0 table freeap || true
     # Fail-closed fallback in table `freeap` (142): if usque0 goes down, clients get
     # unreachable instead of leaking onto campus eth0/wlan0 or tailscale0.
-    ${pkgs.iproute2}/bin/ip route replace unreachable default metric 4294967295 table freeap
+    ${pkgs.iproute2}/bin/ip route replace unreachable default metric 4000 table freeap
     if ${pkgs.iproute2}/bin/ip link show usque0 >/dev/null 2>&1; then
       ${pkgs.iproute2}/bin/ip route replace default dev usque0 metric 10 table freeap
     fi
@@ -65,13 +65,20 @@ let
     ${pkgs.iproute2}/bin/ip rule del pref 101 2>/dev/null || true
     ${pkgs.iproute2}/bin/ip rule add pref 101 from 172.16.0.2 lookup freeap
   '';
+
+  freeapPolicyStopScript = pkgs.writeShellScript "freeap-policy-stop" ''
+    ${pkgs.iproute2}/bin/ip rule del pref 100 2>/dev/null || true
+    ${pkgs.iproute2}/bin/ip rule del pref 99 2>/dev/null || true
+    ${pkgs.iproute2}/bin/ip rule del pref 101 2>/dev/null || true
+    ${pkgs.iproute2}/bin/ip route flush table freeap 2>/dev/null || true
+  '';
 in
 {
   # Pin the USB TP-Link 802.11ac adapter (USB 2357:0138, rtw_8822bu, MAC ac:15:a2:eb:82:ab) to `freeap0`.
+  # Matches live /etc/systemd/network/10-freeap0.link.
   systemd.network.links."10-freeap0" = {
     matchConfig = {
       MACAddress = "ac:15:a2:eb:82:ab";
-      Driver = "rtw_8822bu";
     };
     linkConfig = {
       Name = "freeap0";
@@ -162,19 +169,26 @@ in
   systemd.services.freeap-hostapd = {
     description = "FreeWiFi Access Point (hostapd on freeap0)";
     wantedBy = [ "multi-user.target" ];
+    bindsTo = [ "sys-subsystem-net-devices-freeap0.device" ];
     after = [
       "network.target"
+      "NetworkManager.service"
+      "sys-subsystem-net-devices-freeap0.device"
       "freeap-interface.service"
     ];
-    wants = [ "freeap-interface.service" ];
+    wants = [
+      "freeap-interface.service"
+      "dnsmasq.service"
+    ];
     unitConfig = {
       ConditionPathExists = hostapdConfigPath;
     };
     serviceConfig = {
       Type = "simple";
       ExecStart = "${pkgs.hostapd}/bin/hostapd ${hostapdConfigPath}";
-      # Matches live freeap-hostapd.service: ensure table 142 has the local freeap0 subnet route.
+      # Matches live freeap-hostapd.service: wait briefly then ensure table 142 has the local freeap0 route.
       ExecStartPost = pkgs.writeShellScript "freeap-hostapd-route" ''
+        sleep 2
         ${pkgs.iproute2}/bin/ip route replace 10.42.0.0/24 dev freeap0 table 142 || true
       '';
       Restart = "on-failure";
@@ -183,15 +197,19 @@ in
   };
 
   # DHCP (10.42.0.10-254, 60m lease) & DNS (10.42.0.1 -> 1.1.1.1 / 1.0.0.1 via usque0 src 172.16.0.2).
-  # Writes leases & DNS/DHCP logs to the exact paths expected by freeap-count-notify.py.
+  # Matches live freeap-dnsmasq.service and /etc/NetworkManager/dnsmasq-shared.d/*.conf.
   services.dnsmasq = {
     enable = true;
     resolveLocalQueries = false;
     alwaysKeepRunning = true;
     settings = {
       interface = "freeap0";
+      except-interface = "lo";
       listen-address = "10.42.0.1";
       bind-dynamic = true;
+      no-hosts = true;
+      clear-on-reload = true;
+      strict-order = true;
       domain-needed = true;
       bogus-priv = true;
       no-resolv = true;
@@ -214,9 +232,11 @@ in
 
   systemd.services.dnsmasq = {
     aliases = [ "freeap-dnsmasq.service" ];
+    bindsTo = [ "freeap-hostapd.service" ];
     after = [
       "freeap-interface.service"
       "freeap-policy.service"
+      "freeap-hostapd.service"
     ];
     wants = [
       "freeap-interface.service"
@@ -224,23 +244,33 @@ in
     ];
   };
 
-  # Keep /var/log/freeap-dns.log rotated (matches Pi OS logrotate freeap-dns entry).
+  # Rotate both FreeAP DNS and conntrack destroy logs (matches live /etc/logrotate.d/freeap-dns).
   services.logrotate.settings.freeap-dns = {
-    files = "/var/log/freeap-dns.log";
+    files = [
+      "/var/log/freeap-dns.log"
+      "/var/lib/freeap-notify/destroy.log"
+    ];
     frequency = "daily";
-    rotate = 3;
+    rotate = 2;
     missingok = true;
     notifempty = true;
     copytruncate = true;
   };
 
   # Cloudflare WARP / MASQUE TUN upstream (usque0 @ 172.16.0.2/32), matching the live Pi flags.
+  # Ordered after freeap-policy.service so fail-closed rules exist before usque connects.
   # TODO: Populate secrets/raspberrypi-usque-config.age (or restore /etc/usque/config.json).
   systemd.services.usque = {
     description = "Usque Cloudflare WARP/MASQUE TUN (usque0)";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network-online.target" ];
-    wants = [ "network-online.target" ];
+    after = [
+      "network-online.target"
+      "freeap-policy.service"
+    ];
+    wants = [
+      "network-online.target"
+      "freeap-policy.service"
+    ];
     unitConfig = {
       ConditionPathExists = usqueConfigPath;
     };
@@ -254,23 +284,21 @@ in
   };
 
   # Policy routing rules (fail-closed table `freeap` = 142, rules 99/100/101).
+  # Runs before usque.service (matching live freeap-policy.service).
   systemd.services.freeap-policy = {
     description = "FreeWiFi fail-closed policy routing (freeap0 -> usque0)";
     wantedBy = [ "multi-user.target" ];
     after = [
-      "network-online.target"
+      "network-pre.target"
       "freeap-interface.service"
-      "usque.service"
     ];
-    wants = [
-      "network-online.target"
-      "freeap-interface.service"
-      "usque.service"
-    ];
+    before = [ "usque.service" ];
+    wants = [ "freeap-interface.service" ];
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
       ExecStart = "${freeapPolicyScript}";
+      ExecStop = "${freeapPolicyStopScript}";
     };
   };
 
@@ -316,6 +344,7 @@ in
     timerConfig = {
       OnBootSec = "2min";
       OnUnitActiveSec = "1min";
+      AccuracySec = "10s";
     };
   };
 
