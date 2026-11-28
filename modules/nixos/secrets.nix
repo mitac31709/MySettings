@@ -189,7 +189,7 @@ in
         mode = "0400";
       };
     })
-    (lib.optionalAttrs (hasSecretFile "nm-connections.age") {
+    (lib.optionalAttrs (config.networking.networkmanager.enable && hasSecretFile "nm-connections.age") {
       "nm-connections" = {
         file = secretsDir + "/nm-connections.age";
         owner = "root";
@@ -284,6 +284,15 @@ in
         mode = "0400";
       };
     })
+    (lib.optionalAttrs (hasSecretFile "ubuntu-win-credentials.age") {
+      # CIFS credentials for //192.168.1.33/photos on host ubuntu (replaces /etc/win-credentials).
+      "ubuntu-win-credentials" = {
+        file = secretsDir + "/ubuntu-win-credentials.age";
+        owner = "root";
+        group = "root";
+        mode = "0400";
+      };
+    })
   ];
 
   # Keep /etc/agenix strictly root-only even before the first key is written.
@@ -291,25 +300,27 @@ in
     "d /etc/agenix 0700 root root -"
   ];
 
-  systemd.services.nm-agenix-profiles = lib.mkIf (hasSecretFile "nm-connections.age") {
-    description = "Load agenix-encrypted NetworkManager profiles";
-    wantedBy = [ "multi-user.target" ];
-    after = [ "NetworkManager.service" ];
-    wants = [ "NetworkManager.service" ];
-    before = [ "network-online.target" ];
-    restartTriggers = [
-      (builtins.hashFile "sha256" (secretsDir + "/nm-connections.age"))
-    ];
-    serviceConfig = {
-      Type = "oneshot";
-      RemainAfterExit = true;
-      ExecStart = "${nmProfilesScript}";
-    };
-  };
+  systemd.services.nm-agenix-profiles =
+    lib.mkIf (config.networking.networkmanager.enable && hasSecretFile "nm-connections.age")
+      {
+        description = "Load agenix-encrypted NetworkManager profiles";
+        wantedBy = [ "multi-user.target" ];
+        after = [ "NetworkManager.service" ];
+        wants = [ "NetworkManager.service" ];
+        before = [ "network-online.target" ];
+        restartTriggers = [
+          (builtins.hashFile "sha256" (secretsDir + "/nm-connections.age"))
+        ];
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          ExecStart = "${nmProfilesScript}";
+        };
+      };
 
   # Automatically sync imperative Wi-Fi additions/edits (nmcli / nmtui) back
   # into secrets/nm-connections.age without needing interactive unlock.
-  systemd.services.nm-agenix-sync = {
+  systemd.services.nm-agenix-sync = lib.mkIf config.networking.networkmanager.enable {
     description = "Sync local NetworkManager Wi-Fi profiles into secrets/nm-connections.age";
     wantedBy = [ "multi-user.target" ];
     after = [
@@ -326,7 +337,7 @@ in
     };
   };
 
-  systemd.paths.nm-agenix-sync = {
+  systemd.paths.nm-agenix-sync = lib.mkIf config.networking.networkmanager.enable {
     description = "Watch NetworkManager profiles and sync Wi-Fi changes into secrets/nm-connections.age";
     wantedBy = [ "multi-user.target" ];
     unitConfig = {
