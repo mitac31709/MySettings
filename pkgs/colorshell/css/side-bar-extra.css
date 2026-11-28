@@ -1,0 +1,46 @@
+/* MySettings: Left vertical side-bar (mirrors top-bar visual language) */
+
+.side-bar-container {
+  padding: 6px 0px 6px 6px;
+}
+
+.side-bar-container .side-bar-centerbox > * {
+  background: var(--bg-translucent-primary);
+  border-radius: var(--radius);
+  padding: var(--padding) 0;
+}
+
+.side-bar-container .side-bar-centerbox > * > box:not(.transparent),
+.side-bar-container .side-bar-centerbox > * > button {
+  border-radius: calc(var(--radius) - var(--padding));
+  margin: 0 var(--padding);
+  padding: 6px 2px;
+  min-width: 30px;
+  min-height: 30px;
+}
+
+.side-bar-container .side-bar-centerbox > * > box:not(.transparent):hover,
+.side-bar-container .side-bar-centerbox > * > button:hover {
+  background: var(--color-hover);
+}
+
+.side-bar-container .side-bar-centerbox > * > box:not(.transparent):active,
+.side-bar-container .side-bar-centerbox > * > button:active {
+  box-shadow: 0 0 0 2px var(--color-hover);
+}
+
+.side-bar-container .updates,
+.side-bar-container .startup-sound,
+.side-bar-container .jquake,
+.side-bar-container .services {
+  min-width: 30px;
+  padding: 6px 2px;
+}
+
+.side-bar-container .updates .count {
+  font-size: 10px;
+}
+
+.side-bar-container .tray {
+  padding: 6px 0;
+}

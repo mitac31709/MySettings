@@ -10,6 +10,7 @@
 # - 2-5: Startup sound bar indicator (state watcher + menu / toggle / play)
 # - 2-6: Direct bar launchers (Cheatsheet `?`, CPU/Mem -> btop, Network right-click & PageNetwork -> nmtui)
 # - 2-7: T3 Code agent-run pill + card (watches XDG_RUNTIME_DIR/agent-run-status.json)
+# - 2-9: Left vertical side-bar window (Updates / StartupSound / JQuake / Services / Tray)
 {
   baseColorshell,
   glib,
@@ -44,6 +45,8 @@ baseColorshell.overrideAttrs (old: {
     cp ${./src/window/bar/widgets/AgentRun.tsx} src/window/bar/widgets/AgentRun.tsx
     mkdir -p src/window/agent-run
     cp ${./src/window/agent-run/index.tsx} src/window/agent-run/index.tsx
+    mkdir -p src/window/side-bar
+    cp ${./src/window/side-bar/index.tsx} src/window/side-bar/index.tsx
 
     cp ${./src/window/center-window/index.tsx} src/window/center-window/index.tsx
 
@@ -66,22 +69,39 @@ baseColorshell.overrideAttrs (old: {
 
     substituteInPlace src/windows.ts \
       --replace-fail \
+        'import { Bar } from "./window/bar";' \
+        $'import { Bar } from "./window/bar";\nimport { SideBar } from "./window/side-bar";' \
+      --replace-fail \
         'import { OSD } from "./window/osd";' \
         $'import { OSD } from "./window/osd";\nimport { AgentRunCard } from "./window/agent-run";' \
       --replace-fail \
+        '"bar": Bar,' \
+        $'"bar": Bar,\n    "side-bar": SideBar,' \
+      --replace-fail \
         '"osd": OSD,' \
-        $'"osd": OSD,\n    "agent-run": AgentRunCard,'
+        $'"osd": OSD,\n    "agent-run": AgentRunCard,' \
+      --replace-fail \
+        $'    if(!Windows.getDefault().isOpen("bar"))\n        Windows.getDefault().open("bar");' \
+        $'    if(!Windows.getDefault().isOpen("bar"))\n        Windows.getDefault().open("bar");\n\n    if(!Windows.getDefault().isOpen("side-bar"))\n        Windows.getDefault().open("side-bar");'
+
+    substituteInPlace src/window/bar/widgets/Tray.tsx \
+      --replace-fail \
+        'export const Tray = () => {' \
+        'export const Tray = ({ orientation = Gtk.Orientation.HORIZONTAL }: { orientation?: Gtk.Orientation } = {}) => {' \
+      --replace-fail \
+        'return <Gtk.Box class={"tray transparent"} visible={variableToBoolean(items)} spacing={10}>' \
+        'return <Gtk.Box class={"tray transparent"} orientation={orientation} halign={Gtk.Align.CENTER} visible={variableToBoolean(items)} spacing={orientation === Gtk.Orientation.VERTICAL ? 8 : 10}>'
 
     substituteInPlace src/window/bar/index.tsx \
       --replace-fail \
         'import { Tray } from "./widgets/Tray";' \
-        $'import { Tray } from "./widgets/Tray";\nimport { Cheatsheet } from "./widgets/Cheatsheet";\nimport { ResticBackup } from "./widgets/ResticBackup";\nimport { SystemStats } from "./widgets/SystemStats";\nimport { KeepAwake } from "./widgets/KeepAwake";\nimport { PowerSave } from "./widgets/PowerSave";\nimport { Services } from "./widgets/Services";\nimport { JQuake } from "./widgets/JQuake";\nimport { StartupSound } from "./widgets/StartupSound";\nimport { Updates } from "./widgets/Updates";\nimport { AgentRun } from "./widgets/AgentRun";' \
+        $'import { Cheatsheet } from "./widgets/Cheatsheet";\nimport { ResticBackup } from "./widgets/ResticBackup";\nimport { SystemStats } from "./widgets/SystemStats";\nimport { KeepAwake } from "./widgets/KeepAwake";\nimport { PowerSave } from "./widgets/PowerSave";\nimport { AgentRun } from "./widgets/AgentRun";' \
       --replace-fail \
         '<Apps />' \
         $'<Apps />\n                    <Cheatsheet />' \
       --replace-fail \
         '<Tray />' \
-        $'<AgentRun />\n                    <ResticBackup />\n                    <SystemStats />\n                    <PowerSave />\n                    <KeepAwake />\n                    <Services />\n                    <JQuake />\n                    <StartupSound />\n                    <Updates />\n                    <Tray />'
+        $'<AgentRun />\n                    <ResticBackup />\n                    <SystemStats />\n                    <PowerSave />\n                    <KeepAwake />'
 
     substituteInPlace src/widget/Notification.tsx \
       --replace-fail \
@@ -162,8 +182,20 @@ baseColorshell.overrideAttrs (old: {
     printf '\n' >> data/css/osd.css
     cat ${./css/osd-extra.css} >> data/css/osd.css
 
+    substituteInPlace data/config/hyprland/rules.lua \
+      --replace-fail \
+        'floating-notifications|top-bar)$' \
+        'floating-notifications|top-bar|side-bar)$'
+
+    substituteInPlace data/config/hyprland/rules.conf \
+      --replace-fail \
+        'match:namespace = top-bar|control-center|center-window|runner|floating-notifications' \
+        'match:namespace = top-bar|side-bar|control-center|center-window|runner|floating-notifications'
+
     printf '\n' >> data/css/bar.css
     cat ${./css/bar-extra.css} >> data/css/bar.css
+    printf '\n' >> data/css/bar.css
+    cat ${./css/side-bar-extra.css} >> data/css/bar.css
 
     printf '\n' >> data/css/center-window.css
     cat ${./css/center-window-extra.css} >> data/css/center-window.css

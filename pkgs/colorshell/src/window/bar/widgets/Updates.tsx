@@ -22,7 +22,12 @@ export const Updates = () => {
                 });
             }}
         >
-            <Gtk.Box spacing={4} halign={Gtk.Align.CENTER} valign={Gtk.Align.CENTER}>
+            <Gtk.Box
+                orientation={Gtk.Orientation.VERTICAL}
+                spacing={1}
+                halign={Gtk.Align.CENTER}
+                valign={Gtk.Align.CENTER}
+            >
                 <Gtk.Image iconName={createBinding(updates, "iconName")} />
                 <Gtk.Label
                     class="count number"

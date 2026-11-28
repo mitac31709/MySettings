@@ -23,12 +23,18 @@ export const Services = () => {
                 });
             }}
         >
-            <Gtk.Box spacing={5} halign={Gtk.Align.CENTER} valign={Gtk.Align.CENTER}>
+            <Gtk.Box
+                orientation={Gtk.Orientation.VERTICAL}
+                spacing={3}
+                halign={Gtk.Align.CENTER}
+                valign={Gtk.Align.CENTER}
+            >
                 <Gtk.Image iconName="network-server-symbolic" />
                 <Gtk.Box
                     class="svc-dots-grid"
                     orientation={Gtk.Orientation.VERTICAL}
                     spacing={2}
+                    halign={Gtk.Align.CENTER}
                     valign={Gtk.Align.CENTER}
                 >
                     <Gtk.Box spacing={2}>
