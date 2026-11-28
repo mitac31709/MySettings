@@ -10,21 +10,42 @@ let
   winCredsPath =
     config.age.secrets."ubuntu-win-credentials".path or "/run/agenix/ubuntu-win-credentials";
 
-  # Confirmed Minecraft instance directories under /home/mitac/minecraft/.
-  # All 6 stay disabled at boot (wantedBy = [ ]) and share port 25565 (only one
-  # runs at a time). ATM9-Eureka was the most recently used instance.
-  minecraftInstances = [
-    "ATM10"
-    "ATM9-Eureka"
-    "latest-vanila"
-    "mohist-1.20.1"
-    "paper-1.21.11"
-    "yower-1.21.1"
-  ];
+  javaBin = "${pkgs.jdk21_headless}/bin/java";
 
-  # On-demand launcher for Minecraft instances under /home/mitac/minecraft/<name>.
-  # Checks instance start scripts first (modpacks like ATM9-Eureka / ATM10 ship
-  # startserver.sh, start.sh, or run.sh), then falls back to server.jar.
+  # Confirmed Minecraft instances under /home/mitac/minecraft/ (measured 2026-11-29).
+  # Directory name typos (`latest-vanila`, `yower-1.21.1`) and jar names match the
+  # live machine verbatim. All 6 stay disabled at boot (wantedBy = [ ]) and share
+  # TCP 25565 (mutually exclusive via systemd conflicts). ATM9-Eureka was used last.
+  minecraftInstanceSpecs = {
+    # Live scripts: startserver.sh (also run.sh). user_jvm_args.txt: -Xms6G -Xmx12G + Aikar G1.
+    "ATM10" = {
+      execStart = "${javaBin} @user_jvm_args.txt @libraries/net/neoforged/neoforge/21.1.215/unix_args.txt nogui";
+    };
+    # Live scripts: startserver.sh (also run.sh). user_jvm_args.txt: -Xms3072M -Xmx10G + G1/StringDedup/gc.log.
+    "ATM9-Eureka" = {
+      execStart = "${javaBin} @user_jvm_args.txt @libraries/net/minecraftforge/forge/1.20.1-47.4.23/unix_args.txt nogui";
+    };
+    # Live script: run.sh (no user_jvm_args.txt). Heap: -Xms6G -Xmx6G.
+    "latest-vanila" = {
+      execStart = "${javaBin} -Xms6G -Xmx6G -jar server.jar --nogui";
+    };
+    # Live script: startserver.sh. user_jvm_args.txt: -Xms6G -Xmx12G + Aikar G1.
+    "mohist-1.20.1" = {
+      execStart = "${javaBin} @user_jvm_args.txt -jar mohist-1.20.1-6e92c50.jar nogui";
+    };
+    # Live script: run.sh (no user_jvm_args.txt). Heap: -Xms4096M -Xmx4096M.
+    "paper-1.21.11" = {
+      execStart = "${javaBin} -Xms4096M -Xmx4096M -jar server.jar --nogui";
+    };
+    # Live script: start.sh (jar is youer-1.21.1-a54a27d.jar). user_jvm_args.txt: -Xms4G -Xmx12G + Aikar G1.
+    "yower-1.21.1" = {
+      execStart = "${javaBin} @user_jvm_args.txt -jar youer-1.21.1-a54a27d.jar nogui";
+    };
+  };
+
+  minecraftInstances = builtins.attrNames minecraftInstanceSpecs;
+
+  # Generic fallback runner for the minecraft@ template (any ad-hoc future instance).
   minecraftRunner = pkgs.writeShellScript "minecraft-instance-runner" ''
     set -euo pipefail
     instance="$1"
@@ -38,14 +59,14 @@ let
       fi
     done
     if [ -f "./server.jar" ]; then
-      exec ${pkgs.jdk21_headless}/bin/java ''${JAVA_OPTS:--Xms4G -Xmx10G} -jar ./server.jar nogui
+      exec ${javaBin} ''${JAVA_OPTS:--Xms4G -Xmx10G} -jar ./server.jar nogui
     else
       echo "minecraft@$instance: no startserver.sh, start.sh, run.sh, or server.jar found in $dir" >&2
       exit 1
     fi
   '';
 
-  mkMinecraftUnit = instance: {
+  mkMinecraftUnit = instance: spec: {
     description = "Minecraft Server (${instance})";
     after = [ "network-online.target" ];
     wants = [ "network-online.target" ];
@@ -68,10 +89,7 @@ let
       Group = "users";
       WorkingDirectory = "/home/mitac/minecraft/${instance}";
       Environment = [ "HOME=/home/mitac" ];
-      EnvironmentFile = "-/home/mitac/minecraft/${instance}/.env";
-      # TODO: Verify exact start script and JVM heap flags (10-12G on modpacks)
-      # inside /home/mitac/minecraft/${instance} before first launch.
-      ExecStart = "${minecraftRunner} ${lib.escapeShellArg instance}";
+      ExecStart = spec.execStart;
       SuccessExitStatus = [
         0
         143
@@ -149,14 +167,22 @@ in
     '';
   };
 
-  # TODO: Add the remaining 3 public keys from current ubuntu's ~/.ssh/authorized_keys
-  # (including the restricted pi-lecture-upload key, otherwise lecture uploads from
-  # raspberrypi fail between nixos-anywhere and /home/mitac restore) into keys = [ ... ].
+  # All 4 public keys from live ubuntu ~/.ssh/authorized_keys:
+  # - mitac@NixOS comes from ../../secrets/id-wsl-builder.pub (no duplication).
+  # - pi-lecture-upload keeps command=rrsync (using pkgs.rrsync on NixOS),
+  #   restrict, and from="100.71.240.112" (raspberrypi Tailscale IP).
   users.users.mitac = {
     extraGroups = [ "docker" ];
-    openssh.authorizedKeys.keyFiles = [
-      ../../secrets/id-wsl-builder.pub
-    ];
+    openssh.authorizedKeys = {
+      keyFiles = [
+        ../../secrets/id-wsl-builder.pub
+      ];
+      keys = [
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINA+Viz0A1SfEl0MwqyLjLicGL+8tTGntansBGu/K8RX grokbot-box"
+        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGPC4hGzSF3S6BzLUPeHAO5TGPR3xRWefQpgpmrUYL9J"
+        ''command="${lib.getExe pkgs.rrsync} -wo -no-del /home/mitac/lectures/inbox",restrict,from="100.71.240.112" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK2N8cVaSxLCHbwt1k0d7uCsSjGSp9vTUytf4B5z70Eo pi-lecture-upload''
+      ];
+    };
   };
   users.users.root.openssh.authorizedKeys.keyFiles = [
     ../../secrets/id-wsl-builder.pub
@@ -256,18 +282,21 @@ in
 
   # ---------------------------------------------------------------------------
   # Restored home-directory services & on-demand Minecraft instances
-  # (User=mitac, guarded with ConditionPathExists so first boot stays clean
-  # before /home/mitac is restored)
+  # (User=mitac, matching live ~/.config/systemd/user/ units verbatim; guarded
+  # with ConditionPathExists so first boot stays clean before /home/mitac restore)
   # ---------------------------------------------------------------------------
   systemd.services = {
-    # Hermes Agent gateway (~/.hermes + ~/.local/bin/hermes*)
+    # Hermes Agent gateway (live unit: ~/.config/systemd/user/hermes-gateway.service)
+    # TODO: Hermes auth/API secrets live outside the unit under /home/mitac/.hermes/
+    # (.env, auth.json) — restore from backup or migrate to agenix.
     hermes-gateway = {
-      description = "Hermes Agent Gateway";
+      description = "Hermes Agent Gateway - Messaging Platform Integration";
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
       wantedBy = [ "multi-user.target" ];
       unitConfig = {
-        ConditionPathExists = "/home/mitac/.hermes";
+        StartLimitIntervalSec = 0;
+        ConditionPathExists = "/home/mitac/.hermes/hermes-agent/.hermes/bin/hermes";
       };
       serviceConfig = {
         Type = "simple";
@@ -276,20 +305,32 @@ in
         WorkingDirectory = "/home/mitac/.hermes";
         Environment = [
           "HOME=/home/mitac"
+          "PATH=/home/mitac/.hermes/hermes-agent/node_modules/.bin:/home/mitac/.hermes/tools/node-26.12.1-linux-x64/bin:/home/mitac/.hermes/tools/npm-12.2.2-linux-x64/bin:/home/mitac/.local/bin:/run/current-system/sw/bin"
           "HERMES_HOME=/home/mitac/.hermes"
-          "PATH=/home/mitac/.local/bin:/run/current-system/sw/bin"
+          "HERMES_SUPERVISED_CHILD=1"
         ];
-        EnvironmentFile = "-/home/mitac/.hermes/.env";
-        # TODO: Verify exact ExecStart from ubuntu's ~/.config/systemd/user/hermes-gateway.service
-        ExecStart = "/home/mitac/.local/bin/hermes gateway run";
-        Restart = "on-failure";
-        RestartSec = 10;
+        ExecStart = ''"/home/mitac/.hermes/hermes-agent/.hermes/bin/hermes" "gateway" "run"'';
+        Restart = "always";
+        RestartSec = 5;
+        RestartForceExitStatus = 75;
+        SuccessExitStatus = 75;
+        RestartPreventExitStatus = 78;
+        KillMode = "mixed";
+        KillSignal = "SIGTERM";
+        ExecReload = "${pkgs.coreutils}/bin/kill -USR1 $MAINPID";
+        ExecStop = ''-"/home/mitac/.hermes/hermes-agent/.hermes/bin/hermes" "--run-module" "gateway.systemd_stop_mark"'';
+        ExecStopPost = ''-"/home/mitac/.hermes/hermes-agent/.hermes/bin/hermes" "--run-module" "gateway.cgroup_cleanup"'';
+        TimeoutStopSec = 70;
+        StandardOutput = "journal";
+        StandardError = "journal";
       };
     };
 
-    # siesta-bot (Python venv under ~/siesta-bot, NOT Docker — per inventory)
+    # siesta-bot (Python venv under ~/siesta-bot, NOT Docker — live unit: siesta-bot.service)
+    # TODO: Discord bot token lives outside the unit under /home/mitac/siesta-bot/
+    # (.env) — restore from backup or migrate to agenix.
     siesta-bot = {
-      description = "siesta-bot Discord Bot";
+      description = "シエスタ公国 Discord Bot";
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
       wantedBy = [ "multi-user.target" ];
@@ -303,59 +344,73 @@ in
         WorkingDirectory = "/home/mitac/siesta-bot";
         Environment = [
           "HOME=/home/mitac"
+          "PYTHONUNBUFFERED=1"
           "PATH=/home/mitac/siesta-bot/.venv/bin:/run/current-system/sw/bin"
         ];
-        EnvironmentFile = "-/home/mitac/siesta-bot/.env";
-        # TODO: Verify exact ExecStart from ubuntu's ~/.config/systemd/user/siesta-bot.service
-        ExecStart = "/home/mitac/siesta-bot/.venv/bin/python main.py";
+        ExecStart = "/home/mitac/siesta-bot/.venv/bin/python bot.py";
         Restart = "on-failure";
-        RestartSec = 10;
+        RestartSec = 30;
       };
     };
 
-    # lecture-asr (~/lectures, uv Python 3.12 venv, kotoba-whisper-v2.0-faster)
+    # lecture-asr (venv at ~/.local/share/lecture-asr/venv, ~/lectures/bin/lecture_asr.py)
+    # TODO: Gemini API key lives outside the unit (~/.config/lecture-asr/gemini.env)
+    # — restore from backup or migrate to agenix.
     lecture-asr = {
-      description = "Lecture ASR pipeline";
+      description = "Ingest + transcribe lecture audio (~/lectures)";
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
       unitConfig = {
-        ConditionPathExists = "/home/mitac/lectures/asr-config.yaml";
+        StartLimitIntervalSec = 0;
+        ConditionPathExists = "/home/mitac/.local/share/lecture-asr/venv/bin/python";
       };
       serviceConfig = {
         Type = "oneshot";
         User = "mitac";
         Group = "users";
-        WorkingDirectory = "/home/mitac/lectures";
+        # Wait so the sidecar + audio of one upload are handled in a single run.
+        ExecStartPre = "${pkgs.coreutils}/bin/sleep 30";
+        ExecStart = "/home/mitac/.local/share/lecture-asr/venv/bin/python /home/mitac/lectures/bin/lecture_asr.py run";
+        Nice = 15;
+        CPUWeight = 20;
+        IOSchedulingClass = "idle";
+        TimeoutStartSec = "12h";
         Environment = [
           "HOME=/home/mitac"
+          "HF_HUB_OFFLINE=0"
+          "OMP_NUM_THREADS=4"
           "PATH=/home/mitac/.local/bin:/run/current-system/sw/bin"
         ];
-        EnvironmentFile = "-/home/mitac/.config/lecture-asr/gemini.env";
-        # TODO: Verify exact venv path and ExecStart from ubuntu's ~/.config/systemd/user/lecture-asr.service
-        ExecStart = "/home/mitac/lectures/.venv/bin/python -m lecture_asr --config /home/mitac/lectures/asr-config.yaml";
       };
     };
 
-    # lecture-publish (hourly timer)
+    # lecture-publish (hourly timer only; no lecture-publish.path on live machine)
+    # TODO: Any publish/git credentials used by publish-transcripts.sh live outside
+    # the unit — restore from backup or manage via agenix.
     lecture-publish = {
-      description = "Lecture publish pipeline";
+      description = "Push lecture transcripts to Teiki-Test (retry)";
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
       unitConfig = {
-        ConditionPathExists = "/home/mitac/lectures";
+        ConditionPathExists = "/home/mitac/lectures/bin/publish-transcripts.sh";
       };
+      path = [
+        pkgs.bash
+        pkgs.coreutils
+        pkgs.git
+        pkgs.gh
+        pkgs.openssh
+      ];
       serviceConfig = {
         Type = "oneshot";
         User = "mitac";
         Group = "users";
-        WorkingDirectory = "/home/mitac/lectures";
         Environment = [
           "HOME=/home/mitac"
           "PATH=/home/mitac/.local/bin:/run/current-system/sw/bin"
         ];
-        EnvironmentFile = "-/home/mitac/.config/lecture-asr/gemini.env";
-        # TODO: Verify exact ExecStart from ubuntu's ~/.config/systemd/user/lecture-publish.service
-        ExecStart = "/home/mitac/lectures/.venv/bin/python -m lecture_publish";
+        ExecStart = "/home/mitac/lectures/bin/publish-transcripts.sh";
+        Nice = 10;
       };
     };
 
@@ -387,7 +442,7 @@ in
     };
 
     # Generic Minecraft template (empty wantedBy: never started at boot).
-    # Concrete units for the 6 confirmed instances (ATM10, ATM9-Eureka, latest-vanila,
+    # Concrete units for all 6 live instances (ATM10, ATM9-Eureka, latest-vanila,
     # mohist-1.20.1, paper-1.21.11, yower-1.21.1) are merged right below.
     "minecraft@" = {
       description = "Minecraft Server (%i)";
@@ -408,7 +463,6 @@ in
         Group = "users";
         WorkingDirectory = "/home/mitac/minecraft/%i";
         Environment = [ "HOME=/home/mitac" ];
-        EnvironmentFile = "-/home/mitac/minecraft/%i/.env";
         ExecStart = "${minecraftRunner} %i";
         SuccessExitStatus = [
           0
@@ -419,45 +473,40 @@ in
       };
     };
   }
-  // lib.listToAttrs (
-    map (name: {
-      name = "minecraft@${name}";
-      value = mkMinecraftUnit name;
-    }) minecraftInstances
-  );
+  // lib.mapAttrs' (name: spec: {
+    name = "minecraft@${name}";
+    value = mkMinecraftUnit name spec;
+  }) minecraftInstanceSpecs;
 
   systemd.paths.lecture-asr = {
-    description = "Watch lecture ASR inbox for new recordings";
+    description = "Start transcription when lecture audio arrives in ~/lectures/inbox";
     wantedBy = [ "multi-user.target" ];
     unitConfig = {
-      ConditionPathExists = "/home/mitac/lectures";
+      ConditionPathExists = "/home/mitac/lectures/inbox";
     };
     pathConfig = {
-      # TODO: Verify exact inbox path and directive (PathChanged / DirectoryNotEmpty)
-      # from ubuntu's ~/.config/systemd/user/lecture-asr.path
-      DirectoryNotEmpty = "/home/mitac/lectures/inbox";
+      PathChanged = "/home/mitac/lectures/inbox";
       Unit = "lecture-asr.service";
     };
   };
 
   systemd.timers = {
     lecture-asr = {
-      description = "Fallback timer for lecture ASR pipeline (every 30 min)";
+      description = "Fallback: check for untranscribed lectures every 30 minutes";
       wantedBy = [ "timers.target" ];
       timerConfig = {
-        # TODO: Verify schedule against ubuntu's ~/.config/systemd/user/lecture-asr.timer
-        OnUnitActiveSec = "30min";
         OnBootSec = "5min";
+        OnUnitInactiveSec = "30min";
         Unit = "lecture-asr.service";
       };
     };
 
     lecture-publish = {
-      description = "Hourly timer for lecture publish pipeline";
+      description = "Hourly retry of lecture transcript push";
       wantedBy = [ "timers.target" ];
       timerConfig = {
-        # TODO: Verify schedule against ubuntu's ~/.config/systemd/user/lecture-publish.timer
         OnCalendar = "hourly";
+        RandomizedDelaySec = 300;
         Persistent = true;
         Unit = "lecture-publish.service";
       };
@@ -495,5 +544,7 @@ in
     tmux
     htop
     docker-compose
+    rsync
+    rrsync
   ];
 }

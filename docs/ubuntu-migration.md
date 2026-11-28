@@ -26,11 +26,11 @@ GMKtec NucBox G3（Intel N100 / 16GB RAM / Apacer 256GB NVMe）で動いてい�
   - `cloudflared`・Node 18・`snapd`・`cloud-init`・`open-vm-tools` も意図的に除外しています。
   - タイムゾーンは現行の `Etc/UTC` から `Asia/Tokyo` へ変更しています。
   - `services.tailscale.useRoutingFeatures = "server"` により IPv4 に加えて IPv6 転送も有効になります（現行 Ubuntu は IPv4 のみ転送）。
-- 移行前に `modules/nixos/ubuntu.nix` の `TODO` 箇所を確認・反映しておくこと:
-  - 現行 `ubuntu` の `~/.ssh/authorized_keys` の残り 3 本の公開鍵（制限付き `pi-lecture-upload` 鍵を含む。未登録だと `nixos-anywhere` 直後から `/home/mitac` 復元までの間、Raspberry Pi からの講義アップロードが失敗します）
-  - `~/.config/systemd/user/` の実際の `ExecStart`（`hermes-gateway`, `siesta-bot`, `lecture-asr`, `lecture-publish`）と inbox 監視パス・タイマー間隔
-  - `~/minecraft/` の 6 インスタンス（`ATM10`, `ATM9-Eureka`, `latest-vanila`, `mohist-1.20.1`, `paper-1.21.11`, `yower-1.21.1`）の起動スクリプトとヒープ指定（10–12G）の確認
+- 移行前に残っている `TODO`（秘密・任意項目のみ）:
   - `/etc/win-credentials` の agenix 暗号化（`secrets/ubuntu-win-credentials.age`）
+  - ユニット外の秘密ファイル（`~/.hermes/.env`・`auth.json`、`~/siesta-bot/.env`、`~/.config/lecture-asr/gemini.env` 等）は退避から復元するか agenix へ移行
+  - （任意）NVMe を増設する予定があれば `hosts/ubuntu/disko.nix` の `/dev/nvme0n1` を `/dev/disk/by-id/...` に固定
+  - 公開鍵 4 本（`pi-lecture-upload` の `rrsync` 制限含む）、`hermes-gateway` / `siesta-bot` / `lecture-asr` / `lecture-publish` の実ユニット値、Minecraft 6 インスタンスの起動コマンドは `modules/nixos/ubuntu.nix` へ実測値を反映済み
 
 ---
 
@@ -398,6 +398,10 @@ systemctl status vpnserver
 rsync -aHAX /path/to/backup/home-mitac/ /home/mitac/
 chown -R mitac:users /home/mitac
 
+# ~/.ssh/authorized_keys に古い `/usr/bin/rrsync` の行が残っていると
+# /etc/ssh/authorized_keys.d/mitac（NixOS の rrsync パス）より先に一致して失敗するため退避する
+mv /home/mitac/.ssh/authorized_keys /home/mitac/.ssh/authorized_keys.ubuntu-bak 2>/dev/null || true
+
 # MySettings を配置しておく（以後の rebuild / secrets コマンド用）
 su - mitac -c 'test -d ~/MySettings || git clone -b main https://github.com/mitac31709/MySettings.git ~/MySettings'
 ```
@@ -422,13 +426,23 @@ su - mitac -c 'cd ~/znc && docker compose up -d'
 
 ### 手順 7: Hermes / siesta-bot / lecture-asr / lecture-publish の起動確認
 
-1. 退避した `~/.config/systemd/user/*.{service,path,timer}` と `modules/nixos/ubuntu.nix` の `ExecStart` を照らし合わせ、差分があれば `modules/nixos/ubuntu.nix` を直して `rebuild` します。
-2. 各ユニットを起動・確認します:
+1. 復元した `/home/mitac/.config/systemd/user/` の旧ユニットが `linger` で二重起動しないよう、NixOS 側（システムユニット）へ移行済みの旧ユーザーユニットを無効化・退避します:
+   ```bash
+   su - mitac -c '
+     mkdir -p ~/.config/systemd/user.ubuntu-bak
+     for f in hermes-gateway.service siesta-bot.service lecture-asr.service lecture-asr.path lecture-asr.timer lecture-publish.service lecture-publish.timer nfas26.service; do
+       mv ~/.config/systemd/user/"$f" ~/.config/systemd/user.ubuntu-bak/ 2>/dev/null || true
+       rm -f ~/.config/systemd/user/default.target.wants/"$f" ~/.config/systemd/user/timers.target.wants/"$f"
+     done
+     systemctl --user daemon-reload || true
+   '
+   ```
+2. NixOS 側の各ユニットを起動・確認します:
    ```bash
    systemctl start hermes-gateway siesta-bot
    systemctl status hermes-gateway siesta-bot lecture-asr.path lecture-asr.timer lecture-publish.timer znc-tailscale-cert.timer
    ```
-3. Python venv が古い Ubuntu の `/usr/bin/python3` への壊れたシンボリックリンクを指している場合は、`uv` で venv を張り直します（`programs.nix-ld` が有効なので `ctranslate2` / `onnxruntime` の wheel もそのまま動きます）。
+3. `lecture-asr` の venv（`~/.local/share/lecture-asr/venv`）や `siesta-bot/.venv` が古い Ubuntu の `/usr/bin/python3` への壊れたシンボリックリンクを指している場合は、`uv` で venv を張り直します（`programs.nix-ld` が有効なので `ctranslate2` / `onnxruntime` の wheel もそのまま動きます）。
 
 ### 手順 8: CIFS マウント・Minecraft・restic バックアップの確認
 
