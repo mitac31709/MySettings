@@ -1,4 +1,4 @@
-# Workspace 10 TUI/CLI dashboard: 6 tiled Ghostty windows launched on Hyprland start.
+# Workspace 10 TUI/CLI dashboard: 6 tiled Ghostty windows launched on demand via ws10-dashboard.
 # Windows: btop, OS details (fastfetch), system/service monitor, yazi, nmtui, and shell.
 {
   lib,
@@ -206,15 +206,11 @@ in
   ];
 
   wayland.windowManager.hyprland.extraConfig = lib.mkAfter ''
-    -- Workspace 10 TUI/CLI dashboard tiles (placed silently so login focus stays on WS 1)
+    -- Workspace 10 TUI/CLI dashboard tiles (placed silently on WS 10)
     hl.window_rule({
       name = "ws10-dashboard-tiles",
       match = { class = "^ws10\\..+$" },
       workspace = "10 silent",
     })
-
-    hl.on("hyprland.start", function()
-      hl.exec_cmd(${builtins.toJSON "${lib.getExe ws10Dashboard} --autostart"})
-    end)
   '';
 }

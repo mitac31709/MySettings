@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "tighter-desktop-gaps" ];
+  system.nixos.tags = [ "disable-ws10-autostart" ];
 }
