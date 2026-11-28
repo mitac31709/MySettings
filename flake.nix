@@ -52,6 +52,12 @@
       url = "github:OctoberPrayRain/HyprEndfield";
       flake = false;
     };
+    # Hyprshell v4.11.0-alpha.2 (live window previews in Alt+Tab switcher; nixpkgs ships 4.10.9).
+    hyprshell = {
+      url = "github:H3rmt/hyprshell/v4.11.0-alpha.2";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.home-manager.follows = "home-manager";
+    };
     # Vendor .debs (flake update re-fetches; see scripts/flake-update.sh).
     # Keep URL version in sync with uniclipboardVersion below (flake-update.sh).
     uniclipboard-deb = {
@@ -171,6 +177,8 @@
                     hyprendfield = final.callPackage ./pkgs/hyprendfield {
                       src = inputs.hyprendfield;
                     };
+                    # Hyprshell v4.11.0-alpha.2 for live window previews (nixpkgs ships 4.10.9).
+                    hyprshell = inputs.hyprshell.packages.${prev.stdenv.hostPlatform.system}.hyprshell;
                   }
                 )
               ];

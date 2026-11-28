@@ -2382,20 +2382,19 @@ in
     pkgs.hyprshell
   ];
 
-  # Hyprshell (Windows-style Alt+Tab window switcher daemon; registers Alt+Tab binds via Hyprland Lua IPC).
-  xdg.configFile."hyprshell/config.ron".text = ''
-    (
-        version: 4,
-        windows: (
-            scale: 8.5,
-            items_per_row: 5,
-            switch: (
-                modifier: "alt",
-                filter_by: [],
-                switch_workspaces: false,
-            ),
-        ),
-    )
+  # Hyprshell (Windows-style Alt+Tab window switcher with live previews; registers binds via Hyprland Lua IPC).
+  xdg.configFile."hyprshell/config.toml".text = ''
+    version = 5
+
+    [windows]
+    scale = 8.5
+    items_per_row = 5
+
+    [windows.switch]
+    modifier = "alt"
+    filter_by = []
+    switch_workspaces = false
+    live_preview = true
   '';
 
   systemd.user.services.hyprshell = {
@@ -2407,7 +2406,8 @@ in
       StartLimitBurst = 5;
     };
     Service = {
-      ExecStart = "${lib.getExe pkgs.hyprshell} run";
+      ExecStart = "${lib.getExe pkgs.hyprshell} -c %h/.config/hyprshell/config.toml run";
+      Environment = [ "HYPRSHELL_EXPERIMENTAL=1" ];
       Restart = "on-failure";
       RestartSec = 2;
     };

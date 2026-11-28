@@ -140,6 +140,21 @@
         "type": "github"
       }
     },
+    "crane_2": {
+      "locked": {
+        "lastModified": 1794962885,
+        "narHash": "sha256-zrweT2tXbcWiJMACOhOr2eYFJKVa6g59ouRaZ3BS5Do=",
+        "owner": "ipetkov",
+        "repo": "crane",
+        "rev": "95e62def851e9d650f0eab63cb4f59a3306e20bd",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ipetkov",
+        "repo": "crane",
+        "type": "github"
+      }
+    },
     "flake-parts": {
       "inputs": {
         "nixpkgs-lib": [
@@ -192,6 +207,27 @@
         "owner": "hercules-ci",
         "repo": "flake-parts",
         "rev": "024633cd702b10285db5cb19b40ad48d2399ba60",
+        "type": "github"
+      },
+      "original": {
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "type": "github"
+      }
+    },
+    "flake-parts_4": {
+      "inputs": {
+        "nixpkgs-lib": [
+          "hyprshell",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1793576659,
+        "narHash": "sha256-V1h85lUaJBQoHFrB2vpXZOE0Ju1MYSnIpsehoVZYlDo=",
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "rev": "ea2630b7470978622c7689a1ff75d2b389175399",
         "type": "github"
       },
       "original": {
@@ -289,6 +325,32 @@
       "original": {
         "owner": "OctoberPrayRain",
         "repo": "HyprEndfield",
+        "type": "github"
+      }
+    },
+    "hyprshell": {
+      "inputs": {
+        "crane": "crane_2",
+        "flake-parts": "flake-parts_4",
+        "home-manager": [
+          "home-manager"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1795489812,
+        "narHash": "sha256-ccKNQ0nDXA9Hd+aS8B5TzOutUsDGeSCu1PYeyUmpo14=",
+        "owner": "H3rmt",
+        "repo": "hyprshell",
+        "rev": "87b7d344e832cfae681854f9fec497fdca251fa9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "H3rmt",
+        "ref": "v4.11.0-alpha.2",
+        "repo": "hyprshell",
         "type": "github"
       }
     },
@@ -491,6 +553,7 @@
         "hermes-agent": "hermes-agent",
         "home-manager": "home-manager_2",
         "hyprendfield": "hyprendfield",
+        "hyprshell": "hyprshell",
         "jakubkrehel-skills": "jakubkrehel-skills",
         "nixpkgs": "nixpkgs_3",
         "nixpkgs-cursor": "nixpkgs-cursor",

@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "revert-side-bar-16-9" ];
+  system.nixos.tags = [ "hyprshell-live-preview" ];
 }
