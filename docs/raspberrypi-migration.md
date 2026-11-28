@@ -154,7 +154,7 @@ sudo systemctl start redis-server ntopng lecture-recorder.timer lecture-upload.t
 | ntopng / Redis データ | `/var/lib/ntopng/`（**約 728MB**）、`/var/lib/redis/`（約 100KB）、`/etc/ntopng/ntopng.conf` | 計測履歴の引き継ぎ（`/var/lib/ntopng` は 728MB あるため退避先の空きに注意） |
 | 追加 CA 証明書 | `/usr/local/share/ca-certificates/burp-ca.crt`（939B） | 継続利用する場合、`modules/nixos/raspberrypi/default.nix` の `security.pki.certificateFiles` に追加 |
 | SSH ホスト鍵 | `/etc/ssh/ssh_host_*` | 再インストール後も他端末から `REMOTE HOST IDENTIFICATION HAS CHANGED` が出ないように引き継ぐ |
-| カスタムスクリプト・設定 | `/opt/lecture-recorder/`, `/etc/lecture-recorder/`, `/var/lib/lecrec/`（約 96KB）, `/usr/local/sbin/{campus-apload,freeap,ux302nc}*`, `/var/lib/campus-apload/`（約 7.4MB）, `/etc/udev/rules.d/99-ux302nc.rules`, `/etc/systemd/system/*.{service,timer}`, `/etc/sudoers.d/90-grokbot` | スクリプト本体の復元と、残りの TODO（udev の VID:PID・`grokbot` 公開鍵・sudoers 等）の最終確認 |
+| カスタムスクリプト・設定 | `/opt/lecture-recorder/`, `/etc/lecture-recorder/`, `/var/lib/lecrec/`（約 96KB）, `/usr/local/sbin/{campus-apload,freeap,ux302nc}*`, `/var/lib/campus-apload/`（約 7.4MB）, `/etc/udev/rules.d/99-ux302nc.rules`, `/etc/systemd/system/*.{service,timer}`, `/etc/sudoers.d/90-grokbot` | `/opt/lecture-recorder` とデータ類の復元（udev / `freeap-count-notify` / `campus-apload` / `ux302nc` / sudoers / SSH 公開鍵は Nix 側へ反映済み） |
 
 ### 退避コマンド例（現在の Raspberry Pi 上で実行）
 
@@ -214,9 +214,9 @@ SD カードを書き換える前に、手元の PC（このリポジトリ `MyS
    - `secrets/raspberrypi-lecture-timetable-env.age`（`/etc/lecture-recorder/timetable.env` の中身）
    - `secrets/raspberrypi-lecture-upload-key.age`（`/var/lib/lecrec/.ssh/id_ed25519` に展開される `ubuntu` 書き込み専用 SSH 秘密鍵、`lecrec` 所有）
    - （任意）`secrets/raspberrypi-code-server-env.age`（`config.yaml` ではなく環境変数でパスワードを渡す場合）
-2. 残りの確認事項（TODO）：
-   - 必要に応じて `/usr/local/share/ca-certificates/burp-ca.crt` を `modules/nixos/raspberrypi/default.nix` の `security.pki.certificateFiles` に追加する（その他の udev / nftables / `up.sh` / 運用スクリプト / sudoers / SSH 公開鍵はすでに Nix 側へ反映済み）。
-   - TODO: 内蔵 Wi-Fi のファームウェア（`cyfmac43455-sdio.bin`）を minimal のまま残すか要確認（現在は NixOS 標準版のファームウェアを使用。minimal を維持したい場合は `hardware.firmware` を上書きして差し替える）。
+2. その他の確認事項・移行時の意図的な差分：
+   - （任意 TODO）必要に応じて `/usr/local/share/ca-certificates/burp-ca.crt` を `modules/nixos/raspberrypi/default.nix` の `security.pki.certificateFiles` に追加する（その他の udev / nftables / `up.sh` / 運用スクリプト / sudoers / SSH 公開鍵はすでに Nix 側へ反映済み）。
+   - **内蔵 Wi-Fi ファームウェア（`cyfmac43455-sdio.bin`）は標準（stock）版を使用**：旧 Raspberry Pi OS で `minimal` 版へ切り替えていたのは内蔵 `wlan0` で AP を試した際の名残のため、NixOS では `minimal` 版に固定せず標準版へ戻して運用する。
 
 ---
 
