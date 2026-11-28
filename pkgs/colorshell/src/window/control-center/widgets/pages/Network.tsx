@@ -175,12 +175,106 @@ export const PageNetwork = () => {
         }
     };
 
+    const passwordOverlay = (
+        <Gtk.Box
+            class={"net-pass-backdrop"}
+            hexpand
+            vexpand
+            visible={promptSsid.as(Boolean)}
+            $={(backdrop) => {
+                const click = Gtk.GestureClick.new();
+                click.connect("released", (_, __, x, y) => {
+                    const card = backdrop.get_first_child();
+                    if (!card) {
+                        setPromptSsid(null);
+                        return;
+                    }
+                    const alloc = card.get_allocation();
+                    if (
+                        x < alloc.x ||
+                        x > alloc.x + alloc.width ||
+                        y < alloc.y ||
+                        y > alloc.y + alloc.height
+                    ) {
+                        setPromptSsid(null);
+                    }
+                });
+                backdrop.add_controller(click);
+            }}
+        >
+            <Gtk.Box
+                halign={Gtk.Align.CENTER}
+                valign={Gtk.Align.CENTER}
+            >
+                <With value={promptSsid}>
+                    {(targetSsid: string | null) => {
+                        if (!targetSsid) return <Gtk.Box visible={false} />;
+
+                        let entryRef: Gtk.PasswordEntry | null = null;
+                        const submit = () => {
+                            const pw = entryRef?.get_text() ?? "";
+                            if (!pw) return;
+                            void connectWithNmcli(targetSsid, [
+                                "nmcli",
+                                "device",
+                                "wifi",
+                                "connect",
+                                targetSsid,
+                                "password",
+                                pw,
+                            ]);
+                        };
+
+                        return (
+                            <Gtk.Box
+                                class={"net-pass-box"}
+                                orientation={Gtk.Orientation.VERTICAL}
+                                spacing={8}
+                                widthRequest={280}
+                            >
+                                <Gtk.Label
+                                    class={"net-pass-title"}
+                                    label={`「${targetSsid}」に接続`}
+                                    xalign={0}
+                                />
+                                <Gtk.PasswordEntry
+                                    class={"net-pass-entry"}
+                                    showPeekIcon
+                                    placeholderText={"パスワードを入力"}
+                                    hexpand
+                                    $={(self) => {
+                                        entryRef = self;
+                                    }}
+                                    onMap={(self) => self.grab_focus()}
+                                    onActivate={submit}
+                                />
+                                <Gtk.Box spacing={6} hexpand homogeneous>
+                                    <Gtk.Button
+                                        class={"net-pass-btn"}
+                                        label={tr("cancel")}
+                                        onClicked={() => setPromptSsid(null)}
+                                    />
+                                    <Gtk.Button
+                                        class={"net-pass-btn primary"}
+                                        label={"接続"}
+                                        onClicked={submit}
+                                    />
+                                </Gtk.Box>
+                            </Gtk.Box>
+                        );
+                    }}
+                </With>
+            </Gtk.Box>
+        </Gtk.Box>
+    ) as Gtk.Widget;
+
     return (
         <Page
             id={"network"}
             title={tr("control_center.pages.network.title")}
             description={pageDescription}
             spacing={10}
+            overlay={passwordOverlay}
             headerButtons={wifiBinding.as((wifi) =>
                 wifi
                     ? [
@@ -276,65 +370,6 @@ export const PageNetwork = () => {
                                     }}
                                 />
                             </Gtk.Box>
-
-                            <With value={promptSsid}>
-                                {(targetSsid: string | null) => {
-                                    if (!targetSsid) return <Gtk.Box visible={false} />;
-
-                                    let entryRef: Gtk.PasswordEntry | null = null;
-                                    const submit = () => {
-                                        const pw = entryRef?.get_text() ?? "";
-                                        if (!pw) return;
-                                        void connectWithNmcli(targetSsid, [
-                                            "nmcli",
-                                            "device",
-                                            "wifi",
-                                            "connect",
-                                            targetSsid,
-                                            "password",
-                                            pw,
-                                        ]);
-                                    };
-
-                                    return (
-                                        <Gtk.Box
-                                            class={"net-pass-box"}
-                                            orientation={Gtk.Orientation.VERTICAL}
-                                            spacing={6}
-                                            hexpand
-                                        >
-                                            <Gtk.Label
-                                                class={"net-pass-title"}
-                                                label={`「${targetSsid}」に接続`}
-                                                xalign={0}
-                                            />
-                                            <Gtk.PasswordEntry
-                                                class={"net-pass-entry"}
-                                                showPeekIcon
-                                                placeholderText={"パスワードを入力"}
-                                                hexpand
-                                                $={(self) => {
-                                                    entryRef = self;
-                                                    self.grab_focus();
-                                                }}
-                                                onActivate={submit}
-                                            />
-                                            <Gtk.Box spacing={6} hexpand homogeneous>
-                                                <Gtk.Button
-                                                    class={"net-pass-btn primary"}
-                                                    label={"接続"}
-                                                    onClicked={submit}
-                                                />
-                                                <Gtk.Button
-                                                    class={"net-pass-btn"}
-                                                    label={tr("cancel")}
-                                                    onClicked={() => setPromptSsid(null)}
-                                                />
-                                            </Gtk.Box>
-                                        </Gtk.Box>
-                                    );
-                                }}
-                            </With>
 
                             <Gtk.Label
                                 class={"net-empty"}

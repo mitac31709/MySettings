@@ -155,11 +155,17 @@ baseColorshell.overrideAttrs (old: {
 
     substituteInPlace src/window/control-center/widgets/Page.tsx \
       --replace-fail \
-        '<Gtk.ScrolledWindow hscrollbarPolicy={Gtk.PolicyType.NEVER} propagateNaturalHeight' \
-        '<Gtk.ScrolledWindow hscrollbarPolicy={Gtk.PolicyType.NEVER} propagateNaturalHeight={false} vexpand' \
+        'id, title, description, headerButtons, bottomButtons, ...props' \
+        'id, title, description, headerButtons, bottomButtons, overlay, ...props' \
+      --replace-fail \
+        $'                <Gtk.ScrolledWindow hscrollbarPolicy={Gtk.PolicyType.NEVER} propagateNaturalHeight\n                  vscrollbarPolicy={Gtk.PolicyType.AUTOMATIC}>\n\n                    <This this={this.#container} class="content" \n                      hexpand={false} orientation={Gtk.Orientation.VERTICAL}\n                      {...props} \n                    />\n                </Gtk.ScrolledWindow>' \
+        $'                <Gtk.Overlay hexpand vexpand $={(self: Gtk.Overlay) => {\n                    if (overlay instanceof Gtk.Widget) {\n                        self.add_overlay(overlay);\n                        self.set_measure_overlay(overlay, false);\n                    }\n                }}>\n                    <Gtk.ScrolledWindow hscrollbarPolicy={Gtk.PolicyType.NEVER} propagateNaturalHeight={false} vexpand\n                      vscrollbarPolicy={Gtk.PolicyType.AUTOMATIC}>\n\n                        <This this={this.#container} class="content" \n                          hexpand={false} orientation={Gtk.Orientation.VERTICAL}\n                          {...props} \n                        />\n                    </Gtk.ScrolledWindow>\n                </Gtk.Overlay>' \
       --replace-fail \
         'spacing={2} valign={Gtk.Align.END} vexpand>' \
-        'spacing={2} valign={Gtk.Align.END} vexpand={false}>'
+        'spacing={2} valign={Gtk.Align.END} vexpand={false}>' \
+      --replace-fail \
+        '        bottomButtons?: Array<Page.Button>;' \
+        $'        bottomButtons?: Array<Page.Button>;\n        overlay?: Gtk.Widget | JSX.Element;'
 
     substituteInPlace src/compositor/interface/hyprland/compositor.ts \
       --replace-fail \

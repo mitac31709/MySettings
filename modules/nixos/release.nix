@@ -9,5 +9,5 @@
 { ... }:
 
 {
-  system.nixos.tags = [ "hyprspace-no-strut" ];
+  system.nixos.tags = [ "colorshell-net-popup" ];
 }
